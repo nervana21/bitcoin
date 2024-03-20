@@ -35,6 +35,7 @@
 #include <util/fs.h>
 #include <util/hasher.h>
 #include <util/result.h>
+#include <tuple>
 #include <util/time.h>
 #include <util/translation.h>
 #include <versionbits.h>
@@ -271,7 +272,7 @@ struct PackageMempoolAcceptResult
  *
  * @returns a MempoolAcceptResult indicating whether the transaction was accepted/rejected with reason.
  */
-MempoolAcceptResult AcceptToMemoryPool(Chainstate& active_chainstate, const CTransactionRef& tx,
+[[nodiscard]] std::tuple<MempoolAcceptResult, kernel::FlushResult<void, kernel::AbortFailure>> AcceptToMemoryPool(Chainstate& active_chainstate, const CTransactionRef& tx,
                                        int64_t accept_time, bool bypass_limits, bool test_accept)
     EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
@@ -285,7 +286,7 @@ MempoolAcceptResult AcceptToMemoryPool(Chainstate& active_chainstate, const CTra
 * If a transaction fails, validation will exit early and some results may be missing. It is also
 * possible for the package to be partially submitted.
 */
-PackageMempoolAcceptResult ProcessNewPackage(Chainstate& active_chainstate, CTxMemPool& pool,
+[[nodiscard]] std::tuple<PackageMempoolAcceptResult, kernel::FlushResult<void, kernel::AbortFailure>> ProcessNewPackage(Chainstate& active_chainstate, CTxMemPool& pool,
                                                    const Package& txns, bool test_accept, const std::optional<CFeeRate>& client_maxfeerate)
                                                    EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
