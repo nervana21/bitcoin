@@ -1652,6 +1652,7 @@ bool Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex&
 {
     AssertLockHeld(cs_main);
 
+    FlushResult<void, AbortFailure> result; // TODO Return this result!
     const CBlockIndex* pindexOldTip = m_chain.Tip();
     const CBlockIndex* pindexFork = m_chain.FindFork(index_most_work);
 
@@ -1662,7 +1663,8 @@ bool Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex&
         if (!DisconnectTip(state, &disconnectpool)) {
             // This is likely a fatal error, but keep the mempool consistent,
             // just in case. Only remove from the mempool in this case.
-            if (!GetRole().historical) m_chainman.GetMempool().MaybeUpdateMempoolForReorg(*this, disconnectpool, false);
+            // Propagate flush messages to result, but do not treat flush failure as a chain activation failure.
+            if (!GetRole().historical) m_chainman.GetMempool().MaybeUpdateMempoolForReorg(*this, disconnectpool, false) >> result;
 
             // If we're unable to disconnect a block during normal operation,
             // then that is a failure of our local system -- we should abort
@@ -1706,7 +1708,7 @@ bool Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex&
                     // A system error occurred (disk space, database error, ...).
                     // Make the mempool consistent with the current tip, just in case
                     // any observers try to use it before shutdown.
-                    if (!GetRole().historical) m_chainman.GetMempool().MaybeUpdateMempoolForReorg(*this, disconnectpool, false);
+                    if (!GetRole().historical) m_chainman.GetMempool().MaybeUpdateMempoolForReorg(*this, disconnectpool, false) >> result;
                     return false;
                 }
             } else {
@@ -1723,7 +1725,8 @@ bool Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex&
     if (fBlocksDisconnected) {
         // If any blocks were disconnected, disconnectpool may be non empty.  Add
         // any disconnected transactions back to the mempool.
-        if (!GetRole().historical) m_chainman.GetMempool().MaybeUpdateMempoolForReorg(*this, disconnectpool, true);
+        // Propagate flush messages to result, but do not treat flush failure as a chain activation failure.
+        if (!GetRole().historical) m_chainman.GetMempool().MaybeUpdateMempoolForReorg(*this, disconnectpool, true) >> result;
     }
     if (!GetRole().historical) m_chainman.GetMempool().check(this->CoinsTip(), this->m_chain.Height() + 1);
 
@@ -2002,6 +2005,7 @@ bool Chainstate::InvalidateBlock(BlockValidationState& state, CBlockIndex* const
 {
     AssertLockNotHeld(m_chainstate_mutex);
     AssertLockNotHeld(::cs_main);
+    FlushResult<> result; // TODO Return this result!
 
     // Genesis block can't be invalidated
     assert(pindex);
@@ -2066,7 +2070,8 @@ bool Chainstate::InvalidateBlock(BlockValidationState& state, CBlockIndex* const
         // transactions back to the mempool if disconnecting was successful,
         // and we're not doing a very deep invalidation (in which case
         // keeping the mempool up to date is probably futile anyway).
-        if (!GetRole().historical) m_chainman.GetMempool().MaybeUpdateMempoolForReorg(*this, disconnectpool, /* fAddToMempool = */ (++disconnected <= 10) && ret);
+        // Propagate flush messages to result, but do not treat flush failure as a block invalidation failure.
+        if (!GetRole().historical) m_chainman.GetMempool().MaybeUpdateMempoolForReorg(*this, disconnectpool, /* fAddToMempool = */ (++disconnected <= 10) && ret) >> result;
         if (!ret) return false;
         CBlockIndex* new_tip{m_chain.Tip()};
         assert(disconnected_tip->pprev == new_tip);

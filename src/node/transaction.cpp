@@ -19,22 +19,22 @@
 
 namespace node {
 
-MempoolAcceptResult ProcessTransaction(const CTransactionRef& tx, Chainstate& chainstate, CTxMemPool& mempool, bool test_accept)
+std::tuple<MempoolAcceptResult, kernel::FlushResult<void, kernel::AbortFailure>> ProcessTransaction(const CTransactionRef& tx, Chainstate& chainstate, CTxMemPool& mempool, bool test_accept)
 {
     AssertLockHeld(cs_main);
-    auto result = AcceptToMemoryPool(chainstate, tx, mempool, GetTime(), /*bypass_limits=*/ false, test_accept);
+    auto [result, flush_result] = AcceptToMemoryPool(chainstate, tx, mempool, GetTime(), /*bypass_limits=*/ false, test_accept);
     mempool.check(chainstate.CoinsTip(), chainstate.m_chain.Height() + 1);
-    return result;
+    return {std::move(result), std::move(flush_result)};
 }
 
-MempoolAcceptResult ProcessTransaction(const CTransactionRef& tx, const NodeContext& node, bool test_accept)
+std::tuple<MempoolAcceptResult, kernel::FlushResult<void, kernel::AbortFailure>> ProcessTransaction(const CTransactionRef& tx, const NodeContext& node, bool test_accept)
 {
     AssertLockHeld(cs_main);
     Chainstate& active_chainstate = node.chainman->ActiveChainstate();
     if (!node.mempool) {
         TxValidationState state;
         state.Invalid(TxValidationResult::TX_NO_MEMPOOL, "no-mempool");
-        return MempoolAcceptResult::Failure(state);
+        return {MempoolAcceptResult::Failure(state), {}};
     }
     return ProcessTransaction(tx, active_chainstate, *node.mempool, test_accept);
 }
@@ -94,7 +94,7 @@ TransactionError BroadcastTransaction(NodeContext& node, const CTransactionRef t
             if (check_max_fee || check_max_feerate || broadcast_method == TxBroadcast::NO_MEMPOOL_PRIVATE_BROADCAST) {
                 // First, call ATMP with test_accept and check the fee. If ATMP
                 // fails here, return error immediately.
-                const MempoolAcceptResult result = ProcessTransaction(tx, node, /*test_accept=*/ true);
+                auto [result, flush_result]{ProcessTransaction(tx, node, /*test_accept=*/ true)};
                 if (result.m_result_type != MempoolAcceptResult::ResultType::VALID) {
                     return HandleATMPError(result.m_state, err_string);
                 } else if (check_max_fee && result.m_base_fees.value() > max_tx_fee) {
@@ -109,7 +109,7 @@ TransactionError BroadcastTransaction(NodeContext& node, const CTransactionRef t
             case TxBroadcast::MEMPOOL_AND_BROADCAST_TO_ALL:
                 // Try to submit the transaction to the mempool.
                 {
-                    const MempoolAcceptResult result = ProcessTransaction(tx, node, /*test_accept=*/false);
+                    auto [result, flush_result] = ProcessTransaction(tx, node, /*test_accept=*/false);
                     if (result.m_result_type != MempoolAcceptResult::ResultType::VALID) {
                         return HandleATMPError(result.m_state, err_string);
                     }
