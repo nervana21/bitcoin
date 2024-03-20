@@ -5,6 +5,8 @@
 #include <bench/bench.h>
 #include <consensus/consensus.h>
 #include <node/mining_types.h>
+#include <node/transaction.h>
+#include <validation.h>
 #include <primitives/transaction.h>
 #include <random.h>
 #include <script/script.h>
@@ -18,13 +20,14 @@
 #include <array>
 #include <cstddef>
 #include <memory>
+#include <tuple>
 #include <vector>
 
 using node::BlockCreateOptions;
 
 static void AssembleBlock(benchmark::Bench& bench)
 {
-    const auto test_setup = MakeNoLogFileContext<const TestingSetup>();
+    auto test_setup = MakeNoLogFileContext<const TestingSetup>();
 
     CScriptWitness witness;
     witness.stack.push_back(WITNESS_STACK_ELEM_OP_TRUE);
@@ -47,8 +50,9 @@ static void AssembleBlock(benchmark::Bench& bench)
         LOCK(::cs_main);
 
         for (const auto& txr : txs) {
-            const MempoolAcceptResult res = test_setup->m_node.chainman->ProcessTransaction(txr);
+            auto [res, flush_result]{node::ProcessTransaction(txr, test_setup->m_node)};
             assert(res.m_result_type == MempoolAcceptResult::ResultType::VALID);
+            assert(flush_result);
         }
     }
 
