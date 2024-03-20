@@ -20,6 +20,7 @@
 #include <array>
 #include <cstddef>
 #include <memory>
+#include <tuple>
 #include <vector>
 
 using node::BlockCreateOptions;
@@ -49,8 +50,9 @@ static void AssembleBlock(benchmark::Bench& bench)
         LOCK(::cs_main);
 
         for (const auto& txr : txs) {
-            const MempoolAcceptResult res = node::ProcessTransaction(txr, test_setup->m_node);
+            auto [res, flush_result]{node::ProcessTransaction(txr, test_setup->m_node)};
             assert(res.m_result_type == MempoolAcceptResult::ResultType::VALID);
+            assert(flush_result);
         }
     }
 
