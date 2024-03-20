@@ -53,11 +53,11 @@ size_t KernelMempool::maxSizeBytes()
     return static_cast<size_t>(m_mempool.m_opts.max_size_bytes);
 }
 
-void KernelMempool::MaybeUpdateMempoolForReorg(Chainstate& active_chainstate, DisconnectedBlockTransactions& disconnectpool, bool fAddToMempool)
+kernel::FlushResult<> KernelMempool::MaybeUpdateMempoolForReorg(Chainstate& active_chainstate, DisconnectedBlockTransactions& disconnectpool, bool fAddToMempool)
 {
     LOCK(::cs_main);
     LOCK(m_mempool.cs);
-    m_mempool.MaybeUpdateMempoolForReorg(active_chainstate, disconnectpool, fAddToMempool);
+    return m_mempool.MaybeUpdateMempoolForReorg(active_chainstate, disconnectpool, fAddToMempool);
 }
 
 void KernelMempool::BeginChainstateUpdate()

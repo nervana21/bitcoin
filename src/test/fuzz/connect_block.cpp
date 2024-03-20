@@ -215,7 +215,7 @@ void AddExtraTxsToMempool(TestingSetup& setup)
 
         LOCK(::cs_main);
         // Add transaction to the mempool.
-        const MempoolAcceptResult ctx_result = node::ProcessTransaction(MakeTransactionRef(ctx), setup.m_node);
+        auto [ctx_result, ctx_flush] = node::ProcessTransaction(MakeTransactionRef(ctx), setup.m_node);
         Assert(ctx_result.m_result_type == MempoolAcceptResult::ResultType::VALID);
 
         Assert(setup.m_node.mempool->size() == i);

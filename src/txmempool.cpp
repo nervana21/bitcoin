@@ -1190,11 +1190,12 @@ static bool IsCurrentForFeeEstimation(Chainstate& active_chainstate) EXCLUSIVE_L
     return true;
 }
 
-void CTxMemPool::MaybeUpdateMempoolForReorg(
+kernel::FlushResult<> CTxMemPool::MaybeUpdateMempoolForReorg(
     Chainstate& active_chainstate,
     DisconnectedBlockTransactions& disconnectpool,
     bool fAddToMempool)
 {
+    kernel::FlushResult<> result;
     AssertLockHeld(cs_main);
     AssertLockHeld(cs);
     std::vector<Txid> vHashUpdate;
@@ -1208,10 +1209,14 @@ void CTxMemPool::MaybeUpdateMempoolForReorg(
         auto it = queuedTx.rbegin();
         while (it != queuedTx.rend()) {
             // ignore validation errors in resurrected transactions
-            if (!fAddToMempool || (*it)->IsCoinBase() ||
-                AcceptToMemoryPool(active_chainstate, *it, *this, GetTime(),
-                    /*bypass_limits=*/true, /*test_accept=*/false).m_result_type !=
-                        MempoolAcceptResult::ResultType::VALID) {
+            bool remove{!fAddToMempool || (*it)->IsCoinBase()};
+            if (!remove) {
+                auto [mempool_result, flush_result] = AcceptToMemoryPool(active_chainstate, *it, *this, GetTime(),
+                    /*bypass_limits=*/true, /*test_accept=*/false);
+                flush_result >> result;
+                remove = mempool_result.m_result_type != MempoolAcceptResult::ResultType::VALID;
+            }
+            if (remove) {
                 // If the transaction doesn't make it in to the mempool, remove any
                 // transactions that depend on it (which would now be orphans).
                 removeRecursive(**it, MemPoolRemovalReason::REORG);
@@ -1283,6 +1288,7 @@ void CTxMemPool::MaybeUpdateMempoolForReorg(
     removeForReorg(active_chainstate.m_chain, filter_final_and_mature);
     // Re-limit mempool size, in case we added any transactions
     LimitMempoolSize(*this, active_chainstate.CoinsTip());
+    return result;
 }
 
 /**
@@ -2666,7 +2672,7 @@ PackageMempoolAcceptResult MemPoolAccept::AcceptPackage(const Package& package, 
 
 } // anon namespace
 
-MempoolAcceptResult AcceptToMemoryPool(Chainstate& active_chainstate, const CTransactionRef& tx, CTxMemPool& pool,
+std::tuple<MempoolAcceptResult, kernel::FlushResult<void, kernel::AbortFailure>> AcceptToMemoryPool(Chainstate& active_chainstate, const CTransactionRef& tx, CTxMemPool& pool,
                                        int64_t accept_time, bool bypass_limits, bool test_accept)
 {
     AssertLockHeld(::cs_main);
@@ -2693,10 +2699,10 @@ MempoolAcceptResult AcceptToMemoryPool(Chainstate& active_chainstate, const CTra
     // After we've (potentially) uncached entries, ensure our coins cache is still within its size limits
     BlockValidationState state_dummy;
     auto flush_result{active_chainstate.FlushStateToDisk(state_dummy, FlushStateMode::PERIODIC)};
-    return result;
+    return {std::move(result), std::move(flush_result)};
 }
 
-PackageMempoolAcceptResult ProcessNewPackage(Chainstate& active_chainstate, CTxMemPool& pool,
+std::tuple<PackageMempoolAcceptResult, kernel::FlushResult<void, kernel::AbortFailure>> ProcessNewPackage(Chainstate& active_chainstate, CTxMemPool& pool,
                                                    const Package& package, bool test_accept, const std::optional<CFeeRate>& client_maxfeerate)
 {
     AssertLockHeld(cs_main);
@@ -2725,7 +2731,7 @@ PackageMempoolAcceptResult ProcessNewPackage(Chainstate& active_chainstate, CTxM
     // Ensure the coins cache is still within limits.
     BlockValidationState state_dummy;
     auto flush_result{active_chainstate.FlushStateToDisk(state_dummy, FlushStateMode::PERIODIC)};
-    return result;
+    return {std::move(result), std::move(flush_result)};
 }
 
 

@@ -5,7 +5,9 @@
 #ifndef BITCOIN_KERNEL_MEMPOOL_INTERFACE_H
 #define BITCOIN_KERNEL_MEMPOOL_INTERFACE_H
 
+#include <kernel/disconnected_transactions.h>
 #include <kernel/mempool_entry.h>
+#include <kernel/result.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -35,7 +37,7 @@ public:
     virtual void check(const CCoinsViewCache& active_coins_tip, int64_t spendheight) {}
     virtual bool empty() { return true; }
     virtual size_t maxSizeBytes() { return 0; }
-    virtual void MaybeUpdateMempoolForReorg(Chainstate& active_chainstate, DisconnectedBlockTransactions& disconnectpool, bool fAddToMempool) {}
+    virtual kernel::FlushResult<> MaybeUpdateMempoolForReorg(Chainstate& active_chainstate, DisconnectedBlockTransactions& disconnectpool, bool fAddToMempool) { return {}; }
     virtual void BeginChainstateUpdate() {}
     virtual void EndChainstateUpdate() {}
 };
