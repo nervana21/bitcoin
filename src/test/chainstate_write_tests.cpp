@@ -77,8 +77,8 @@ BOOST_FIXTURE_TEST_CASE(write_during_multiblock_activation, TestChain100Setup)
 
     {
         LOCK(m_node.chainman->GetMutex());
-        chainstate.DisconnectTip(state_dummy, nullptr);
-        chainstate.DisconnectTip(state_dummy, nullptr);
+        BOOST_CHECK(chainstate.DisconnectTip(state_dummy, nullptr));
+        BOOST_CHECK(chainstate.DisconnectTip(state_dummy, nullptr));
     }
 
     BOOST_CHECK_EQUAL(second_from_tip->pprev, chainstate.m_chain.Tip());
