@@ -34,7 +34,8 @@ BOOST_FIXTURE_TEST_CASE(tx_mempool_block_doublespend, Dersig100Setup)
     const auto ToMemPool = [this](const CMutableTransaction& tx) {
         LOCK(cs_main);
 
-        const MempoolAcceptResult result = ProcessTransaction(MakeTransactionRef(tx), m_node);
+        auto [result, flush_result]{ProcessTransaction(MakeTransactionRef(tx), m_node)};
+        BOOST_CHECK(flush_result);
         return result.m_result_type == MempoolAcceptResult::ResultType::VALID;
     };
 

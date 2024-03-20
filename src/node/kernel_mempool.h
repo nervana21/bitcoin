@@ -34,7 +34,7 @@ public:
     void check(const CCoinsViewCache& active_coins_tip, int64_t spendheight) override;
     bool empty() override;
     size_t maxSizeBytes() override;
-    void MaybeUpdateMempoolForReorg(Chainstate& active_chainstate, DisconnectedBlockTransactions& disconnectpool, bool fAddToMempool) override;
+    kernel::FlushResult<> MaybeUpdateMempoolForReorg(Chainstate& active_chainstate, DisconnectedBlockTransactions& disconnectpool, bool fAddToMempool) override;
     void BeginChainstateUpdate() override;
     void EndChainstateUpdate() override;
 
