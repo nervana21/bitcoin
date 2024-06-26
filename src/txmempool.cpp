@@ -185,7 +185,7 @@ static CTxMemPool::Options&& Flatten(CTxMemPool::Options&& opts, bilingual_str& 
 }
 
 CTxMemPool::CTxMemPool(Options opts, bilingual_str& error)
-    : m_opts{Flatten(std::move(opts), error)}
+    : m_opts{Flatten(std::move(opts), error)}, m_log{BCLog::MEMPOOL, m_opts.logger}
 {
     m_txgraph = MakeTxGraph(
         /*max_cluster_count=*/m_opts.limits.cluster_count,
@@ -1259,7 +1259,7 @@ kernel::FlushResult<> CTxMemPool::MaybeUpdateMempoolForReorg(
             }
         } else {
             const CCoinsViewMemPool view_mempool{&active_chainstate.CoinsTip(), *this};
-            const std::optional<LockPoints> new_lock_points{CalculateLockPointsAtTip(active_chainstate.m_chain.Tip(), view_mempool, tx)};
+            const std::optional<LockPoints> new_lock_points{CalculateLockPointsAtTip(m_log.logger, active_chainstate.m_chain.Tip(), view_mempool, tx)};
             if (new_lock_points.has_value() && CheckSequenceLocksAtTip(active_chainstate.m_chain.Tip(), *new_lock_points)) {
                 // Now update the mempool entry lockpoints as well.
                 it->UpdateLockPoints(*new_lock_points);
@@ -1783,7 +1783,7 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
     // be mined yet.
     // Pass in m_view which has all of the relevant inputs cached. Note that, since m_view's
     // backend was removed, it no longer pulls coins from the mempool.
-    const std::optional<LockPoints> lock_points{CalculateLockPointsAtTip(m_active_chainstate.m_chain.Tip(), m_view, tx)};
+    const std::optional<LockPoints> lock_points{CalculateLockPointsAtTip(m_pool.m_log.logger, m_active_chainstate.m_chain.Tip(), m_view, tx)};
     if (!lock_points.has_value() || !CheckSequenceLocksAtTip(m_active_chainstate.m_chain.Tip(), *lock_points)) {
         return state.Invalid(TxValidationResult::TX_PREMATURE_SPEND, "non-BIP68-final");
     }
