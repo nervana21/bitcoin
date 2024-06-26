@@ -40,6 +40,8 @@
 #include <string_view>
 #include <utility>
 
+#define LOG_REQUIRE_CONTEXT true
+
 TRACEPOINT_SEMAPHORE(mempool, added);
 TRACEPOINT_SEMAPHORE(mempool, removed);
 TRACEPOINT_SEMAPHORE(mempool, replaced);
@@ -233,7 +235,7 @@ void CTxMemPool::Apply(ChangeSet* changeset)
         addNewTransaction(it);
     }
     if (!m_txgraph->DoWork(/*max_cost=*/POST_CHANGE_COST)) {
-        LogDebug(BCLog::MEMPOOL, "Mempool in non-optimal ordering after addition(s).");
+        LogDebug(m_log, "Mempool in non-optimal ordering after addition(s).");
     }
 }
 
@@ -392,7 +394,7 @@ void CTxMemPool::removeForReorg(CChain& chain, std::function<bool(txiter)> check
         assert(TestLockPointValidity(chain, it->GetLockPoints()));
     }
     if (!m_txgraph->DoWork(/*max_cost=*/POST_CHANGE_COST)) {
-        LogDebug(BCLog::MEMPOOL, "Mempool in non-optimal ordering after reorg.");
+        LogDebug(m_log, "Mempool in non-optimal ordering after reorg.");
     }
 }
 
@@ -434,7 +436,7 @@ std::vector<RemovedMempoolTransactionInfo> CTxMemPool::removeForBlock(const std:
     lastRollingFeeUpdate = GetTime();
     blockSinceLastRollingFeeBump = true;
     if (!m_txgraph->DoWork(/*max_cost=*/POST_CHANGE_COST)) {
-        LogDebug(BCLog::MEMPOOL, "Mempool in non-optimal ordering after block.");
+        LogDebug(m_log, "Mempool in non-optimal ordering after block.");
     }
     return txs_removed_for_block;
 }
@@ -447,7 +449,7 @@ void CTxMemPool::check(const CCoinsViewCache& active_coins_tip, int64_t spendhei
 
     AssertLockHeld(::cs_main);
     LOCK(cs);
-    LogDebug(BCLog::MEMPOOL, "Checking mempool with %u transactions and %u inputs\n", (unsigned int)mapTx.size(), (unsigned int)mapNextTx.size());
+    LogDebug(m_log, "Checking mempool with %u transactions and %u inputs\n", (unsigned int)mapTx.size(), (unsigned int)mapNextTx.size());
 
     uint64_t checkTotal = 0;
     CAmount check_total_fee{0};
@@ -702,9 +704,9 @@ void CTxMemPool::PrioritiseTransaction(const Txid& hash, const CAmount& nFeeDelt
         }
         if (delta == 0) {
             mapDeltas.erase(hash);
-            LogInfo("PrioritiseTransaction: %s (%sin mempool) delta cleared\n", hash.ToString(), it == mapTx.end() ? "not " : "");
+            LogInfo(m_log, "PrioritiseTransaction: %s (%sin mempool) delta cleared\n", hash.ToString(), it == mapTx.end() ? "not " : "");
         } else {
-            LogInfo("PrioritiseTransaction: %s (%sin mempool) fee += %s, new delta=%s\n",
+            LogInfo(m_log, "PrioritiseTransaction: %s (%sin mempool) fee += %s, new delta=%s\n",
                       hash.ToString(),
                       it == mapTx.end() ? "not " : "",
                       FormatMoney(nFeeDelta),
@@ -845,7 +847,7 @@ void CTxMemPool::RemoveUnbroadcastTx(const Txid& txid, const bool unchecked) {
 
     if (m_unbroadcast_txids.erase(txid))
     {
-        LogDebug(BCLog::MEMPOOL, "Removed %s from set of unbroadcast txns%s", txid.GetHex(), (unchecked ? " before confirmation that txn was sent out" : ""));
+        LogDebug(m_log, "Removed %s from set of unbroadcast txns%s", txid.GetHex(), (unchecked ? " before confirmation that txn was sent out" : ""));
     }
 }
 
@@ -965,7 +967,7 @@ void CTxMemPool::TrimToSize(size_t sizelimit, std::vector<COutPoint>* pvNoSpends
     }
 
     if (maxFeeRateRemoved > CFeeRate(0)) {
-        LogDebug(BCLog::MEMPOOL, "Removed %u txn, rolling minimum fee bumped to %s\n", nTxnRemoved, maxFeeRateRemoved.ToString());
+        LogDebug(m_log, "Removed %u txn, rolling minimum fee bumped to %s\n", nTxnRemoved, maxFeeRateRemoved.ToString());
     }
 }
 
@@ -1167,7 +1169,7 @@ static void LimitMempoolSize(CTxMemPool& pool, CCoinsViewCache& coins_cache)
     AssertLockHeld(pool.cs);
     int expired = pool.Expire(GetTime<std::chrono::seconds>() - pool.m_opts.expiry);
     if (expired != 0) {
-        LogDebug(BCLog::MEMPOOL, "Expired %i transactions from the memory pool\n", expired);
+        LogDebug(pool.m_log, "Expired %i transactions from the memory pool\n", expired);
     }
 
     std::vector<COutPoint> vNoSpendsRemaining;
@@ -2021,7 +2023,8 @@ bool MemPoolAccept::PackageRBFChecks(const std::vector<CTransactionRef>& txns,
                                      "package RBF failed: " + err_tup.value().second, "");
     }
 
-    LogDebug(BCLog::TXPACKAGES, "package RBF checks passed: parent %s (wtxid=%s), child %s (wtxid=%s), package hash (%s)\n",
+    const util::log::Context log_packages{BCLog::TXPACKAGES, m_pool.m_log.logger};
+    LogDebug(log_packages, "package RBF checks passed: parent %s (wtxid=%s), child %s (wtxid=%s), package hash (%s)\n",
         txns.front()->GetHash().ToString(), txns.front()->GetWitnessHash().ToString(),
         txns.back()->GetHash().ToString(), txns.back()->GetWitnessHash().ToString(),
         GetPackageHash(txns).ToString());
@@ -2079,7 +2082,7 @@ bool MemPoolAccept::ConsensusScriptChecks(const ATMPArgs& args, Workspace& ws)
     script_verify_flags currentBlockScriptVerifyFlags{GetBlockScriptFlags(*m_active_chainstate.m_chain.Tip(), m_active_chainstate.m_chainman)};
     if (!CheckInputsFromMempoolAndCache(tx, state, m_view, m_pool, currentBlockScriptVerifyFlags,
                                         ws.m_precomputed_txdata, m_active_chainstate.CoinsTip(), GetValidationCache())) {
-        LogError("BUG! PLEASE REPORT THIS! CheckInputScripts failed against latest-block but not STANDARD flags %s, %s", hash.ToString(), state.ToString());
+        LogError(m_pool.m_log, "BUG! PLEASE REPORT THIS! CheckInputScripts failed against latest-block but not STANDARD flags %s, %s", hash.ToString(), state.ToString());
         return Assume(false);
     }
 
@@ -2120,7 +2123,7 @@ void MemPoolAccept::FinalizeSubpackage(const ATMPArgs& args)
                                     feerate.size);
 
         }
-        LogDebug(BCLog::MEMPOOL, "%s\n", log_string);
+        LogDebug(m_pool.m_log, "%s\n", log_string);
         TRACEPOINT(mempool, replaced,
                 it->GetTx().GetHash().data(),
                 it->GetTxSize(),
@@ -2185,7 +2188,7 @@ bool MemPoolAccept::SubmitPackage(const ATMPArgs& args, std::vector<Workspace>& 
                    [](const auto& ws) { return ws.m_ptx->GetWitnessHash(); });
 
     if (!m_subpackage.m_replaced_transactions.empty()) {
-        LogDebug(BCLog::MEMPOOL, "replaced %u mempool transactions with %u new one(s) for %s additional fees, %d delta bytes\n",
+        LogDebug(m_pool.m_log, "replaced %u mempool transactions with %u new one(s) for %s additional fees, %d delta bytes\n",
                  m_subpackage.m_replaced_transactions.size(), workspaces.size(),
                  m_subpackage.m_total_modified_fees - m_subpackage.m_conflicting_fees,
                  m_subpackage.m_total_vsize - static_cast<int>(m_subpackage.m_conflicting_size));
@@ -2319,7 +2322,7 @@ MempoolAcceptResult MemPoolAccept::AcceptSingleTransactionInternal(const CTransa
     }
 
     if (!m_subpackage.m_replaced_transactions.empty()) {
-        LogDebug(BCLog::MEMPOOL, "replaced %u mempool transactions with 1 new transaction for %s additional fees, %d delta bytes\n",
+        LogDebug(m_pool.m_log, "replaced %u mempool transactions with 1 new transaction for %s additional fees, %d delta bytes\n",
                  m_subpackage.m_replaced_transactions.size(),
                  ws.m_modified_fees - m_subpackage.m_conflicting_fees,
                  ws.m_vsize - static_cast<int>(m_subpackage.m_conflicting_size));
