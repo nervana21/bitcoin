@@ -12,10 +12,11 @@
 
 #include <stdexcept>
 
-FlatFileSeq::FlatFileSeq(fs::path dir, const char* prefix, uint64_t chunk_size)
-  : m_dir(std::move(dir)),
-    m_prefix(prefix),
-    m_chunk_size(chunk_size)
+FlatFileSeq::FlatFileSeq(util::log::Logger& logger, fs::path dir, const char* prefix, uint64_t chunk_size)
+    : m_log{BCLog::VALIDATION, &logger},
+      m_dir(std::move(dir)),
+      m_prefix(prefix),
+      m_chunk_size(chunk_size)
 {
     if (chunk_size == 0) {
         throw std::invalid_argument("chunk_size must be positive");
