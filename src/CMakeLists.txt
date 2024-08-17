@@ -86,6 +86,48 @@ target_link_libraries(bitcoin_consensus
     secp256k1
 )
 
+add_library(bitcoin_kernel STATIC EXCLUDE_FROM_ALL
+  chain.cpp
+  coins.cpp
+  compressor.cpp
+  consensus/tx_verify.cpp
+  dbwrapper.cpp
+  deploymentinfo.cpp
+  deploymentstatus.cpp
+  flatfile.cpp
+  kernel/blocktreestorage.cpp
+  kernel/chain.cpp
+  kernel/chainparams.cpp
+  kernel/checks.cpp
+  kernel/coinstats.cpp
+  kernel/context.cpp
+  kernel/cs_main.cpp
+  kernel/disconnected_transactions.cpp
+  kernel/mempool_removal_reason.cpp
+  node/blockstorage.cpp
+  node/chainstate.cpp
+  node/utxo_snapshot.cpp
+  pow.cpp
+  script/solver.cpp
+  script/sigcache.cpp
+  signet.cpp
+  txdb.cpp
+  util/serfloat.cpp
+  validation.cpp
+  validationinterface.cpp
+  versionbits.cpp
+)
+target_link_libraries(bitcoin_kernel
+  PRIVATE
+    core_interface
+    bitcoin_consensus
+    bitcoin_util_kernel
+    leveldb
+    secp256k1
+    $<TARGET_NAME_IF_EXISTS:USDT::headers>
+    $<$<PLATFORM_ID:Windows>:ws2_32>
+)
+
 if(WITH_ZMQ)
   add_subdirectory(zmq)
 endif()
@@ -96,10 +138,8 @@ add_library(bitcoin_common STATIC EXCLUDE_FROM_ALL
   addresstype.cpp
   base58.cpp
   bech32.cpp
-  chain.cpp
   chainparams.cpp
   chainparamsbase.cpp
-  coins.cpp
   common/args.cpp
   common/bloom.cpp
   common/bip352.cpp
@@ -115,12 +155,9 @@ add_library(bitcoin_common STATIC EXCLUDE_FROM_ALL
   common/signmessage.cpp
   common/system.cpp
   common/url.cpp
-  compressor.cpp
   core_io.cpp
-  deploymentinfo.cpp
   external_signer.cpp
   init/common.cpp
-  kernel/chainparams.cpp
   key.cpp
   key_io.cpp
   merkleblock.cpp
@@ -130,10 +167,9 @@ add_library(bitcoin_common STATIC EXCLUDE_FROM_ALL
   netaddress.cpp
   netbase.cpp
   outputtype.cpp
+  protocol.cpp
   policy/feerate.cpp
   policy/policy.cpp
-  pow.cpp
-  protocol.cpp
   psbt.cpp
   rpc/rawtransaction_util.cpp
   rpc/request.cpp
@@ -144,13 +180,14 @@ add_library(bitcoin_common STATIC EXCLUDE_FROM_ALL
   script/parsing.cpp
   script/sign.cpp
   script/signingprovider.cpp
-  script/solver.cpp
 )
 target_link_libraries(bitcoin_common
   PRIVATE
     core_interface
     bitcoin_consensus
+    bitcoin_kernel
     bitcoin_util
+    bitcoin_util_kernel
     univalue
     secp256k1
     $<TARGET_NAME_IF_EXISTS:USDT::headers>
@@ -189,10 +226,6 @@ add_library(bitcoin_node STATIC EXCLUDE_FROM_ALL
   bip324.cpp
   blockencodings.cpp
   blockfilter.cpp
-  consensus/tx_verify.cpp
-  dbwrapper.cpp
-  deploymentstatus.cpp
-  flatfile.cpp
   headerssync.cpp
   httprpc.cpp
   httpserver.cpp
@@ -203,14 +236,6 @@ add_library(bitcoin_node STATIC EXCLUDE_FROM_ALL
   index/txindex.cpp
   index/txospenderindex.cpp
   init.cpp
-  kernel/blocktreestorage.cpp
-  kernel/chain.cpp
-  kernel/checks.cpp
-  kernel/coinstats.cpp
-  kernel/context.cpp
-  kernel/cs_main.cpp
-  kernel/disconnected_transactions.cpp
-  kernel/mempool_removal_reason.cpp
   mapport.cpp
   net.cpp
   net_processing.cpp
@@ -218,9 +243,7 @@ add_library(bitcoin_node STATIC EXCLUDE_FROM_ALL
   node/abort.cpp
   node/block_template_manager.cpp
   node/blockmanager_args.cpp
-  node/blockstorage.cpp
   node/caches.cpp
-  node/chainstate.cpp
   node/chainstatemanager_args.cpp
   node/coin.cpp
   node/coins_view_args.cpp
@@ -246,14 +269,13 @@ add_library(bitcoin_node STATIC EXCLUDE_FROM_ALL
   node/txdownloadman_impl.cpp
   node/txorphanage.cpp
   node/txreconciliation.cpp
-  node/utxo_snapshot.cpp
   node/warnings.cpp
   noui.cpp
-  policy/ephemeral_policy.cpp
   policy/fees/block_policy_estimator.cpp
   policy/fees/estimator_args.cpp
   policy/fees/estimator_man.cpp
   policy/fees/mempool_estimator.cpp
+  policy/ephemeral_policy.cpp
   policy/packages.cpp
   policy/rbf.cpp
   policy/settings.cpp
@@ -273,16 +295,10 @@ add_library(bitcoin_node STATIC EXCLUDE_FROM_ALL
   rpc/server_util.cpp
   rpc/signmessage.cpp
   rpc/txoutproof.cpp
-  script/sigcache.cpp
-  signet.cpp
   torcontrol.cpp
-  txdb.cpp
   txgraph.cpp
   txmempool.cpp
   txrequest.cpp
-  validation.cpp
-  validationinterface.cpp
-  versionbits.cpp
   $<$<TARGET_EXISTS:bitcoin_wallet>:wallet/init.cpp>
   $<$<NOT:$<TARGET_EXISTS:bitcoin_wallet>>:dummywallet.cpp>
 )
@@ -290,9 +306,10 @@ target_link_libraries(bitcoin_node
   PRIVATE
     core_interface
     bitcoin_common
+    bitcoin_kernel
     bitcoin_util
+    bitcoin_util_kernel
     $<TARGET_NAME_IF_EXISTS:bitcoin_zmq>
-    leveldb
     minisketch
     univalue
     $<TARGET_NAME_IF_EXISTS:Boost::headers>
