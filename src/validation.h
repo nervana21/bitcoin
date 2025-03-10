@@ -425,6 +425,9 @@ protected:
 
     ValidationSignals* m_signals;
 
+    //! A queue for script verifications that have to be performed by worker threads.
+    CCheckQueue<CScriptCheck>& m_script_check_queue;
+
 public:
     const util::log::Context m_log;
     //! Reference to a BlockManager instance which itself is shared across all
@@ -1218,7 +1221,6 @@ public:
     //! or nullopt if the best header does not extend the tip.
     std::optional<int> BlocksAheadOfTip() const LOCKS_EXCLUDED(::cs_main);
 
-    CCheckQueue<CScriptCheck>& GetCheckQueue() { return m_script_check_queue; }
 
     ~ChainstateManager();
 
