@@ -443,6 +443,8 @@ public:
 
     const CChainParams& m_chainparams;
 
+    ValidationCache& m_validation_cache;
+
     explicit Chainstate(
         node::BlockManager& blockman,
         ChainstateManager& chainman,
