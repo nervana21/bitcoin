@@ -2079,7 +2079,7 @@ bool MemPoolAccept::ConsensusScriptChecks(const ATMPArgs& args, Workspace& ws)
     // There is a similar check in CreateNewBlock() to prevent creating
     // invalid blocks (using TestBlockValidity), however allowing such
     // transactions into the mempool can be exploited as a DoS attack.
-    script_verify_flags currentBlockScriptVerifyFlags{GetBlockScriptFlags(*m_active_chainstate.m_chain.Tip(), m_active_chainstate.m_chainman.GetConsensus(), m_active_chainstate.m_chainman.m_versionbitscache)};
+    script_verify_flags currentBlockScriptVerifyFlags{GetBlockScriptFlags(*m_active_chainstate.m_chain.Tip(), m_active_chainstate.m_chainparams.GetConsensus(), m_active_chainstate.m_chainman.m_versionbitscache)};
     if (!CheckInputsFromMempoolAndCache(tx, state, m_view, m_pool, currentBlockScriptVerifyFlags,
                                         ws.m_precomputed_txdata, m_active_chainstate.CoinsTip(), GetValidationCache())) {
         LogError(m_pool.m_log, "BUG! PLEASE REPORT THIS! CheckInputScripts failed against latest-block but not STANDARD flags %s, %s", hash.ToString(), state.ToString());
@@ -2679,7 +2679,7 @@ std::tuple<MempoolAcceptResult, kernel::FlushResult<void, kernel::AbortFailure>>
                                        int64_t accept_time, bool bypass_limits, bool test_accept)
 {
     AssertLockHeld(::cs_main);
-    const CChainParams& chainparams{active_chainstate.m_chainman.GetParams()};
+    const CChainParams& chainparams{active_chainstate.m_chainparams};
 
     std::vector<COutPoint> coins_to_uncache;
 
@@ -2713,7 +2713,7 @@ std::tuple<PackageMempoolAcceptResult, kernel::FlushResult<void, kernel::AbortFa
     assert(std::all_of(package.cbegin(), package.cend(), [](const auto& tx){return tx != nullptr;}));
 
     std::vector<COutPoint> coins_to_uncache;
-    const CChainParams& chainparams = active_chainstate.m_chainman.GetParams();
+    const CChainParams& chainparams = active_chainstate.m_chainparams;
     auto result = [&]() EXCLUSIVE_LOCKS_REQUIRED(cs_main) {
         AssertLockHeld(cs_main);
         if (test_accept) {

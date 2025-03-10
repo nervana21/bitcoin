@@ -308,6 +308,7 @@ Chainstate::Chainstate(
       m_blockman(blockman),
       m_chainman(chainman),
       m_interrupt(chainman.m_interrupt),
+      m_chainparams(chainman.GetParams()),
       m_assumeutxo(from_snapshot_blockhash ? Assumeutxo::UNVALIDATED : Assumeutxo::VALIDATED),
       m_from_snapshot_blockhash(from_snapshot_blockhash) {}
 
@@ -746,7 +747,7 @@ FlushResult<void, AbortFailure> Chainstate::ConnectBlock(const CBlock& block, Bl
     assert(*pindex->phashBlock == block_hash);
 
     const auto time_start{SteadyClock::now()};
-    const CChainParams& params{m_chainman.GetParams()};
+    const CChainParams& params{m_chainparams};
 
     // Check it again in case a previous version let a bad block in
     // NOTE: We don't currently (re-)invoke ContextualCheckBlock() or
@@ -1384,7 +1385,7 @@ void Chainstate::UpdateTip(const CBlockIndex* pindexNew)
 
     std::vector<bilingual_str> warning_messages;
     if (!m_chainman.IsInitialBlockDownload()) {
-        auto bits = m_chainman.m_versionbitscache.CheckUnknownActivations(pindexNew, m_chainman.GetParams());
+        auto bits = m_chainman.m_versionbitscache.CheckUnknownActivations(pindexNew, m_chainparams);
         for (auto [bit, active] : bits) {
             const bilingual_str warning = strprintf(_("Unknown new rules activated (versionbit %i)"), bit);
             if (active) {
@@ -3104,7 +3105,7 @@ FlushResult<void, BlockValidationState> TestBlockValidity(
     }
 
     // For signets CheckBlock() verifies the challenge iff fCheckPow is set.
-    if (!CheckBlock(block, state, chainstate.m_chainman.GetConsensus(), /*fCheckPow=*/check_pow, /*fCheckMerkleRoot=*/check_merkle_root)) {
+    if (!CheckBlock(block, state, chainstate.m_chainparams.GetConsensus(), /*fCheckPow=*/check_pow, /*fCheckMerkleRoot=*/check_merkle_root)) {
         // This should never happen, but belt-and-suspenders don't approve the
         // block if it does.
         if (state.IsValid()) NONFATAL_UNREACHABLE();
@@ -3127,13 +3128,13 @@ FlushResult<void, BlockValidationState> TestBlockValidity(
      * - do run ContextualCheckBlock()
      */
 
-    if (!ContextualCheckBlockHeader(block, state, chainstate.m_blockman, chainstate.m_chainman.GetConsensus(), chainstate.m_chainman.m_versionbitscache, tip)) {
+    if (!ContextualCheckBlockHeader(block, state, chainstate.m_blockman, chainstate.m_chainparams.GetConsensus(), chainstate.m_chainman.m_versionbitscache, tip)) {
         if (state.IsValid()) NONFATAL_UNREACHABLE();
         result.update({util::Error{}, std::move(state)});
         return result;
     }
 
-    if (!ContextualCheckBlock(block, state, chainstate.m_chainman.GetConsensus(), chainstate.m_chainman.m_versionbitscache, tip)) {
+    if (!ContextualCheckBlock(block, state, chainstate.m_chainparams.GetConsensus(), chainstate.m_chainman.m_versionbitscache, tip)) {
         if (state.IsValid()) NONFATAL_UNREACHABLE();
         result.update({util::Error{}, std::move(state)});
         return result;
@@ -3522,7 +3523,7 @@ bool Chainstate::NeedsRedownload() const
     // At and above m_params.SegwitHeight, segwit consensus rules must be validated
     CBlockIndex* block{m_chain.Tip()};
 
-    while (block != nullptr && DeploymentActiveAt(*block, m_chainman.GetConsensus(), m_chainman.m_versionbitscache, Consensus::DEPLOYMENT_SEGWIT)) {
+    while (block != nullptr && DeploymentActiveAt(*block, m_chainparams.GetConsensus(), m_chainman.m_versionbitscache, Consensus::DEPLOYMENT_SEGWIT)) {
         if (!(block->nStatus & BLOCK_OPT_WITNESS)) {
             // block is insufficiently validated for a segwit client
             return true;
