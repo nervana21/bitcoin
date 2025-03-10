@@ -789,6 +789,7 @@ bool ContextualCheckBlockHeader(
 
 bool ContextualCheckBlock(const CBlock& block, BlockValidationState& state, const Consensus::Params& params, VersionBitsCache& versionbitscache, const CBlockIndex* pindexPrev)
 {
+    Assert(!block.vtx.empty() && block.vtx[0] && !block.vtx[0]->vin.empty());
     const int nHeight = pindexPrev == nullptr ? 0 : pindexPrev->nHeight + 1;
 
     // Enforce BIP113 (Median Time Past).
@@ -816,6 +817,16 @@ bool ContextualCheckBlock(const CBlock& block, BlockValidationState& state, cons
         if (block.vtx[0]->vin[0].scriptSig.size() < expect.size() ||
             !std::equal(expect.begin(), expect.end(), block.vtx[0]->vin[0].scriptSig.begin())) {
             return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-height", "block height mismatch in coinbase");
+        }
+    }
+
+    // Make sure the coinbase transaction is timelocked to the block's height.
+    if (nHeight > 0 && DeploymentActiveAfter(pindexPrev, chainman, Consensus::DEPLOYMENT_CONSENSUSCLEANUP)) {
+        if (block.vtx[0]->nLockTime != static_cast<uint32_t>(nHeight - 1)) {
+            return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-locktime", "block height mismatch in coinbase nLockTime");
+        }
+        if (block.vtx[0]->vin[0].nSequence == CTxIn::SEQUENCE_FINAL) {
+            return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-sequence", "locktime is disabled for coinbase");
         }
     }
 
