@@ -3743,7 +3743,7 @@ void PeerManagerImpl::ProcessCompactBlockTxns(CNode& pfrom, Peer& peer, const Bl
         // We should not have gotten this far in compact block processing unless it's attached to a known header
         const CBlockIndex* prev_block{Assume(m_chainman.m_blockman.LookupBlockIndex(partialBlock.header.hashPrevBlock))};
         ReadStatus status = partialBlock.FillBlock(*pblock, block_transactions.txn,
-                                                   /*segwit_active=*/DeploymentActiveAfter(prev_block, m_chainman, Consensus::DEPLOYMENT_SEGWIT));
+                                                   /*segwit_active=*/DeploymentActiveAfter(prev_block, m_chainman.GetConsensus(), m_chainman.m_versionbitscache, Consensus::DEPLOYMENT_SEGWIT));
         if (status == READ_STATUS_INVALID) {
             RemoveBlockRequest(block_transactions.blockhash, pfrom.GetId()); // Reset in-flight state in case Misbehaving does not result in a disconnect
             Misbehaving(peer, "invalid compact block/non-matching block transactions");
@@ -4987,7 +4987,7 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
                 std::vector<CTransactionRef> dummy;
                 const CBlockIndex* prev_block{Assume(m_chainman.m_blockman.LookupBlockIndex(cmpctblock.header.hashPrevBlock))};
                 status = tempBlock.FillBlock(*pblock, dummy,
-                                             /*segwit_active=*/DeploymentActiveAfter(prev_block, m_chainman, Consensus::DEPLOYMENT_SEGWIT));
+                                             /*segwit_active=*/DeploymentActiveAfter(prev_block, m_chainman.GetConsensus(), m_chainman.m_versionbitscache, Consensus::DEPLOYMENT_SEGWIT));
                 if (status == READ_STATUS_OK) {
                     fBlockReconstructed = true;
                 }
@@ -5123,7 +5123,7 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
 
         // Check for possible mutation if it connects to something we know so we can check for DEPLOYMENT_SEGWIT being active
         if (prev_block && IsBlockMutated(&LogInstance(), /*block=*/*pblock,
-                           /*check_witness_root=*/DeploymentActiveAfter(prev_block, m_chainman, Consensus::DEPLOYMENT_SEGWIT))) {
+                           /*check_witness_root=*/DeploymentActiveAfter(prev_block, m_chainman.GetConsensus(), m_chainman.m_versionbitscache, Consensus::DEPLOYMENT_SEGWIT))) {
             LogDebug(BCLog::NET, "Received mutated block from peer=%d\n", peer.m_id);
             Misbehaving(peer, "mutated block");
             WITH_LOCK(cs_main, RemoveBlockRequest(pblock->GetHash(), peer.m_id));
