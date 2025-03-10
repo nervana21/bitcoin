@@ -1458,7 +1458,7 @@ inline constexpr script_verify_flags CONSENSUS_SCRIPT_VERIFY_FLAGS{
 
 // Returns the script flags which should be checked for a given block
 // (a subset of CONSENSUS_SCRIPT_VERIFY_FLAGS)
-script_verify_flags GetBlockScriptFlags(const CBlockIndex& block_index, const ChainstateManager& chainman);
+script_verify_flags GetBlockScriptFlags(const CBlockIndex& block_index, const Consensus::Params& consensusparams, VersionBitsCache& versionbitscache);
 
 /** The context CheckInputScripts is called in, which decides how a
  *  script failure is reported: as a consensus failure for blocks,
