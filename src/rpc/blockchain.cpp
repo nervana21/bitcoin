@@ -1321,7 +1321,7 @@ static void SoftForkDescPushBack(const CBlockIndex* blockindex, UniValue& softfo
 {
     // For buried deployments.
 
-    if (!DeploymentEnabled(chainman, dep)) return;
+    if (!DeploymentEnabled(chainman.GetConsensus(), dep)) return;
 
     UniValue rv(UniValue::VOBJ);
     rv.pushKV("type", "buried");
@@ -1335,7 +1335,7 @@ static void SoftForkDescPushBack(const CBlockIndex* blockindex, UniValue& softfo
 static void SoftForkDescPushBack(const CBlockIndex* blockindex, UniValue& softforks, const ChainstateManager& chainman, Consensus::DeploymentPos id)
 {
     // For BIP9 deployments.
-    if (!DeploymentEnabled(chainman, id)) return;
+    if (!DeploymentEnabled(chainman.GetConsensus(), id)) return;
     if (blockindex == nullptr) return;
 
     UniValue bip9(UniValue::VOBJ);
