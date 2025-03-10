@@ -317,14 +317,14 @@ fs::path Chainstate::StoragePath() const
 const CBlockIndex* Chainstate::SnapshotBase() const
 {
     if (!m_from_snapshot_blockhash) return nullptr;
-    if (!m_cached_snapshot_base) m_cached_snapshot_base = Assert(m_chainman.m_blockman.LookupBlockIndex(*m_from_snapshot_blockhash));
+    if (!m_cached_snapshot_base) m_cached_snapshot_base = Assert(m_blockman.LookupBlockIndex(*m_from_snapshot_blockhash));
     return m_cached_snapshot_base;
 }
 
 const CBlockIndex* Chainstate::TargetBlock() const
 {
     if (!m_target_blockhash) return nullptr;
-    if (!m_cached_target_block) m_cached_target_block = Assert(m_chainman.m_blockman.LookupBlockIndex(*m_target_blockhash));
+    if (!m_cached_target_block) m_cached_target_block = Assert(m_blockman.LookupBlockIndex(*m_target_blockhash));
     return m_cached_target_block;
 }
 
@@ -1161,7 +1161,7 @@ FlushResult<void, AbortFailure> Chainstate::FlushStateToDisk(
         bool fFlushForPrune = false;
 
         CoinsCacheSizeState cache_state = GetCoinsCacheSizeState();
-        if (m_blockman.IsPruneMode() && (m_blockman.m_check_for_pruning || nManualPruneHeight > 0) && m_chainman.m_blockman.m_blockfiles_indexed) {
+        if (m_blockman.IsPruneMode() && (m_blockman.m_check_for_pruning || nManualPruneHeight > 0) && m_blockman.m_blockfiles_indexed) {
             // make sure we don't prune above any of the prune locks bestblocks
             // pruning is height-based
             int last_prune{m_chain.Height()}; // last height we can prune
@@ -1944,7 +1944,7 @@ FlushResult<> Chainstate::ActivateBestChain(BlockValidationState& state, std::sh
                 }
 
                 if (kernel::IsInterrupted(m_chainman.GetNotifications().blockTip(
-                        /*state=*/GetSynchronizationState(still_in_ibd, m_chainman.m_blockman.m_blockfiles_indexed),
+                        /*state=*/GetSynchronizationState(still_in_ibd, m_blockman.m_blockfiles_indexed),
                         /*index=*/*pindexNewTip,
                         /*verification_progress=*/m_chainman.GuessVerificationProgress(pindexNewTip))))
                 {
@@ -2213,7 +2213,7 @@ FlushResult<> Chainstate::InvalidateBlock(BlockValidationState& state, CBlockInd
         // distinguish user-initiated invalidateblock changes from other
         // changes.
         (void)m_chainman.GetNotifications().blockTip(
-            /*state=*/GetSynchronizationState(m_chainman.IsInitialBlockDownload(), m_chainman.m_blockman.m_blockfiles_indexed),
+            /*state=*/GetSynchronizationState(m_chainman.IsInitialBlockDownload(), m_blockman.m_blockfiles_indexed),
             /*index=*/*to_mark_failed->pprev,
             /*verification_progress=*/WITH_LOCK(m_chainman.GetMutex(), return m_chainman.GuessVerificationProgress(to_mark_failed->pprev)));
 
@@ -3213,7 +3213,7 @@ bool Chainstate::LoadChainTip()
     if (!this->GetRole().historical) {
         // Ignoring return value for now.
         (void)m_chainman.GetNotifications().blockTip(
-            /*state=*/GetSynchronizationState(/*init=*/true, m_chainman.m_blockman.m_blockfiles_indexed),
+            /*state=*/GetSynchronizationState(/*init=*/true, m_blockman.m_blockfiles_indexed),
             /*index=*/*pindex,
             /*verification_progress=*/m_chainman.GuessVerificationProgress(tip));
     }
