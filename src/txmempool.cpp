@@ -1620,7 +1620,7 @@ private:
 
     ValidationCache& GetValidationCache()
     {
-        return m_active_chainstate.m_chainman.m_validation_cache;
+        return m_active_chainstate.m_validation_cache;
     }
 
 private:
