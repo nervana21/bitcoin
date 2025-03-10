@@ -683,10 +683,8 @@ DisconnectResult Chainstate::DisconnectBlock(const CBlock& block, const CBlockIn
     return fClean ? DISCONNECT_OK : DISCONNECT_UNCLEAN;
 }
 
-script_verify_flags GetBlockScriptFlags(const CBlockIndex& block_index, const ChainstateManager& chainman)
+script_verify_flags GetBlockScriptFlags(const CBlockIndex& block_index, const Consensus::Params& consensusparams, VersionBitsCache& versionbitscache)
 {
-    const Consensus::Params& consensusparams = chainman.GetConsensus();
-
     // BIP16 didn't become active until Apr 1 2012 (on mainnet, and
     // retroactively applied to testnet)
     // However, only one historical block violated the P2SH rules (on both
@@ -702,22 +700,22 @@ script_verify_flags GetBlockScriptFlags(const CBlockIndex& block_index, const Ch
     }
 
     // Enforce the DERSIG (BIP66) rule
-    if (DeploymentActiveAt(block_index, consensusparams, chainman.m_versionbitscache, Consensus::DEPLOYMENT_DERSIG)) {
+    if (DeploymentActiveAt(block_index, consensusparams, versionbitscache, Consensus::DEPLOYMENT_DERSIG)) {
         flags |= SCRIPT_VERIFY_DERSIG;
     }
 
     // Enforce CHECKLOCKTIMEVERIFY (BIP65)
-    if (DeploymentActiveAt(block_index, consensusparams, chainman.m_versionbitscache, Consensus::DEPLOYMENT_CLTV)) {
+    if (DeploymentActiveAt(block_index, consensusparams, versionbitscache, Consensus::DEPLOYMENT_CLTV)) {
         flags |= SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY;
     }
 
     // Enforce CHECKSEQUENCEVERIFY (BIP112)
-    if (DeploymentActiveAt(block_index, consensusparams, chainman.m_versionbitscache, Consensus::DEPLOYMENT_CSV)) {
+    if (DeploymentActiveAt(block_index, consensusparams, versionbitscache, Consensus::DEPLOYMENT_CSV)) {
         flags |= SCRIPT_VERIFY_CHECKSEQUENCEVERIFY;
     }
 
     // Enforce BIP147 NULLDUMMY (activated simultaneously with segwit)
-    if (DeploymentActiveAt(block_index, consensusparams, chainman.m_versionbitscache, Consensus::DEPLOYMENT_SEGWIT)) {
+    if (DeploymentActiveAt(block_index, consensusparams, versionbitscache, Consensus::DEPLOYMENT_SEGWIT)) {
         flags |= SCRIPT_VERIFY_NULLDUMMY;
     }
 
@@ -925,7 +923,7 @@ FlushResult<void, AbortFailure> Chainstate::ConnectBlock(const CBlock& block, Bl
     }
 
     // Get the script flags for this block
-    script_verify_flags flags{GetBlockScriptFlags(*pindex, m_chainman)};
+    script_verify_flags flags{GetBlockScriptFlags(*pindex, params.GetConsensus(), m_chainman.m_versionbitscache)};
 
     const auto time_2{SteadyClock::now()};
     m_chainman.time_forks += time_2 - time_1;
@@ -3036,7 +3034,7 @@ bool ChainstateManager::CheckTxAgainstTip(const CTransaction& tx, TxValidationSt
         return false;
     }
 
-    const script_verify_flags flags{GetBlockScriptFlags(*tip, *this)};
+    const script_verify_flags flags{GetBlockScriptFlags(*tip, GetConsensus(), m_versionbitscache)};
     PrecomputedTransactionData txdata;
     return CheckInputScripts(tx, state, view, flags, /*cacheSigStore=*/false, /*cacheFullScriptStore=*/false, txdata, m_validation_cache);
 }
