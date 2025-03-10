@@ -303,6 +303,7 @@ Chainstate::Chainstate(
       m_notifications(chainman.m_options.notifications),
       m_chain_stats(chainman.m_chain_stats),
       m_signals(chainman.m_options.signals),
+      m_script_check_queue(chainman.m_script_check_queue),
       m_log{chainman.m_log},
       m_blockman(blockman),
       m_chainman(chainman),
@@ -961,7 +962,7 @@ FlushResult<void, AbortFailure> Chainstate::ConnectBlock(const CBlock& block, Bl
     // for as long as `control`.
     std::vector<PrecomputedTransactionData> txsdata(block.vtx.size());
     std::optional<CCheckQueueControl<CScriptCheck>> control;
-    if (auto& queue = m_chainman.GetCheckQueue(); queue.HasThreads() && fScriptChecks) control.emplace(queue);
+    if (auto& queue = m_script_check_queue; queue.HasThreads() && fScriptChecks) control.emplace(queue);
 
     std::vector<int> prevheights;
     CAmount nFees = 0;
