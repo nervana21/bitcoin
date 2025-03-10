@@ -439,6 +439,8 @@ public:
 
     ValidationCache& m_validation_cache;
 
+    VersionBitsCache& m_versionbitscache;
+
     explicit Chainstate(
         node::BlockManager& blockman,
         ChainstateManager& chainman,
