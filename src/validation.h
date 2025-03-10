@@ -400,6 +400,10 @@ protected:
 
     std::optional<const char*> m_last_script_check_reason_logged GUARDED_BY(::cs_main){};
 
+    const fs::path& m_datadir;
+
+    kernel::Notifications& m_notifications;
+
 public:
     const util::log::Context m_log;
     //! Reference to a BlockManager instance which itself is shared across all
