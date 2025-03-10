@@ -436,6 +436,8 @@ public:
     //! chainstate within deeply nested method calls.
     ChainstateManager& m_chainman;
 
+    const util::SignalInterrupt& m_interrupt;
+
     explicit Chainstate(
         node::BlockManager& blockman,
         ChainstateManager& chainman,
