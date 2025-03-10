@@ -339,6 +339,12 @@ public:
 
     BlockMap m_block_index GUARDED_BY(cs_main);
 
+    /** Best header we've seen so far for which the block is not known to be invalid
+        (used, among others, for getheaders queries' starting points).
+        In case of multiple best headers with the same work, it could point to any
+        because CBlockIndexWorkComparator tiebreaker rules are not applied. */
+    CBlockIndex* m_best_header GUARDED_BY(::cs_main){nullptr};
+
     /**
      * The height of the base block of an assumeutxo snapshot, if one is in use.
      *
@@ -374,7 +380,7 @@ public:
      */
     void ScanAndUnlinkAlreadyPrunedFiles() EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
-    CBlockIndex* AddToBlockIndex(const CBlockHeader& block, CBlockIndex*& best_header) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    CBlockIndex* AddToBlockIndex(const CBlockHeader& block) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
     /** Create a new block index entry for a given block hash */
     CBlockIndex* InsertBlockIndex(const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
