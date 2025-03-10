@@ -106,7 +106,7 @@ CBlockIndex* TestChainstateManager::FindMostWorkChain()
 
 void TestChainstateManager::ResetBestInvalid()
 {
-    m_best_invalid = nullptr;
+    m_blockman.m_best_invalid = nullptr;
 }
 
 std::vector<std::pair<COutPoint, CAmount>> ResetChainmanAndMempool(TestingSetup& setup, FakeNodeClock& node_clock)

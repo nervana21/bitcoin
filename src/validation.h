@@ -815,9 +815,6 @@ private:
 
     ChainStats m_chain_stats{};
 
-protected:
-    CBlockIndex* m_best_invalid GUARDED_BY(::cs_main){nullptr};
-
 public:
     using Options = kernel::ChainstateManagerOpts;
 
