@@ -441,6 +441,8 @@ public:
 
     const util::SignalInterrupt& m_interrupt;
 
+    const CChainParams& m_chainparams;
+
     explicit Chainstate(
         node::BlockManager& blockman,
         ChainstateManager& chainman,
