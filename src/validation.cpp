@@ -1880,6 +1880,7 @@ Chainstate::Chainstate(
       m_log{chainman.m_log},
       m_blockman(blockman),
       m_chainman(chainman),
+      m_interrupt(chainman.m_interrupt),
       m_assumeutxo(from_snapshot_blockhash ? Assumeutxo::UNVALIDATED : Assumeutxo::VALIDATED),
       m_from_snapshot_blockhash(from_snapshot_blockhash) {}
 
@@ -2946,7 +2947,7 @@ FlushResult<void, AbortFailure> Chainstate::FlushStateToDisk(
             m_signals->ChainStateFlushed(this->GetRole(), GetLocator(m_last_flushed_block));
         }
 
-        if (!m_chainman.m_interrupt && ShouldCompactChainstate(m_chainman.IsInitialBlockDownload())) {
+        if (!m_interrupt && ShouldCompactChainstate(m_chainman.IsInitialBlockDownload())) {
             try {
                 CoinsDB().CompactFullAsync();
             } catch (const std::exception& e) {
@@ -3644,7 +3645,7 @@ FlushResult<> Chainstate::ActivateBestChain(BlockValidationState& state, std::sh
         // never interrupt before connecting the genesis block during LoadChainTip(). Previously this
         // caused an assert() failure during interrupt in such cases as the UTXO DB flushing checks
         // that the best block hash is non-null.
-        if (m_chainman.m_interrupt) break;
+        if (m_interrupt) break;
     } while (pindexNewTip != pindexMostWork);
 
     m_chainman.CheckBlockIndex();
@@ -3733,7 +3734,7 @@ FlushResult<> Chainstate::InvalidateBlock(BlockValidationState& state, CBlockInd
 
     // Disconnect (descendants of) pindex, and mark them invalid.
     while (true) {
-        if (m_chainman.m_interrupt) break;
+        if (m_interrupt) break;
 
         // Make sure the queue of validation callbacks doesn't grow unboundedly.
         if (m_signals) LimitValidationInterfaceQueue(*m_signals);
@@ -4915,7 +4916,7 @@ FlushResult<VerifyDBResult> CVerifyDB::VerifyDB(
                 skipped_l3_checks = true;
             }
         }
-        if (chainstate.m_chainman.m_interrupt) {
+        if (chainstate.m_interrupt) {
             result.update(Interrupted{});
             return result;
         }
@@ -4957,7 +4958,7 @@ FlushResult<VerifyDBResult> CVerifyDB::VerifyDB(
                 result.update(util::Error{std::move(error)});
                 return result;
             }
-            if (chainstate.m_chainman.m_interrupt) {
+            if (chainstate.m_interrupt) {
                 result.update(Interrupted{});
                 return result;
             }
