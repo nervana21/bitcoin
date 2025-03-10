@@ -43,7 +43,11 @@ BOOST_AUTO_TEST_CASE(validation_chainstate_resize_caches)
     ChainstateManager& manager = *Assert(m_node.chainman);
     Chainstate& c1 = WITH_LOCK(cs_main, return manager.InitializeChainstate());
     c1.InitCoinsDB(
-        /*cache_size_bytes=*/8_MiB, /*in_memory=*/true, /*should_wipe=*/false);
+        /*cache_size_bytes=*/8_MiB,
+        /*in_memory=*/true,
+        /*should_wipe=*/false,
+        /*coins_db=*/manager.m_options.coins_db,
+        /*coins_view=*/manager.m_options.coins_view);
     WITH_LOCK(::cs_main, c1.InitCoinsCache(8_MiB));
     BOOST_REQUIRE(manager.LoadGenesisBlock()); // Need at least one block loaded to be able to flush caches
 
