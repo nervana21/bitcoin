@@ -423,6 +423,8 @@ protected:
 
     ChainStats& m_chain_stats;
 
+    ValidationSignals* m_signals;
+
 public:
     const util::log::Context m_log;
     //! Reference to a BlockManager instance which itself is shared across all

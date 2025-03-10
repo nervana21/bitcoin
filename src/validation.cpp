@@ -302,6 +302,7 @@ Chainstate::Chainstate(
     : m_datadir(chainman.m_options.datadir),
       m_notifications(chainman.m_options.notifications),
       m_chain_stats(chainman.m_chain_stats),
+      m_signals(chainman.m_options.signals),
       m_log{chainman.m_log},
       m_blockman(blockman),
       m_chainman(chainman),
@@ -1287,8 +1288,8 @@ FlushResult<void, AbortFailure> Chainstate::FlushStateToDisk(
         }
     }
     if (full_flush_completed) {
-        if (m_chainman.m_options.signals) {
-            m_chainman.m_options.signals->ChainStateFlushed(this->GetRole(), GetLocator(m_last_flushed_block));
+        if (m_signals) {
+            m_signals->ChainStateFlushed(this->GetRole(), GetLocator(m_last_flushed_block));
         }
 
         if (!m_chainman.m_interrupt && ShouldCompactChainstate(m_chainman.IsInitialBlockDownload())) {
@@ -1469,8 +1470,8 @@ FlushResult<> Chainstate::DisconnectTip(BlockValidationState& state, Disconnecte
     UpdateTip(pindexDelete->pprev);
     // Let wallets know transactions went from 1-confirmed to
     // 0-confirmed or conflicted:
-    if (m_chainman.m_options.signals) {
-        m_chainman.m_options.signals->BlockDisconnected(std::move(pblock), pindexDelete);
+    if (m_signals) {
+        m_signals->BlockDisconnected(std::move(pblock), pindexDelete);
     }
     return result;
 }
@@ -1523,8 +1524,8 @@ FlushResult<void, AbortFailure> Chainstate::ConnectTip(
         CoinsViewOverlay& view{*m_coins_views->m_connect_block_view};
         const auto reset_guard{view.StartFetching(*block_to_connect)};
         bool rv = bool{ConnectBlock(*block_to_connect, state, pindexNew, view) >> result};
-        if (m_chainman.m_options.signals) {
-            m_chainman.m_options.signals->BlockChecked(block_to_connect, state);
+        if (m_signals) {
+            m_signals->BlockChecked(block_to_connect, state);
         }
         if (!rv) {
             if (state.IsInvalid())
@@ -1570,8 +1571,8 @@ FlushResult<void, AbortFailure> Chainstate::ConnectTip(
     m_chain.SetTip(*pindexNew);
     m_chainman.UpdateIBDStatus();
     // Not fired while IBD is active. removeForBlock() above still runs.
-    if (!GetRole().historical && m_chainman.m_options.signals && !m_chainman.IsInitialBlockDownload()) {
-        m_chainman.m_options.signals->MempoolTransactionsRemovedForBlock(block_to_connect, std::move(txs_removed_for_block), pindexNew->nHeight);
+    if (!GetRole().historical && m_signals && !m_chainman.IsInitialBlockDownload()) {
+        m_signals->MempoolTransactionsRemovedForBlock(block_to_connect, std::move(txs_removed_for_block), pindexNew->nHeight);
     }
     UpdateTip(pindexNew);
 
@@ -1876,7 +1877,7 @@ FlushResult<> Chainstate::ActivateBestChain(BlockValidationState& state, std::sh
         // Note that if a validationinterface callback ends up calling
         // ActivateBestChain this may lead to a deadlock! We should
         // probably have a DEBUG_LOCKORDER test for this in the future.
-        if (m_chainman.m_options.signals) LimitValidationInterfaceQueue(*m_chainman.m_options.signals);
+        if (m_signals) LimitValidationInterfaceQueue(*m_signals);
 
         {
             LOCK(cs_main);
@@ -1920,8 +1921,8 @@ FlushResult<> Chainstate::ActivateBestChain(BlockValidationState& state, std::sh
                 pindexNewTip = m_chain.Tip();
 
                 for (auto& [index, block] : std::move(connected_blocks)) {
-                    if (m_chainman.m_options.signals) {
-                        m_chainman.m_options.signals->BlockConnected(chainstate_role, std::move(Assert(block)), Assert(index));
+                    if (m_signals) {
+                        m_signals->BlockConnected(chainstate_role, std::move(Assert(block)), Assert(index));
                     }
                 }
 
@@ -1944,8 +1945,8 @@ FlushResult<> Chainstate::ActivateBestChain(BlockValidationState& state, std::sh
             // Enqueue while holding cs_main to ensure that UpdatedBlockTip is called in the order in which blocks are connected
             if (this == &m_chainman.ActiveChainstate() && pindexFork != pindexNewTip) {
                 // Notify ValidationInterface subscribers
-                if (m_chainman.m_options.signals) {
-                    m_chainman.m_options.signals->UpdatedBlockTip(pindexNewTip, pindexFork, still_in_ibd);
+                if (m_signals) {
+                    m_signals->UpdatedBlockTip(pindexNewTip, pindexFork, still_in_ibd);
                 }
 
                 if (kernel::IsInterrupted(m_notifications.blockTip(
@@ -1962,8 +1963,8 @@ FlushResult<> Chainstate::ActivateBestChain(BlockValidationState& state, std::sh
             }
             } // release the chainstate update guard
             // Notify external listeners about the new tip, even if pindexFork == pindexNewTip.
-            if (m_chainman.m_options.signals && this == &m_chainman.ActiveChainstate()) {
-                m_chainman.m_options.signals->ActiveTipChange(*Assert(pindexNewTip), m_chainman.IsInitialBlockDownload());
+            if (m_signals && this == &m_chainman.ActiveChainstate()) {
+                m_signals->ActiveTipChange(*Assert(pindexNewTip), m_chainman.IsInitialBlockDownload());
             }
         } // release cs_main
         // When we reach this point, we switched to a new tip (stored in pindexNewTip).
@@ -2097,7 +2098,7 @@ FlushResult<> Chainstate::InvalidateBlock(BlockValidationState& state, CBlockInd
         if (m_chainman.m_interrupt) break;
 
         // Make sure the queue of validation callbacks doesn't grow unboundedly.
-        if (m_chainman.m_options.signals) LimitValidationInterfaceQueue(*m_chainman.m_options.signals);
+        if (m_signals) LimitValidationInterfaceQueue(*m_signals);
 
         LOCK(cs_main);
         // Lock for as long as disconnectpool is in scope to make sure MaybeUpdateMempoolForReorg is
@@ -2224,8 +2225,8 @@ FlushResult<> Chainstate::InvalidateBlock(BlockValidationState& state, CBlockInd
 
         // Fire ActiveTipChange now for the current chain tip to make sure clients are notified.
         // ActivateBestChain may call this as well, but not necessarily.
-        if (m_chainman.m_options.signals) {
-            m_chainman.m_options.signals->ActiveTipChange(*Assert(m_chain.Tip()), m_chainman.IsInitialBlockDownload());
+        if (m_signals) {
+            m_signals->ActiveTipChange(*Assert(m_chain.Tip()), m_chainman.IsInitialBlockDownload());
         }
     }
     return result;
