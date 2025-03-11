@@ -305,6 +305,7 @@ Chainstate::Chainstate(
       m_signals(chainman.m_options.signals),
       m_script_check_queue(chainman.m_script_check_queue),
       m_assumed_valid_block(*chainman.m_options.assumed_valid_block),
+      m_minimum_chain_work(*chainman.m_options.minimum_chain_work),
       m_log{chainman.m_log},
       m_blockman(blockman),
       m_chainman(chainman),
@@ -812,7 +813,7 @@ FlushResult<void, AbortFailure> Chainstate::ConnectBlock(const CBlock& block, Bl
             script_check_reason = (pindex->nHeight > it->second.nHeight) ? "block height above assumevalid height" : "block not in assumevalid chain";
         } else if (m_blockman.m_best_header->GetAncestor(pindex->nHeight) != pindex) {
             script_check_reason = "block not in best header chain";
-        } else if (m_blockman.m_best_header->nChainWork < m_chainman.MinimumChainWork()) {
+        } else if (m_blockman.m_best_header->nChainWork < m_minimum_chain_work) {
             script_check_reason = "best header chainwork below minimumchainwork";
         } else if (GetBlockProofEquivalentTime(*m_blockman.m_best_header, *pindex, *m_blockman.m_best_header, params.GetConsensus()) <= TWO_WEEKS_IN_SECONDS) {
             script_check_reason = "block too recent relative to best header";
