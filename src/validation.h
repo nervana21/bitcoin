@@ -428,6 +428,8 @@ protected:
     //! A queue for script verifications that have to be performed by worker threads.
     CCheckQueue<CScriptCheck>& m_script_check_queue;
 
+    uint256 m_assumed_valid_block;
+
 public:
     const util::log::Context m_log;
     //! Reference to a BlockManager instance which itself is shared across all
