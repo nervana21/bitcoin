@@ -40,6 +40,7 @@ BOOST_AUTO_TEST_CASE(test_cuckoocache_no_fakes)
 {
     SeedRandomForTest(SeedRand::ZEROS);
     CuckooCache::cache<uint256, SignatureCacheHasher> cc{};
+    LOCK(cc.m_mutex);
     cc.setup_bytes(4_MiB);
     for (int x = 0; x < 100000; ++x) {
         cc.insert(m_rng.rand256());
@@ -59,6 +60,7 @@ double test_cache(size_t bytes, double load)
     SeedRandomForTest(SeedRand::ZEROS);
     std::vector<uint256> hashes;
     Cache set{};
+    LOCK(set.m_mutex);
     set.setup_bytes(bytes);
     uint32_t n_insert = static_cast<uint32_t>(load * (bytes / sizeof(uint256)));
     hashes.resize(n_insert);
@@ -130,6 +132,7 @@ void test_cache_erase(size_t bytes)
     SeedRandomForTest(SeedRand::ZEROS);
     std::vector<uint256> hashes;
     Cache set{};
+    LOCK(set.m_mutex);
     set.setup_bytes(bytes);
     uint32_t n_insert = static_cast<uint32_t>(load * (bytes / sizeof(uint256)));
     hashes.resize(n_insert);
@@ -193,7 +196,10 @@ void test_cache_erase_parallel(size_t bytes)
     SeedRandomForTest(SeedRand::ZEROS);
     std::vector<uint256> hashes;
     Cache set{};
-    set.setup_bytes(bytes);
+    {
+        LOCK(set.m_mutex);
+        set.setup_bytes(bytes);
+    }
     uint32_t n_insert = static_cast<uint32_t>(load * (bytes / sizeof(uint256)));
     hashes.resize(n_insert);
     for (uint32_t i = 0; i < n_insert; ++i) {
@@ -206,11 +212,10 @@ void test_cache_erase_parallel(size_t bytes)
      * "future proofed".
      */
     std::vector<uint256> hashes_insert_copy = hashes;
-    std::shared_mutex mtx;
 
     {
         /** Grab lock to make sure we release inserts */
-        std::unique_lock<std::shared_mutex> l(mtx);
+        LOCK(set.m_mutex);
         /** Insert the first half */
         for (uint32_t i = 0; i < (n_insert / 2); ++i)
             set.insert(hashes_insert_copy[i]);
@@ -225,7 +230,7 @@ void test_cache_erase_parallel(size_t bytes)
         /** Each thread is emplaced with x copy-by-value
         */
         threads.emplace_back([&, x] {
-            std::shared_lock<std::shared_mutex> l(mtx);
+            LOCK(set.m_mutex);
             size_t ntodo = (n_insert/4)/3;
             size_t start = ntodo*x;
             size_t end = ntodo*(x+1);
@@ -239,9 +244,9 @@ void test_cache_erase_parallel(size_t bytes)
      */
     for (std::thread& t : threads)
         t.join();
-    /** Grab lock to make sure we observe erases */
-    std::unique_lock<std::shared_mutex> l(mtx);
     /** Insert the second half */
+
+    LOCK(set.m_mutex);
     for (uint32_t i = (n_insert / 2); i < n_insert; ++i)
         set.insert(hashes_insert_copy[i]);
 
@@ -334,6 +339,7 @@ void test_cache_generations()
 
     std::vector<block_activity> hashes;
     Cache set{};
+    LOCK(set.m_mutex);
     set.setup_bytes(bytes);
     hashes.reserve(n_insert / BLOCK_SIZE);
     std::deque<block_activity> last_few;
