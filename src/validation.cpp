@@ -482,7 +482,7 @@ ValidationCache::ValidationCache(util::log::Logger& logger, const size_t script_
     m_script_execution_cache_hasher.Write(nonce.begin(), 32);
     m_script_execution_cache_hasher.Write(nonce.begin(), 32);
 
-    const auto [num_elems, approx_size_bytes] = m_script_execution_cache.setup_bytes(script_execution_cache_bytes);
+    const auto [num_elems, approx_size_bytes] = WITH_LOCK(m_script_execution_cache.m_mutex, return m_script_execution_cache.setup_bytes(script_execution_cache_bytes));
     const util::log::Context log{BCLog::VALIDATION, &logger};
     LogInfo(log, "Using %zu MiB out of %zu MiB requested for script execution cache, able to store %zu elements",
               approx_size_bytes >> 20, script_execution_cache_bytes >> 20, num_elems);
@@ -527,8 +527,7 @@ bool CheckInputScripts(const CTransaction& tx, TxValidationState& state,
     uint256 hashCacheEntry;
     CSHA256 hasher = validation_cache.ScriptExecutionCacheHasher();
     hasher.Write(UCharCast(tx.GetWitnessHash().begin()), 32).Write((unsigned char*)&flags, sizeof(flags)).Finalize(hashCacheEntry.begin());
-    AssertLockHeld(cs_main); //TODO: Remove this requirement by making CuckooCache not require external locks
-    if (validation_cache.m_script_execution_cache.contains(hashCacheEntry, !cacheFullScriptStore)) {
+    if (WITH_LOCK(validation_cache.m_script_execution_cache.m_mutex, return validation_cache.m_script_execution_cache.contains(hashCacheEntry, !cacheFullScriptStore))) {
         return true;
     }
 
@@ -576,6 +575,7 @@ bool CheckInputScripts(const CTransaction& tx, TxValidationState& state,
     if (cacheFullScriptStore && !pvChecks) {
         // We executed all of the provided scripts, and were told to
         // cache the result. Do so now.
+        LOCK(validation_cache.m_script_execution_cache.m_mutex);
         validation_cache.m_script_execution_cache.insert(hashCacheEntry);
     }
 
