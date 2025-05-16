@@ -14,7 +14,6 @@
 #include <util/byte_units.h>
 #include <util/hasher.h>
 #include <cstddef>
-#include <shared_mutex>
 #include <span>
 #include <vector>
 
@@ -46,7 +45,6 @@ private:
     CSHA256 m_salted_hasher_schnorr;
     typedef CuckooCache::cache<uint256, SignatureCacheHasher> map_type;
     map_type setValid;
-    std::shared_mutex cs_sigcache;
 
 public:
     SignatureCache(util::log::Logger& logger, size_t max_size_bytes);
