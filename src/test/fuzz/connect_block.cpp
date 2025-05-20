@@ -9,6 +9,7 @@
 #include <node/block_template_manager.h>
 #include <node/kernel_notifications.h>
 #include <node/mining_types.h>
+#include <node/transaction.h>
 #include <primitives/block.h>
 #include <primitives/transaction.h>
 #include <pubkey.h>
@@ -214,7 +215,7 @@ void AddExtraTxsToMempool(TestingSetup& setup)
 
         LOCK(::cs_main);
         // Add transaction to the mempool.
-        const MempoolAcceptResult ctx_result = setup.m_node.chainman->ProcessTransaction(MakeTransactionRef(ctx));
+        const MempoolAcceptResult ctx_result = node::ProcessTransaction(MakeTransactionRef(ctx), setup.m_node);
         Assert(ctx_result.m_result_type == MempoolAcceptResult::ResultType::VALID);
 
         Assert(setup.m_node.chainman->ActiveChainstate().GetMempool()->size() == i);
