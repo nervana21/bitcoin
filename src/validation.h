@@ -1234,14 +1234,14 @@ public:
     void ReceivedBlockTransactions(const CBlock& block, CBlockIndex* pindexNew, const FlatFilePos& pos) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     /**
-     * Try to add a transaction to the memory pool.
+     * Consensus-check one non-coinbase transaction against the active chain tip.
      *
-     * @param[in]  tx              The transaction to submit for mempool acceptance.
-     * @param[in]  test_accept     When true, run validation checks but don't submit to mempool.
+     * Runs the same checks ConnectBlock applies before updating the UTXO set:
+     * CheckTransaction, finality, input availability, BIP68 sequence locks,
+     * Consensus::CheckTxInputs at the next height, and input scripts under the
+     * tip's block script flags. Does not consult a mempool and does not write
+     * the UTXO set.
      */
-    [[nodiscard]] MempoolAcceptResult ProcessTransaction(const CTransactionRef& tx, bool test_accept=false)
-        EXCLUSIVE_LOCKS_REQUIRED(cs_main);
-
     [[nodiscard]] bool CheckTxAtTip(const CTransaction& tx, TxValidationState& state)
         EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
