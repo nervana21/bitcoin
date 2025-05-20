@@ -1121,15 +1121,6 @@ public:
     void ReceivedBlockTransactions(const CBlock& block, CBlockIndex* pindexNew, const FlatFilePos& pos) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     /**
-     * Try to add a transaction to the memory pool.
-     *
-     * @param[in]  tx              The transaction to submit for mempool acceptance.
-     * @param[in]  test_accept     When true, run validation checks but don't submit to mempool.
-     */
-    [[nodiscard]] MempoolAcceptResult ProcessTransaction(const CTransactionRef& tx, bool test_accept=false)
-        EXCLUSIVE_LOCKS_REQUIRED(cs_main);
-
-    /**
      * Consensus-check one non-coinbase transaction against the active chain tip.
      *
      * Runs the same checks ConnectBlock applies before updating the UTXO set:
