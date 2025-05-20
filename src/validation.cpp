@@ -3111,22 +3111,6 @@ bool ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlock>& blo
 
     return true;
 }
-
-MempoolAcceptResult ChainstateManager::ProcessTransaction(const CTransactionRef& tx, bool test_accept)
-{
-    AssertLockHeld(cs_main);
-    Chainstate& active_chainstate = ActiveChainstate();
-    if (!active_chainstate.GetMempool()) {
-        TxValidationState state;
-        state.Invalid(TxValidationResult::TX_NO_MEMPOOL, "no-mempool");
-        return MempoolAcceptResult::Failure(state);
-    }
-    auto [result, flush_result] = AcceptToMemoryPool(active_chainstate, tx, GetTime(), /*bypass_limits=*/ false, test_accept);
-    (void)flush_result;
-    active_chainstate.GetMempool()->check(active_chainstate.CoinsTip(), active_chainstate.m_chain.Height() + 1);
-    return result;
-}
-
 bool ChainstateManager::CheckTxAtTip(const CTransaction& tx, TxValidationState& state)
 {
     AssertLockHeld(cs_main);
@@ -3170,9 +3154,7 @@ bool ChainstateManager::CheckTxAtTip(const CTransaction& tx, TxValidationState& 
     return CheckInputScripts(tx, state, view, flags, CheckInputScriptsFor::Block, /*cacheSigStore=*/false, /*cacheFullScriptStore=*/false, txdata, m_validation_cache);
 }
 
-
-FlushResult<void, BlockValidationState> TestBlockValidity(
-    Chainstate& chainstate,
+FlushResult<void, BlockValidationState> TestBlockValidity(    Chainstate& chainstate,
     const CBlock& block,
     const bool check_pow,
     const bool check_merkle_root)
