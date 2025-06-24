@@ -285,7 +285,7 @@ void BlockManager::FindFilesToPruneManual(
 {
     assert(IsPruneMode() && nManualPruneHeight > 0);
 
-    LOCK(::cs_main);
+    LOCK2(cs_main, m_last_blockfile_mutex);
     if (chain.m_chain.Height() < 0) {
         return;
     }
@@ -313,7 +313,7 @@ void BlockManager::FindFilesToPrune(
     const Chainstate& chain,
     ChainstateManager& chainman)
 {
-    LOCK(::cs_main);
+    LOCK2(cs_main, m_last_blockfile_mutex);
     // Compute `target` value with maximum size (in bytes) of blocks below the
     // `last_prune` height which should be preserved and not pruned. The
     // `target` value will be derived from the -prune preference provided by the
@@ -568,6 +568,7 @@ util::Result<InterruptResult, AbortFailure> BlockManager::LoadBlockIndexDB(const
 
     {
         // Initialize the blockfile cursors.
+        LOCK(m_last_blockfile_mutex);
         for (size_t i = 0; i < m_blockfile_info.size(); ++i) {
             const auto last_height_in_file = m_blockfile_info[i].nHeightLast;
             m_blockfile_cursors[BlockfileTypeForHeight(last_height_in_file)] = {static_cast<int>(i), 0};
@@ -591,7 +592,7 @@ util::Result<InterruptResult, AbortFailure> BlockManager::LoadBlockIndexDB(const
 void BlockManager::ScanAndUnlinkAlreadyPrunedFiles()
 {
     AssertLockHeld(::cs_main);
-    int max_blockfile{this->MaxBlockfileNum()};
+    int max_blockfile = WITH_LOCK(m_last_blockfile_mutex, return this->MaxBlockfileNum());
     if (!m_have_pruned) {
         return;
     }
@@ -787,6 +788,7 @@ BlockfileType BlockManager::BlockfileTypeForHeight(int height)
 FlushResult<> BlockManager::FlushChainstateBlockFile(int tip_height)
 {
     AssertLockHeld(::cs_main);
+    LOCK(m_last_blockfile_mutex);
     auto& cursor = m_blockfile_cursors[BlockfileTypeForHeight(tip_height)];
     // If the cursor does not exist, it means an assumeutxo snapshot is loaded,
     // but no blocks past the snapshot height have been written yet, so there
@@ -834,6 +836,7 @@ fs::path BlockManager::GetBlockPosFilename(const FlatFilePos& pos) const
 FlushResult<FlatFilePos, AbortFailure> BlockManager::FindNextBlockPos(unsigned int nAddSize, unsigned int nHeight, uint64_t nTime)
 {
     AssertLockHeld(::cs_main);
+    LOCK(m_last_blockfile_mutex);
     FlushResult<FlatFilePos, AbortFailure> result;
     const BlockfileType chain_type = BlockfileTypeForHeight(nHeight);
 
@@ -931,6 +934,8 @@ void BlockManager::UpdateBlockInfo(const CBlock& block, unsigned int nHeight, co
     AssertLockHeld(::cs_main);
     // Update the cursor so it points to the last file.
     const BlockfileType chain_type{BlockfileTypeForHeight(nHeight)};
+
+    LOCK(m_last_blockfile_mutex);
     auto& cursor{m_blockfile_cursors[chain_type]};
     if (!cursor || cursor->file_num < pos.nFile) {
         m_blockfile_cursors[chain_type] = BlockfileCursor{pos.nFile};
@@ -975,7 +980,7 @@ FlushResult<void, AbortFailure> BlockManager::WriteBlockUndo(const CBlockUndo& b
     FlushResult<void, AbortFailure> result;
     AssertLockHeld(::cs_main);
     const BlockfileType type = BlockfileTypeForHeight(block.nHeight);
-    auto& cursor = *Assert(m_blockfile_cursors[type]);
+    auto& cursor = *Assert(WITH_LOCK(m_last_blockfile_mutex, return m_blockfile_cursors[type]));
 
     // Write undo information to disk
     if (block.GetUndoPos().IsNull()) {
