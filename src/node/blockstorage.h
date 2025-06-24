@@ -492,10 +492,10 @@ private:
         EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     /** Return false if block file or undo file flushing fails. */
-    [[nodiscard]] kernel::FlushResult<> FlushBlockFile(int blockfile_num, bool fFinalize, bool finalize_undo) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    [[nodiscard]] kernel::FlushResult<> FlushBlockFile(int blockfile_num, bool fFinalize, bool finalize_undo) EXCLUSIVE_LOCKS_REQUIRED(m_blockfile_mutex);
 
     /** Return false if undo file flushing fails. */
-    [[nodiscard]] kernel::FlushResult<> FlushUndoFile(int block_file, bool finalize = false);
+    [[nodiscard]] kernel::FlushResult<> FlushUndoFile(int block_file, bool finalize = false) EXCLUSIVE_LOCKS_REQUIRED(m_blockfile_mutex);
 
     /**
      * Helper function performing various preparations before a block can be saved to disk:
@@ -506,15 +506,15 @@ private:
      * The nAddSize argument passed to this function should include not just the size of the serialized CBlock, but also the size of
      * separator fields (STORAGE_HEADER_BYTES).
      */
-    [[nodiscard]] kernel::FlushResult<FlatFilePos, kernel::AbortFailure> FindNextBlockPos(unsigned int nAddSize, unsigned int nHeight, uint64_t nTime) EXCLUSIVE_LOCKS_REQUIRED(::cs_main, !m_last_blockfile_mutex);
-    [[nodiscard]] kernel::FlushResult<> FlushChainstateBlockFile(int tip_height) EXCLUSIVE_LOCKS_REQUIRED(::cs_main, !m_last_blockfile_mutex);
-    [[nodiscard]] util::Result<void, kernel::AbortFailure> FindUndoPos(BlockValidationState& state, int nFile, FlatFilePos& pos, unsigned int nAddSize) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    [[nodiscard]] kernel::FlushResult<FlatFilePos, kernel::AbortFailure> FindNextBlockPos(unsigned int nAddSize, unsigned int nHeight, uint64_t nTime) EXCLUSIVE_LOCKS_REQUIRED(::cs_main, !m_blockfile_mutex);
+    [[nodiscard]] kernel::FlushResult<> FlushChainstateBlockFile(int tip_height) EXCLUSIVE_LOCKS_REQUIRED(::cs_main, !m_blockfile_mutex);
+    [[nodiscard]] util::Result<void, kernel::AbortFailure> FindUndoPos(BlockValidationState& state, int nFile, FlatFilePos& pos, unsigned int nAddSize) EXCLUSIVE_LOCKS_REQUIRED(::cs_main, m_blockfile_mutex);
 
     /* Calculate the block/rev files to delete based on height specified by user with RPC command pruneblockchain */
     void FindFilesToPruneManual(
         std::set<int>& setFilesToPrune,
         int nManualPruneHeight,
-        const Chainstate& chain) EXCLUSIVE_LOCKS_REQUIRED(!m_last_blockfile_mutex);
+        const Chainstate& chain) EXCLUSIVE_LOCKS_REQUIRED(!m_blockfile_mutex);
 
     /**
      * Prune block and undo files (blk???.dat and rev???.dat) so that the disk space used is less than a user-defined target.
@@ -536,9 +536,9 @@ private:
         std::set<int>& setFilesToPrune,
         int last_prune,
         const Chainstate& chain,
-        ChainstateManager& chainman) EXCLUSIVE_LOCKS_REQUIRED(!m_last_blockfile_mutex);
+        ChainstateManager& chainman) EXCLUSIVE_LOCKS_REQUIRED(!m_blockfile_mutex);
 
-    Mutex m_last_blockfile_mutex;
+    Mutex m_blockfile_mutex;
     //! Since assumedvalid chainstates may be syncing a range of the chain that is very
     //! far away from the normal/background validation process, we should segment blockfiles
     //! for assumed chainstates. Otherwise, we might have wildly different height ranges
@@ -550,18 +550,22 @@ private:
     //!
     //! The first element is the NORMAL cursor, second is ASSUMED.
     std::array<std::optional<BlockfileCursor>, BlockfileType::NUM_TYPES>
-        m_blockfile_cursors GUARDED_BY(m_last_blockfile_mutex) = {
+        m_blockfile_cursors GUARDED_BY(m_blockfile_mutex) = {
             BlockfileCursor{},
             std::nullopt,
     };
-    int MaxBlockfileNum() EXCLUSIVE_LOCKS_REQUIRED(m_last_blockfile_mutex)
+    int MaxBlockfileNum() EXCLUSIVE_LOCKS_REQUIRED(m_blockfile_mutex)
     {
-        AssertLockHeld(m_last_blockfile_mutex);
+        AssertLockHeld(m_blockfile_mutex);
         static const BlockfileCursor empty_cursor;
         const auto& normal = m_blockfile_cursors[BlockfileType::NORMAL].value_or(empty_cursor);
         const auto& assumed = m_blockfile_cursors[BlockfileType::ASSUMED].value_or(empty_cursor);
         return std::max(normal.file_num, assumed.file_num);
     }
+
+    uint64_t CalculateCurrentUsageImpl() EXCLUSIVE_LOCKS_REQUIRED(m_blockfile_mutex);
+
+    void PruneOneBlockFileImpl(const int fileNumber) EXCLUSIVE_LOCKS_REQUIRED(cs_main, m_blockfile_mutex);
 
     /** Global flag to indicate we should check to see if there are
      *  block/undo files that should be deleted.  Set on startup
@@ -591,7 +595,7 @@ private:
     std::unique_ptr<BlockStore> m_undo_store;
 
 protected:
-    std::vector<CBlockFileInfo> m_blockfile_info;
+    std::vector<CBlockFileInfo> m_blockfile_info GUARDED_BY(m_blockfile_mutex);
 
     /** Dirty block index entries. */
     std::set<CBlockIndex*> m_dirty_blockindex;
@@ -672,32 +676,36 @@ public:
 
     std::unique_ptr<kernel::BlockTreeStore> m_block_tree_db GUARDED_BY(::cs_main);
 
-    void WriteBlockIndexDB() EXCLUSIVE_LOCKS_REQUIRED(::cs_main, !m_last_blockfile_mutex);
+    void WriteBlockIndexDB() EXCLUSIVE_LOCKS_REQUIRED(::cs_main, !m_blockfile_mutex);
     [[nodiscard]] util::Result<kernel::InterruptResult, kernel::AbortFailure> LoadBlockIndexDB(const std::optional<uint256>& snapshot_blockhash)
-        EXCLUSIVE_LOCKS_REQUIRED(::cs_main, !m_last_blockfile_mutex);
+        EXCLUSIVE_LOCKS_REQUIRED(::cs_main, !m_blockfile_mutex);
 
     /**
      * Remove any pruned block & undo files that are still on disk.
      * This could happen on some systems if the file was still being read while unlinked,
      * or if we crash before unlinking.
      */
-    void ScanAndUnlinkAlreadyPrunedFiles() EXCLUSIVE_LOCKS_REQUIRED(::cs_main, !m_last_blockfile_mutex);
+    void ScanAndUnlinkAlreadyPrunedFiles() EXCLUSIVE_LOCKS_REQUIRED(::cs_main, !m_blockfile_mutex);
 
     CBlockIndex* AddToBlockIndex(const CBlockHeader& block) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
     /** Create a new block index entry for a given block hash */
     CBlockIndex* InsertBlockIndex(const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     //! Mark one block file as pruned (modify associated database entries)
-    void PruneOneBlockFile(int fileNumber) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    void PruneOneBlockFile(const int fileNumber) EXCLUSIVE_LOCKS_REQUIRED(cs_main, !m_blockfile_mutex)
+    {
+        LOCK(m_blockfile_mutex);
+        return PruneOneBlockFileImpl(fileNumber);
+    }
 
     CBlockIndex* LookupBlockIndex(const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
     const CBlockIndex* LookupBlockIndex(const uint256& hash) const EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     /** Get block file info entry for one block file */
-    CBlockFileInfo* GetBlockFileInfo(size_t n) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    CBlockFileInfo* GetBlockFileInfo(size_t n) EXCLUSIVE_LOCKS_REQUIRED(::cs_main, !m_blockfile_mutex);
 
     [[nodiscard]] kernel::FlushResult<void, kernel::AbortFailure> WriteBlockUndo(const CBlockUndo& blockundo, BlockValidationState& state, CBlockIndex& block)
-        EXCLUSIVE_LOCKS_REQUIRED(::cs_main, !m_last_blockfile_mutex);
+        EXCLUSIVE_LOCKS_REQUIRED(::cs_main, !m_blockfile_mutex);
 
     /** Store block on disk and update block file statistics.
      *
@@ -707,7 +715,7 @@ public:
      * @returns in case of success, the position to which the block was written to
      *          in case of an error, an empty FlatFilePos
      */
-    [[nodiscard]] kernel::FlushResult<FlatFilePos, kernel::AbortFailure> WriteBlock(const CBlock& block, int nHeight) EXCLUSIVE_LOCKS_REQUIRED(::cs_main, !m_last_blockfile_mutex);
+    [[nodiscard]] kernel::FlushResult<FlatFilePos, kernel::AbortFailure> WriteBlock(const CBlock& block, int nHeight) EXCLUSIVE_LOCKS_REQUIRED(::cs_main, !m_blockfile_mutex);
 
     /** Update blockfile info while processing a block during reindex. The block must be available on disk.
      *
@@ -715,7 +723,7 @@ public:
      * @param[in]  nHeight      the height of the block
      * @param[in]  pos          the position of the serialized CBlock on disk
      */
-    void UpdateBlockInfo(const CBlock& block, unsigned int nHeight, const FlatFilePos& pos) EXCLUSIVE_LOCKS_REQUIRED(::cs_main, !m_last_blockfile_mutex);
+    void UpdateBlockInfo(const CBlock& block, unsigned int nHeight, const FlatFilePos& pos) EXCLUSIVE_LOCKS_REQUIRED(::cs_main, !m_blockfile_mutex);
 
     /** Whether running in -prune mode. */
     [[nodiscard]] bool IsPruneMode() const { return m_prune_mode; }
@@ -727,7 +735,11 @@ public:
     [[nodiscard]] bool LoadingBlocks() const { return m_importing || !m_blockfiles_indexed; }
 
     /** Calculate the amount of disk space the block & undo files currently use */
-    uint64_t CalculateCurrentUsage() EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    uint64_t CalculateCurrentUsage() EXCLUSIVE_LOCKS_REQUIRED(::cs_main, !m_blockfile_mutex)
+    {
+        LOCK(m_blockfile_mutex);
+        return CalculateCurrentUsageImpl();
+    }
 
     //! Check if all blocks in the [upper_block, lower_block] range have data available as
     //! defined by the status mask.
