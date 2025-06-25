@@ -1760,8 +1760,7 @@ void PeerManagerImpl::ReattemptPrivateBroadcast(CScheduler& scheduler)
     const auto stale_txs = m_tx_for_private_broadcast.GetStale();
     if (!stale_txs.empty()) {
         for (const auto& stale_tx : stale_txs) {
-            // Only hold lock per single submission
-            LOCK(cs_main);
+            // Only hold lock per single submission. ProcessTransaction takes cs_main.
             auto [mempool_acceptable, flush_result] = node::ProcessTransaction(stale_tx, m_chainman.ActiveChainstate(), m_mempool, /*test_accept=*/true);
             if (mempool_acceptable.m_result_type == MempoolAcceptResult::ResultType::VALID) {
                 if (!m_tx_for_private_broadcast.TryGrantRetry(stale_tx)) continue;
@@ -3498,7 +3497,7 @@ void PeerManagerImpl::ProcessPackageResult(const node::PackageToValidate& packag
 bool PeerManagerImpl::ProcessOrphanTx(Peer& peer)
 {
     AssertLockHeld(g_msgproc_mutex);
-    LOCK2(::cs_main, m_tx_download_mutex);
+    LOCK(m_tx_download_mutex);
 
     while (CTransactionRef porphanTx = m_txdownloadman.GetTxToReconsider(peer.m_id)) {
         auto [result, flush_result]{node::ProcessTransaction(porphanTx, m_chainman.ActiveChainstate(), m_mempool)};
@@ -4750,7 +4749,7 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
                      txid.ToString(), pfrom.LogPeer());
         }
 
-        LOCK2(cs_main, m_tx_download_mutex);
+        LOCK(m_tx_download_mutex);
 
         const auto& [should_validate, package_to_validate] = m_txdownloadman.ReceivedTx(pfrom.GetId(), ptx);
         if (!should_validate) {
