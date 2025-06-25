@@ -2707,7 +2707,7 @@ std::tuple<MempoolAcceptResult, kernel::FlushResult<void, kernel::AbortFailure>>
 std::tuple<PackageMempoolAcceptResult, kernel::FlushResult<void, kernel::AbortFailure>> ProcessNewPackage(Chainstate& active_chainstate, CTxMemPool& pool,
                                                    const Package& package, bool test_accept, const std::optional<CFeeRate>& client_maxfeerate)
 {
-    AssertLockHeld(cs_main);
+    LOCK(cs_main);
     assert(!package.empty());
     assert(std::all_of(package.cbegin(), package.cend(), [](const auto& tx){return tx != nullptr;}));
 
