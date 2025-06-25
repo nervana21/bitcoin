@@ -404,8 +404,7 @@ FUZZ_TARGET(tx_pool_standard, .init = initialize_tx_pool)
 
         // Make sure ProcessNewPackage on one transaction works.
         // The result is not guaranteed to be the same as what is returned by ATMP.
-        auto [result_package, process_result]{WITH_LOCK(::cs_main,
-                                    return ProcessNewPackage(chainstate, tx_pool, {tx}, true, /*client_maxfeerate=*/{}))};
+        auto [result_package, process_result]{ProcessNewPackage(chainstate, tx_pool, {tx}, true, /*client_maxfeerate=*/{})};
         Assert(process_result);
         // If something went wrong due to a package-specific policy, it might not return a
         // validation result for the transaction.

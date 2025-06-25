@@ -396,12 +396,14 @@ static RPCMethod testmempoolaccept()
             ChainstateManager& chainman = EnsureChainman(node);
             Chainstate& chainstate = chainman.ActiveChainstate();
             const PackageMempoolAcceptResult package_result = [&] {
-                LOCK(::cs_main);
+            const PackageMempoolAcceptResult package_result = [&] {
                 if (txns.size() > 1) {
                     auto [mempool_accept, flush_result]{ProcessNewPackage(chainstate, mempool, txns, /*test_accept=*/true, /*client_maxfeerate=*/{})};
+                    Assert(flush_result);
                     return mempool_accept;
                 }
                 auto [mempool_accept, flush_result]{ProcessTransaction(txns[0], node, /*test_accept=*/true)};
+                Assert(flush_result);
                 return PackageMempoolAcceptResult(txns[0]->GetWitnessHash(), mempool_accept);
             }();
 
@@ -1479,7 +1481,8 @@ static RPCMethod submitpackage()
             NodeContext& node = EnsureAnyNodeContext(request.context);
             CTxMemPool& mempool = EnsureMemPool(node);
             Chainstate& chainstate = EnsureChainman(node).ActiveChainstate();
-            auto [package_result, flush_result]{WITH_LOCK(::cs_main, return ProcessNewPackage(chainstate, mempool, txns, /*test_accept=*/ false, client_maxfeerate))};
+            auto [package_result, flush_result]{ProcessNewPackage(chainstate, mempool, txns, /*test_accept=*/ false, client_maxfeerate)};
+            Assert(flush_result);
 
             std::string package_msg = "success";
 

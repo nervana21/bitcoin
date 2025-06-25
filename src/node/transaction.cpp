@@ -21,7 +21,7 @@ namespace node {
 
 std::tuple<MempoolAcceptResult, kernel::FlushResult<void, kernel::AbortFailure>> ProcessTransaction(const CTransactionRef& tx, Chainstate& chainstate, CTxMemPool& mempool, bool test_accept)
 {
-    AssertLockHeld(cs_main);
+    LOCK(cs_main);
     auto [result, flush_result] = AcceptToMemoryPool(chainstate, tx, mempool, GetTime(), /*bypass_limits=*/ false, test_accept);
     mempool.check(chainstate.CoinsTip(), chainstate.m_chain.Height() + 1);
     return {std::move(result), std::move(flush_result)};
@@ -29,7 +29,6 @@ std::tuple<MempoolAcceptResult, kernel::FlushResult<void, kernel::AbortFailure>>
 
 std::tuple<MempoolAcceptResult, kernel::FlushResult<void, kernel::AbortFailure>> ProcessTransaction(const CTransactionRef& tx, const NodeContext& node, bool test_accept)
 {
-    AssertLockHeld(cs_main);
     Chainstate& active_chainstate = node.chainman->ActiveChainstate();
     if (!node.mempool) {
         TxValidationState state;
@@ -66,6 +65,7 @@ TransactionError BroadcastTransaction(NodeContext& node, const CTransactionRef t
     bool callback_set = false;
 
     {
+        {
         LOCK(cs_main);
 
         // If the transaction is already confirmed in the chain, don't do anything
@@ -76,6 +76,7 @@ TransactionError BroadcastTransaction(NodeContext& node, const CTransactionRef t
             // IsSpent doesn't mean the coin is spent, it means the output doesn't exist.
             // So if the output does exist, then this transaction exists in the chain.
             if (!existingCoin.IsSpent()) return TransactionError::ALREADY_IN_UTXO_SET;
+        }
         }
 
         if (auto mempool_tx = node.mempool->get(txid); mempool_tx) {

@@ -339,8 +339,8 @@ FUZZ_TARGET(ephemeral_package_eval, .init = initialize_tx_pool)
 
         auto single_submit = txs.size() == 1;
 
-        auto [result_package, process_result]{WITH_LOCK(::cs_main,
-                                    return ProcessNewPackage(chainstate, tx_pool, txs, /*test_accept=*/single_submit, /*client_maxfeerate=*/{}))};
+        auto [result_package, process_result]{ProcessNewPackage(chainstate, tx_pool, txs, /*test_accept=*/single_submit, /*client_maxfeerate=*/{})};
+        Assert(process_result);
 
         auto [res, flush_result]{WITH_LOCK(::cs_main, return AcceptToMemoryPool(chainstate, txs.back(), tx_pool, GetTime(),
                                    /*bypass_limits=*/false, /*test_accept=*/!single_submit))};
@@ -513,8 +513,7 @@ FUZZ_TARGET(tx_package_eval, .init = initialize_tx_pool)
             client_maxfeerate = CFeeRate(fuzzed_data_provider.ConsumeIntegralInRange<CAmount>(-1, 50 * COIN), 100);
         }
 
-        auto [result_package, process_result]{WITH_LOCK(::cs_main,
-                                    return ProcessNewPackage(chainstate, tx_pool, txs, /*test_accept=*/single_submit, client_maxfeerate))};
+        auto [result_package, process_result]{ProcessNewPackage(chainstate, tx_pool, txs, /*test_accept=*/single_submit, client_maxfeerate)};
         Assert(process_result);
 
         // Always set bypass_limits to false because it is not supported in ProcessNewPackage and
