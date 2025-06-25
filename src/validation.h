@@ -288,8 +288,7 @@ struct PackageMempoolAcceptResult
 * possible for the package to be partially submitted.
 */
 [[nodiscard]] std::tuple<PackageMempoolAcceptResult, kernel::FlushResult<void, kernel::AbortFailure>> ProcessNewPackage(Chainstate& active_chainstate, CTxMemPool& pool,
-                                                   const Package& txns, bool test_accept, const std::optional<CFeeRate>& client_maxfeerate)
-                                                   EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+                                                   const Package& txns, bool test_accept, const std::optional<CFeeRate>& client_maxfeerate) LOCKS_EXCLUDED(cs_main);
 
 /* Mempool validation helper functions */
 
