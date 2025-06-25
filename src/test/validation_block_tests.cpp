@@ -309,7 +309,6 @@ BOOST_AUTO_TEST_CASE(mempool_locks_reorg)
 
         // Add the txs to the tx pool
         {
-            LOCK(cs_main);
             for (const auto& tx : txs) {
                 auto [result, flush_result]{node::ProcessTransaction(tx, m_node)};
                 BOOST_REQUIRE(result.m_result_type == MempoolAcceptResult::ResultType::VALID);
