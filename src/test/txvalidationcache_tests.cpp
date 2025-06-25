@@ -32,8 +32,6 @@ BOOST_FIXTURE_TEST_CASE(tx_mempool_block_doublespend, Dersig100Setup)
     CScript scriptPubKey = CScript() <<  ToByteVector(coinbaseKey.GetPubKey()) << OP_CHECKSIG;
 
     const auto ToMemPool = [this](const CMutableTransaction& tx) {
-        LOCK(cs_main);
-
         auto [result, flush_result]{ProcessTransaction(MakeTransactionRef(tx), m_node)};
         BOOST_CHECK(flush_result);
         return result.m_result_type == MempoolAcceptResult::ResultType::VALID;
