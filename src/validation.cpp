@@ -2899,18 +2899,23 @@ bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock,
     if (fNewBlock) *fNewBlock = true;
     try {
         FlatFilePos blockPos{};
-        if (dbp) {
-            blockPos = *dbp;
-            m_blockman.UpdateBlockInfo(block, pindex->nHeight, blockPos);
-        } else {
-            auto pos{m_blockman.WriteBlock(block, pindex->nHeight) >> result};
-            if (!pos || pos->IsNull()) {
-                auto error{Untranslated("Failed to find position to write new block to disk")};
-                state.Error(strprintf("%s: %s", __func__, error.original));
-                result.update(util::Error{std::move(error)});
-                return false;
+        {
+            LEAVE_CRITICAL_SECTION(cs_main);
+            if (dbp) {
+                blockPos = *dbp;
+                m_blockman.UpdateBlockInfo(block, pindex->nHeight, blockPos);
+            } else {
+                auto pos{m_blockman.WriteBlock(block, pindex->nHeight) >> result};
+                if (!pos || pos->IsNull()) {
+                    auto error{Untranslated("Failed to find position to write new block to disk")};
+                    state.Error(strprintf("%s: %s", __func__, error.original));
+                    result.update(util::Error{std::move(error)});
+                    ENTER_CRITICAL_SECTION(cs_main);
+                    return false;
+                }
+                blockPos = *pos;
             }
-            blockPos = *pos;
+            ENTER_CRITICAL_SECTION(cs_main);
         }
         ReceivedBlockTransactions(block, pindex, blockPos);
     } catch (const std::runtime_error& e) {
