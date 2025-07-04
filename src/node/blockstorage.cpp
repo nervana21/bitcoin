@@ -840,7 +840,6 @@ fs::path BlockManager::GetBlockPosFilename(const FlatFilePos& pos) const
 
 FlushResult<FlatFilePos, AbortFailure> BlockManager::FindNextBlockPos(unsigned int nAddSize, unsigned int nHeight, uint64_t nTime)
 {
-    AssertLockHeld(::cs_main);
     LOCK(m_blockfile_mutex);
     FlushResult<FlatFilePos, AbortFailure> result;
     const BlockfileType chain_type = BlockfileTypeForHeight(nHeight);
@@ -936,7 +935,6 @@ FlushResult<FlatFilePos, AbortFailure> BlockManager::FindNextBlockPos(unsigned i
 
 void BlockManager::UpdateBlockInfo(const CBlock& block, unsigned int nHeight, const FlatFilePos& pos)
 {
-    AssertLockHeld(::cs_main);
     // Update the cursor so it points to the last file.
     const BlockfileType chain_type{BlockfileTypeForHeight(nHeight)};
 
@@ -1162,7 +1160,6 @@ BlockManager::ReadRawBlockResult BlockManager::ReadRawBlock(const FlatFilePos& p
 
 FlushResult<FlatFilePos, AbortFailure> BlockManager::WriteBlock(const CBlock& block, int nHeight)
 {
-    AssertLockHeld(::cs_main);
     const unsigned int block_size{static_cast<unsigned int>(GetSerializeSize(TX_WITH_WITNESS(block)))};
     auto result{FindNextBlockPos(block_size + STORAGE_HEADER_BYTES, nHeight, block.GetBlockTime())};
     if (!result || result->IsNull()) {
