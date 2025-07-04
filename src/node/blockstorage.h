@@ -506,7 +506,7 @@ private:
      * The nAddSize argument passed to this function should include not just the size of the serialized CBlock, but also the size of
      * separator fields (STORAGE_HEADER_BYTES).
      */
-    [[nodiscard]] kernel::FlushResult<FlatFilePos, kernel::AbortFailure> FindNextBlockPos(unsigned int nAddSize, unsigned int nHeight, uint64_t nTime) EXCLUSIVE_LOCKS_REQUIRED(::cs_main, !m_blockfile_mutex);
+    [[nodiscard]] kernel::FlushResult<FlatFilePos, kernel::AbortFailure> FindNextBlockPos(unsigned int nAddSize, unsigned int nHeight, uint64_t nTime) EXCLUSIVE_LOCKS_REQUIRED(!m_blockfile_mutex);
     [[nodiscard]] kernel::FlushResult<> FlushChainstateBlockFile(int tip_height) EXCLUSIVE_LOCKS_REQUIRED(::cs_main, !m_blockfile_mutex);
     [[nodiscard]] util::Result<void, kernel::AbortFailure> FindUndoPos(BlockValidationState& state, int nFile, FlatFilePos& pos, unsigned int nAddSize) EXCLUSIVE_LOCKS_REQUIRED(::cs_main, m_blockfile_mutex);
 
@@ -715,7 +715,7 @@ public:
      * @returns in case of success, the position to which the block was written to
      *          in case of an error, an empty FlatFilePos
      */
-    [[nodiscard]] kernel::FlushResult<FlatFilePos, kernel::AbortFailure> WriteBlock(const CBlock& block, int nHeight) EXCLUSIVE_LOCKS_REQUIRED(::cs_main, !m_blockfile_mutex);
+    [[nodiscard]] kernel::FlushResult<FlatFilePos, kernel::AbortFailure> WriteBlock(const CBlock& block, int nHeight) EXCLUSIVE_LOCKS_REQUIRED(!m_blockfile_mutex);
 
     /** Update blockfile info while processing a block during reindex. The block must be available on disk.
      *
@@ -723,7 +723,7 @@ public:
      * @param[in]  nHeight      the height of the block
      * @param[in]  pos          the position of the serialized CBlock on disk
      */
-    void UpdateBlockInfo(const CBlock& block, unsigned int nHeight, const FlatFilePos& pos) EXCLUSIVE_LOCKS_REQUIRED(::cs_main, !m_blockfile_mutex);
+    void UpdateBlockInfo(const CBlock& block, unsigned int nHeight, const FlatFilePos& pos) EXCLUSIVE_LOCKS_REQUIRED(!m_blockfile_mutex);
 
     /** Whether running in -prune mode. */
     [[nodiscard]] bool IsPruneMode() const { return m_prune_mode; }
