@@ -137,11 +137,11 @@ BOOST_FIXTURE_TEST_CASE(index_unclean_shutdown, TestChain100Setup)
 
                 new_block = std::make_shared<CBlock>(block);
 
-                LOCK(cs_main);
+                UniqueLock lock{cs_main};
                 BlockValidationState state;
                 BOOST_CHECK(CheckBlock(block, state, params.GetConsensus()));
                 FlushResult<void, AbortFailure> accept_result;
-                BOOST_CHECK(m_node.chainman->AcceptBlock(new_block, state, accept_result, &new_block_index, true, nullptr, nullptr, true));
+                BOOST_CHECK(m_node.chainman->AcceptBlock(new_block, lock, state, accept_result, &new_block_index, true, nullptr, nullptr, true));
                 BOOST_CHECK(accept_result);
                 CCoinsViewCache view(&chainstate.CoinsTip());
                 BOOST_CHECK(chainstate.ConnectBlock(block, state, new_block_index, view));
