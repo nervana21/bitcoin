@@ -2827,12 +2827,11 @@ void ChainstateManager::ReportHeadersPresync(int64_t height, int64_t timestamp)
 }
 
 /** Store block on disk. If dbp is non-nullptr, the file is known to already reside on disk */
-bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, BlockValidationState& state, FlushResult<void, AbortFailure>& result, CBlockIndex** ppindex, bool fRequested, const FlatFilePos* dbp, bool* fNewBlock, bool min_pow_checked)
+bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, UniqueLock<RecursiveMutex>& lock, BlockValidationState& state, FlushResult<void, AbortFailure>& result, CBlockIndex** ppindex, bool fRequested, const FlatFilePos* dbp, bool* fNewBlock, bool min_pow_checked)
 {
     const CBlock& block = *pblock;
 
     if (fNewBlock) *fNewBlock = false;
-    AssertLockHeld(cs_main);
 
     CBlockIndex *pindexDummy = nullptr;
     CBlockIndex *&pindex = ppindex ? *ppindex : pindexDummy;
@@ -2900,7 +2899,7 @@ bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock,
     try {
         FlatFilePos blockPos{};
         {
-            LEAVE_CRITICAL_SECTION(cs_main);
+            REVERSE_LOCK(lock, cs_main);
             if (dbp) {
                 blockPos = *dbp;
                 m_blockman.UpdateBlockInfo(block, pindex->nHeight, blockPos);
@@ -2910,12 +2909,10 @@ bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock,
                     auto error{Untranslated("Failed to find position to write new block to disk")};
                     state.Error(strprintf("%s: %s", __func__, error.original));
                     result.update(util::Error{std::move(error)});
-                    ENTER_CRITICAL_SECTION(cs_main);
                     return false;
                 }
                 blockPos = *pos;
             }
-            ENTER_CRITICAL_SECTION(cs_main);
         }
         ReceivedBlockTransactions(block, pindex, blockPos);
     } catch (const std::runtime_error& e) {
@@ -2958,7 +2955,7 @@ bool ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlock>& blo
 
         // CheckBlock() does not support multi-threaded block validation because CBlock::fChecked can cause data race.
         // Therefore, the following critical section must include the CheckBlock() call as well.
-        LOCK(cs_main);
+        TRY_LOCK(cs_main, lock);
 
         // Skipping AcceptBlock() for CheckBlock() failures means that we will never mark a block as invalid if
         // CheckBlock() fails.  This is protective against consensus failure if there are any unknown forms of block
@@ -2968,7 +2965,7 @@ bool ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlock>& blo
         bool ret = CheckBlock(*block, state, GetConsensus());
         if (ret) {
             // Store to disk
-            ret = AcceptBlock(block, state, result, &pindex, force_processing, nullptr, new_block, min_pow_checked);
+            ret = AcceptBlock(block, lock, state, result, &pindex, force_processing, nullptr, new_block, min_pow_checked);
         }
         if (!ret) {
             if (m_options.signals) {
@@ -3675,7 +3672,7 @@ FlushResult<InterruptResult, AbortFailure> ChainstateManager::LoadExternalBlockF
                 std::shared_ptr<CBlock> pblock{}; // needs to remain available after the cs_main lock is released to avoid duplicate reads from disk
 
                 {
-                    LOCK(cs_main);
+                    TRY_LOCK(cs_main, lock);
                     // detect out of order blocks, and store them for later
                     if (hash != params.GetConsensus().hashGenesisBlock && !m_blockman.LookupBlockIndex(header.hashPrevBlock)) {
                         LogDebug(log_reindex, "%s: Out of order block %s, parent %s not known\n", __func__, hash.ToString(),
@@ -3697,7 +3694,7 @@ FlushResult<InterruptResult, AbortFailure> ChainstateManager::LoadExternalBlockF
 
                         FlushResult<void, AbortFailure> accept_result;
                         BlockValidationState state;
-                        if (AcceptBlock(pblock, state, accept_result, nullptr, true, dbp, nullptr, true)) {
+                        if (AcceptBlock(pblock, lock, state, accept_result, nullptr, true, dbp, nullptr, true)) {
                             nLoaded++;
                         }
                         // Propagate flush messages but not flush success/failure (AcceptBlock
@@ -3762,10 +3759,10 @@ FlushResult<InterruptResult, AbortFailure> ChainstateManager::LoadExternalBlockF
                         if (m_blockman.ReadBlock(*pblockrecursive, it->second, {})) {
                             const auto& block_hash{pblockrecursive->GetHash()};
                             LogDebug(log_reindex, "%s: Processing out of order child %s of %s", __func__, block_hash.ToString(), head.ToString());
-                            LOCK(cs_main);
+                            TRY_LOCK(cs_main, lock);
                             FlushResult<void, AbortFailure> accept_result;
                             BlockValidationState dummy;
-                            if (AcceptBlock(pblockrecursive, dummy, accept_result, nullptr, true, &it->second, nullptr, true)) {
+                            if (AcceptBlock(pblockrecursive, lock, dummy, accept_result, nullptr, true, &it->second, nullptr, true)) {
                                 nLoaded++;
                                 queue.push_back(block_hash);
                             }

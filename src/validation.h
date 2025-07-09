@@ -1201,7 +1201,7 @@ public:
      *            Errors from saving or flushing to disk are reported in `result`
      *            and do not affect the return value.
      */
-    [[nodiscard]] bool AcceptBlock(const std::shared_ptr<const CBlock>& pblock, BlockValidationState& state, kernel::FlushResult<void, kernel::AbortFailure>& result, CBlockIndex** ppindex, bool fRequested, const FlatFilePos* dbp, bool* fNewBlock, bool min_pow_checked) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    [[nodiscard]] bool AcceptBlock(const std::shared_ptr<const CBlock>& pblock, UniqueLock<RecursiveMutex>& lock, BlockValidationState& state, kernel::FlushResult<void, kernel::AbortFailure>& result, CBlockIndex** ppindex, bool fRequested, const FlatFilePos* dbp, bool* fNewBlock, bool min_pow_checked) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     void ReceivedBlockTransactions(const CBlock& block, CBlockIndex* pindexNew, const FlatFilePos& pos) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
