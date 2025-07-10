@@ -286,7 +286,8 @@ void BlockManager::FindFilesToPruneManual(
 {
     assert(IsPruneMode() && nManualPruneHeight > 0);
 
-    LOCK2(cs_main, m_blockfile_mutex);
+    LOCK(cs_main);
+    LOCK(m_blockfile_mutex);
     if (chain.m_chain.Height() < 0) {
         return;
     }
@@ -596,7 +597,7 @@ void BlockManager::ScanAndUnlinkAlreadyPrunedFiles()
 {
     AssertLockHeld(::cs_main);
     std::set<int> block_files_to_prune;
-    {
+    { // scope for m_blockfile_mutex
     LOCK(m_blockfile_mutex);
     int max_blockfile = this->MaxBlockfileNum();
     if (!m_have_pruned) {
@@ -608,7 +609,7 @@ void BlockManager::ScanAndUnlinkAlreadyPrunedFiles()
             block_files_to_prune.insert(file_number);
         }
     }
-    }
+    } // end of scope for m_blockfile_mutex
 
     UnlinkPrunedFiles(block_files_to_prune);
 }
