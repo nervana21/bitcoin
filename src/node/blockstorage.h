@@ -538,7 +538,7 @@ private:
         const Chainstate& chain,
         ChainstateManager& chainman) EXCLUSIVE_LOCKS_REQUIRED(!m_blockfile_mutex);
 
-    Mutex m_blockfile_mutex;
+    mutable Mutex m_blockfile_mutex;
     //! Since assumedvalid chainstates may be syncing a range of the chain that is very
     //! far away from the normal/background validation process, we should segment blockfiles
     //! for assumed chainstates. Otherwise, we might have wildly different height ranges
@@ -796,7 +796,7 @@ public:
     /**
      *  Actually unlink the specified files
      */
-    void UnlinkPrunedFiles(const std::set<int>& setFilesToPrune) const;
+    void UnlinkPrunedFiles(const std::set<int>& setFilesToPrune) const EXCLUSIVE_LOCKS_REQUIRED(!m_blockfile_mutex);
 
     /** Functions for disk access for blocks */
     bool ReadBlock(CBlock& block, const FlatFilePos& pos, const std::optional<uint256>& expected_hash) const;
