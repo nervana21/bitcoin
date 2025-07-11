@@ -2827,31 +2827,35 @@ void ChainstateManager::ReportHeadersPresync(int64_t height, int64_t timestamp)
 }
 
 /** Store block on disk. If dbp is non-nullptr, the file is known to already reside on disk */
-bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, UniqueLock<RecursiveMutex>& lock, BlockValidationState& state, FlushResult<void, AbortFailure>& result, CBlockIndex** ppindex, bool fRequested, const FlatFilePos* dbp, bool* fNewBlock, bool min_pow_checked)
+bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, BlockValidationState& state, FlushResult<void, AbortFailure>& result, CBlockIndex** ppindex, bool fRequested, const FlatFilePos* dbp, bool* fNewBlock, bool min_pow_checked) LOCKS_EXCLUDED(cs_main)
 {
     const CBlock& block = *pblock;
     if (fNewBlock) *fNewBlock = false;
 
     static Mutex map_mutex;
-    static std::set<uint256> blocks_being_processed;
+    static std::map<uint256, std::shared_ptr<Mutex>> blocks_being_processed;
+    std::shared_ptr<Mutex> block_mutex;
 
     CBlockIndex *pindexDummy = nullptr;
     CBlockIndex *&pindex = ppindex ? *ppindex : pindexDummy;
 
-    bool accepted_header{AcceptBlockHeader(block, state, &pindex, min_pow_checked)};
-    CheckBlockIndex();
-
-    if (!accepted_header)
-        return false;
+    {
+        LOCK(cs_main);
+        bool accepted_header{AcceptBlockHeader(block, state, &pindex, min_pow_checked)};
+        CheckBlockIndex();
+        if (!accepted_header)
+           return false;
+    }
 
     {
         LOCK(map_mutex);
         if (!blocks_being_processed.contains(block.GetHash())) {
-            blocks_being_processed.insert(block.GetHash());
-        } else {
-            return true;
+            blocks_being_processed[block.GetHash()] = std::make_shared<Mutex>();
         }
+        block_mutex = blocks_being_processed[block.GetHash()];
     }
+    LOCK(*block_mutex);
+    WAIT_LOCK(cs_main, lock);
 
     // Check all requested blocks that we do not already have for validity and
     // save them to disk. Skip processing of unrequested blocks as an anti-DoS
@@ -2912,7 +2916,7 @@ bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock,
         FlatFilePos blockPos{};
         auto pre_pos{pindex->GetBlockPos()};
         assert(pre_pos.IsNull());
-        LogInfo("Thread %p: About to REVERSE_LOCK for block %s, pindex=%p\n", std::this_thread::get_id(), block.GetHash().ToString(), pindex);
+        LogInfo(m_log, "Thread %p: About to REVERSE_LOCK for block %s, pindex=%p\n", std::this_thread::get_id(), block.GetHash().ToString(), pindex);
         {
             REVERSE_LOCK(lock, cs_main);
             if (dbp) {
@@ -2930,7 +2934,7 @@ bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock,
             }
         }
         auto post_pos{pindex->GetBlockPos()};
-        LogInfo("Thread %p: After REVERSE_LOCK for block %s, pindex=%p, pos=%s, but expected pos=%s\n", std::this_thread::get_id(), block.GetHash().ToString(), pindex, pindex->GetBlockPos().ToString(), blockPos.ToString());
+        LogInfo(m_log, "Thread %p: After REVERSE_LOCK for block %s, pindex=%p, pos=%s, but expected pos=%s\n", std::this_thread::get_id(), block.GetHash().ToString(), pindex, pindex->GetBlockPos().ToString(), blockPos.ToString());
         assert(post_pos.IsNull());
         ReceivedBlockTransactions(block, pindex, blockPos);
     } catch (const std::runtime_error& e) {
@@ -2978,19 +2982,19 @@ bool ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlock>& blo
 
         // CheckBlock() does not support multi-threaded block validation because CBlock::fChecked can cause data race.
         // Therefore, the following critical section must include the CheckBlock() call as well.
-        WAIT_LOCK(cs_main, lock);
 
         // Skipping AcceptBlock() for CheckBlock() failures means that we will never mark a block as invalid if
         // CheckBlock() fails.  This is protective against consensus failure if there are any unknown forms of block
         // malleability that cause CheckBlock() to fail; see e.g. CVE-2012-2459 and
         // https://lists.linuxfoundation.org/pipermail/bitcoin-dev/2019-February/016697.html.  Because CheckBlock() is
         // not very expensive, the anti-DoS benefits of caching failure (of a definitely-invalid block) are not substantial.
-        bool ret = CheckBlock(*block, state, GetConsensus());
+        bool ret = WITH_LOCK(cs_main, return CheckBlock(*block, state, GetConsensus()));
         if (ret) {
             // Store to disk
-            ret = AcceptBlock(block, lock, state, result, &pindex, force_processing, nullptr, new_block, min_pow_checked);
+            ret = AcceptBlock(block, state, result, &pindex, force_processing, nullptr, new_block, min_pow_checked);
         }
         if (!ret) {
+            LOCK(cs_main);
             if (m_options.signals) {
                 m_options.signals->BlockChecked(block, state);
             }
@@ -3716,8 +3720,9 @@ FlushResult<InterruptResult, AbortFailure> ChainstateManager::LoadExternalBlockF
                         nRewind = blkdat.GetPos();
 
                         FlushResult<void, AbortFailure> accept_result;
+                        REVERSE_LOCK(lock, cs_main);
                         BlockValidationState state;
-                        if (AcceptBlock(pblock, lock, state, accept_result, nullptr, true, dbp, nullptr, true)) {
+                        if (AcceptBlock(pblock, state, accept_result, nullptr, true, dbp, nullptr, true)) {
                             nLoaded++;
                         }
                         // Propagate flush messages but not flush success/failure (AcceptBlock
@@ -3782,10 +3787,9 @@ FlushResult<InterruptResult, AbortFailure> ChainstateManager::LoadExternalBlockF
                         if (m_blockman.ReadBlock(*pblockrecursive, it->second, {})) {
                             const auto& block_hash{pblockrecursive->GetHash()};
                             LogDebug(log_reindex, "%s: Processing out of order child %s of %s", __func__, block_hash.ToString(), head.ToString());
-                            WAIT_LOCK(cs_main, lock);
                             FlushResult<void, AbortFailure> accept_result;
                             BlockValidationState dummy;
-                            if (AcceptBlock(pblockrecursive, lock, dummy, accept_result, nullptr, true, &it->second, nullptr, true)) {
+                            if (AcceptBlock(pblockrecursive, dummy, accept_result, nullptr, true, &it->second, nullptr, true)) {
                                 nLoaded++;
                                 queue.push_back(block_hash);
                             }
