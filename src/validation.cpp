@@ -2826,15 +2826,35 @@ void ChainstateManager::ReportHeadersPresync(int64_t height, int64_t timestamp)
     }
 }
 
+class BlockProcessingGuard {
+private:
+    const uint256& block_hash_;
+    Mutex& map_mutex_;
+    std::condition_variable_any& cv_;
+    std::set<uint256>& blocks_being_processed_;
+
+public:
+    BlockProcessingGuard(const uint256& hash, Mutex& mutex, std::condition_variable_any& cv, std::set<uint256>& set)
+        : block_hash_(hash), map_mutex_(mutex), cv_(cv), blocks_being_processed_(set)
+    {
+    }
+
+    ~BlockProcessingGuard() {
+        LOCK(map_mutex_);
+        blocks_being_processed_.erase(block_hash_);
+        cv_.notify_all();
+    }
+};
+
 /** Store block on disk. If dbp is non-nullptr, the file is known to already reside on disk */
 bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, BlockValidationState& state, FlushResult<void, AbortFailure>& result, CBlockIndex** ppindex, bool fRequested, const FlatFilePos* dbp, bool* fNewBlock, bool min_pow_checked) LOCKS_EXCLUDED(cs_main)
 {
     const CBlock& block = *pblock;
     if (fNewBlock) *fNewBlock = false;
 
-    static Mutex map_mutex;
-    static std::map<uint256, std::shared_ptr<Mutex>> blocks_being_processed;
-    std::shared_ptr<Mutex> block_mutex;
+    static Mutex map_mutex ;
+    static std::condition_variable_any processing_cv;
+    static std::set<uint256> blocks_being_processed;
 
     CBlockIndex *pindexDummy = nullptr;
     CBlockIndex *&pindex = ppindex ? *ppindex : pindexDummy;
@@ -2847,15 +2867,23 @@ bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock,
            return false;
     }
 
+    const uint256& block_hash = pindex->GetBlockHash();
+
     {
         LOCK(map_mutex);
-        if (!blocks_being_processed.contains(block.GetHash())) {
-            blocks_being_processed[block.GetHash()] = std::make_shared<Mutex>();
-        }
-        block_mutex = blocks_being_processed[block.GetHash()];
+        processing_cv.wait(map_mutex, [&]() {
+            bool available = !blocks_being_processed.contains(block_hash);
+            if (!available) {
+                LogInfo(m_log, "Thread %p: Block %s still being processed, waiting...", std::this_thread::get_id(), block_hash.ToString());
+            }
+            return available;
+        });
+        LogInfo(m_log, "Thread %p: Block %s available, marking as being processed", std::this_thread::get_id(), block_hash.ToString());
+        blocks_being_processed.insert(block_hash);
     }
-    LOCK(*block_mutex);
     WAIT_LOCK(cs_main, lock);
+
+    BlockProcessingGuard guard(block_hash, map_mutex, processing_cv, blocks_being_processed);
 
     // Check all requested blocks that we do not already have for validity and
     // save them to disk. Skip processing of unrequested blocks as an anti-DoS
@@ -2942,11 +2970,6 @@ bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock,
         FatalError(GetNotifications(), state, error);
         result.update({util::Error{std::move(error)}, AbortFailure{.fatal = true}});
         return false;
-    }
-
-    {
-        LOCK(map_mutex);
-        blocks_being_processed.erase(block.GetHash());
     }
 
     // TODO: FlushStateToDisk() handles flushing of both block and chainstate
