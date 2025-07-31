@@ -907,11 +907,7 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
             return state.Invalid(TxValidationResult::TX_WITNESS_MUTATED, "bad-witness-nonstandard");
         }
     } else {
-        // All standard Segwit programs but P2A require a non-empty witness. Detect if it is spending a non-P2A Segwit
-        // program with no witness. We specifically detect the case of stripped witness because in this case wtxid==txid
-        // and adding the wtxid to the reject filter upon Script validation failure could allow a malicious peer to
-        // interfere with orphan parent resolution (which is necessarily done by txid) as used in 1p1c package relay. For
-        // more details see this brief historical summary: https://github.com/bitcoin/bitcoin/pull/32379#issuecomment-2985252920.
+        // Check if any input is spending a witness output without providing a witness
         for (const auto& txin: tx.vin) {
             const auto& prev_spk{m_view.AccessCoin(txin.prevout).out.scriptPubKey};
             if (RequiresNonEmptyWitness(prev_spk)) {
