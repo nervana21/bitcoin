@@ -901,7 +901,7 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
         return state.Invalid(TxValidationResult::TX_INPUTS_NOT_STANDARD, "bad-txns-nonstandard-inputs");
     }
 
-    // Check for non-standard witnesses.
+    // Check for witness-related policy violations.
     if (tx.HasWitness()) {
         if (m_pool.m_opts.require_standard && !IsWitnessStandard(tx, m_view)) {
             return state.Invalid(TxValidationResult::TX_WITNESS_MUTATED, "bad-witness-nonstandard");
