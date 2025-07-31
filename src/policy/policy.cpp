@@ -96,6 +96,14 @@ bool IsStandard(const CScript& scriptPubKey, TxoutType& whichType)
     return true;
 }
 
+bool RequiresNonEmptyWitness(const CScript& scriptPubKey)
+{
+    int version;
+    std::vector<uint8_t> program;
+    return scriptPubKey.IsWitnessProgram(version, program) &&
+           !scriptPubKey.IsPayToAnchor(version, program);
+}
+
 bool IsStandardTx(const CTransaction& tx, const std::optional<unsigned>& max_datacarrier_bytes, bool permit_bare_multisig, const CFeeRate& dust_relay_fee, std::string& reason)
 {
     if (tx.version > TX_MAX_STANDARD_VERSION || tx.version < 1) {
