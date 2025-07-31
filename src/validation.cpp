@@ -912,11 +912,9 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
         // and adding the wtxid to the reject filter upon Script validation failure could allow a malicious peer to
         // interfere with orphan parent resolution (which is necessarily done by txid) as used in 1p1c package relay. For
         // more details see this brief historical summary: https://github.com/bitcoin/bitcoin/pull/32379#issuecomment-2985252920.
-        int version;
-        std::vector<uint8_t> program;
         for (const auto& txin: tx.vin) {
             const auto& prev_spk{m_view.AccessCoin(txin.prevout).out.scriptPubKey};
-            if (prev_spk.IsWitnessProgram(version, program) && !prev_spk.IsPayToAnchor(version, program)) {
+            if (RequiresNonEmptyWitness(prev_spk)) {
                 return state.Invalid(TxValidationResult::TX_WITNESS_STRIPPED, "bad-witness-stripped");
             }
         }
