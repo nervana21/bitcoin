@@ -139,6 +139,23 @@ bool IsDust(const CTxOut& txout, const CFeeRate& dustRelayFee);
 
 bool IsStandard(const CScript& scriptPubKey, TxoutType& whichType);
 
+/**
+ * Check if the script is a witness program that is not P2A (Pay-to-Anchor).
+ *
+ * All standard Segwit programs but P2A require a non-empty witness.
+ * Detect if it is spending a non-P2A Segwit program with no witness.
+ * We specifically detect the case of stripped witness because in this
+ * case wtxid==txid and adding the wtxid to the reject filter upon Script
+ * validation failure could allow a malicious peer to interfere with orphan
+ * parent resolution (which is necessarily done by txid) as used in 1p1c
+ * package relay. For more details see this brief historical summary:
+ * https://github.com/bitcoin/bitcoin/pull/32379#issuecomment-2985252920.
+ *
+ * @param[in] scriptPubKey The script to check.
+ * @return True if the script is a witness program that is not P2A.
+ */
+bool IsNonAnchorWitnessProgram(const CScript& scriptPubKey);
+
 /** Get the vout index numbers of all dust outputs */
 std::vector<uint32_t> GetDust(const CTransaction& tx, CFeeRate dust_relay_rate);
 
