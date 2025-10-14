@@ -976,6 +976,7 @@ FlushResult<void, AbortFailure> Chainstate::ConnectBlock(const CBlock& block, Bl
     std::optional<CCheckQueueControl<CScriptCheck>> control;
     if (auto& queue = m_script_check_queue; queue.HasThreads() && fScriptChecks) control.emplace(queue);
 
+    const bool enforce_bip54{DeploymentActiveAt(*pindex, params.GetConsensus(), m_versionbitscache, Consensus::DEPLOYMENT_CONSENSUSCLEANUP)};
     std::vector<int> prevheights;
     CAmount nFees = 0;
     int nInputs = 0;
@@ -992,7 +993,7 @@ FlushResult<void, AbortFailure> Chainstate::ConnectBlock(const CBlock& block, Bl
         {
             CAmount txfee = 0;
             TxValidationState tx_state;
-            if (!Consensus::CheckTxInputs(tx, tx_state, view, pindex->nHeight, txfee)) {
+            if (!Consensus::CheckTxInputs(tx, tx_state, view, pindex->nHeight, txfee, /*enforce_bip54=*/enforce_bip54)) {
                 // Any transaction validation failure in ConnectBlock is a block consensus failure
                 state.Invalid(BlockValidationResult::BLOCK_CONSENSUS,
                               tx_state.GetRejectReason(),
@@ -3084,7 +3085,10 @@ bool ChainstateManager::CheckTxAgainstTip(const CTransaction& tx, TxValidationSt
     }
 
     CAmount txfee{0};
-    if (!Consensus::CheckTxInputs(tx, state, view, active.m_chain.Height() + 1, txfee)) {
+    const bool enforce_bip54{DeploymentActiveAfter(
+        tip, GetConsensus(), m_versionbitscache,
+        Consensus::DEPLOYMENT_CONSENSUSCLEANUP)};
+    if (!Consensus::CheckTxInputs(tx, state, view, active.m_chain.Height() + 1, txfee, enforce_bip54)) {
         return false;
     }
 
