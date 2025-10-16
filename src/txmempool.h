@@ -872,8 +872,7 @@ public:
  * @param[in]  test_accept        When true, run validation checks but don't submit to mempool.
  *
  * @returns a MempoolAcceptResult indicating whether the transaction was accepted/rejected with reason.
- */
-[[nodiscard]] std::tuple<MempoolAcceptResult, kernel::FlushResult<void, kernel::AbortFailure>> AcceptToMemoryPool(Chainstate& active_chainstate, const CTransactionRef& tx,
+ */[[nodiscard]] std::tuple<MempoolAcceptResult, kernel::FlushResult<void, kernel::AbortFailure>> AcceptToMemoryPool(Chainstate& active_chainstate, const CTransactionRef& tx, CTxMemPool& pool,
                                        int64_t accept_time, bool bypass_limits, bool test_accept)
     EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 

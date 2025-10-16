@@ -359,8 +359,7 @@ FUZZ_TARGET(ephemeral_package_eval, .init = initialize_ephemeral_package_eval)
         auto [result_package, process_result]{ProcessNewPackage(chainstate, tx_pool, txs, /*test_accept=*/single_submit, /*client_maxfeerate=*/{})};
         Assert(process_result);
         valid_package |= result_package.m_state.IsValid();
-
-        auto [res, flush_result]{WITH_LOCK(::cs_main, return AcceptToMemoryPool(chainstate, txs.back(), GetTime(),
+        auto [res, flush_result]{WITH_LOCK(::cs_main, return AcceptToMemoryPool(chainstate, txs.back(), tx_pool, GetTime(),
                                    /*bypass_limits=*/false, /*test_accept=*/!single_submit))};
         Assert(flush_result);
         (void)res;
@@ -540,7 +539,7 @@ FUZZ_TARGET(tx_package_eval, .init = initialize_tx_package_eval)
 
         // Always set bypass_limits to false because it is not supported in ProcessNewPackage and
         // can be a source of divergence.
-        auto [res, flush_result]{WITH_LOCK(::cs_main, return AcceptToMemoryPool(chainstate, txs.back(), GetTime(),
+        auto [res, flush_result]{WITH_LOCK(::cs_main, return AcceptToMemoryPool(chainstate, txs.back(), tx_pool, GetTime(),
                                    /*bypass_limits=*/false, /*test_accept=*/!single_submit))};
         Assert(flush_result);
         const bool passed = res.m_result_type == MempoolAcceptResult::ResultType::VALID;

@@ -23,9 +23,8 @@
 namespace node {
 
 std::tuple<MempoolAcceptResult, kernel::FlushResult<void, kernel::AbortFailure>> ProcessTransaction(const CTransactionRef& tx, Chainstate& chainstate, CTxMemPool& mempool, bool test_accept)
-{
-    LOCK(cs_main);
-    auto [result, flush_result] = AcceptToMemoryPool(chainstate, tx, GetTime(), /*bypass_limits=*/ false, test_accept);
+{    LOCK(cs_main);
+    auto [result, flush_result] = AcceptToMemoryPool(chainstate, tx, mempool, GetTime(), /*bypass_limits=*/ false, test_accept);
     mempool.check(chainstate.CoinsTip(), chainstate.m_chain.Height() + 1);
     return {std::move(result), std::move(flush_result)};
 }

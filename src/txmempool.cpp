@@ -1207,10 +1207,9 @@ void CTxMemPool::MaybeUpdateMempoolForReorg(
         const auto queuedTx = disconnectpool.take();
         auto it = queuedTx.rbegin();
         while (it != queuedTx.rend()) {
-            // ignore validation errors in resurrected transactions
-                        if (!fAddToMempool || (*it)->IsCoinBase() ||
+            // ignore validation errors in resurrected transactions            if (!fAddToMempool || (*it)->IsCoinBase() ||
                 ([&] {
-                    auto [accepted, flush_result]{AcceptToMemoryPool(active_chainstate, *it, GetTime(),
+                    auto [accepted, flush_result]{AcceptToMemoryPool(active_chainstate, *it, *this, GetTime(),
                         /*bypass_limits=*/true, /*test_accept=*/false)};
                     (void)flush_result;
                     return accepted.m_result_type != MempoolAcceptResult::ResultType::VALID;
@@ -2668,14 +2667,11 @@ PackageMempoolAcceptResult MemPoolAccept::AcceptPackage(const Package& package, 
 }
 
 } // anon namespace
-
-std::tuple<MempoolAcceptResult, kernel::FlushResult<void, kernel::AbortFailure>> AcceptToMemoryPool(Chainstate& active_chainstate, const CTransactionRef& tx,
+std::tuple<MempoolAcceptResult, kernel::FlushResult<void, kernel::AbortFailure>> AcceptToMemoryPool(Chainstate& active_chainstate, const CTransactionRef& tx, CTxMemPool& pool,
                                        int64_t accept_time, bool bypass_limits, bool test_accept)
 {
     AssertLockHeld(::cs_main);
     const CChainParams& chainparams{active_chainstate.m_chainman.GetParams()};
-    assert(active_chainstate.GetMempool() != nullptr);
-    CTxMemPool& pool{*active_chainstate.GetMempool()};
 
     std::vector<COutPoint> coins_to_uncache;
 
