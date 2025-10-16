@@ -119,7 +119,7 @@ FlushResult<InterruptResult> LoadMempool(CTxMemPool& pool, const fs::path& load_
             if (nTime > TicksSinceEpoch<std::chrono::seconds>(now - pool.m_opts.expiry)) {
                 LOCK(cs_main);
                 // Ignore failure value, do not treat flush error as failure.
-                auto [accepted, flush_result] = AcceptToMemoryPool(active_chainstate, tx, nTime, /*bypass_limits=*/false, /*test_accept=*/false);
+                auto [accepted, flush_result] = AcceptToMemoryPool(active_chainstate, tx, pool, nTime, /*bypass_limits=*/false, /*test_accept=*/false);
                 flush_result >> result;
                 if (accepted.m_result_type == MempoolAcceptResult::ResultType::VALID) {
                     ++count;

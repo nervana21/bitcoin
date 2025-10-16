@@ -199,7 +199,7 @@ FlushResult<InterruptResult, ChainstateLoadError> LoadChainstate(ChainstateManag
     chainman.m_total_coinsdb_cache = cache_sizes.coins_db;
 
     // Load the fully validated chainstate.
-    Chainstate& validated_cs{chainman.InitializeChainstate(options.mempool)};
+    Chainstate& validated_cs{chainman.InitializeChainstate()};
 
     // Load a chain created from a UTXO snapshot, if any exist.
     Chainstate* assumeutxo_cs{chainman.LoadAssumeutxoChainstate()};
@@ -249,7 +249,7 @@ FlushResult<InterruptResult, ChainstateLoadError> LoadChainstate(ChainstateManag
         // duplicating the blockindex work above.
         assert(chainman.m_chainstates.empty());
 
-        chainman.InitializeChainstate(options.mempool);
+        chainman.InitializeChainstate();
 
         // A reload of the block index is required to recompute setBlockIndexCandidates
         // for the fully validated chainstate.

@@ -45,7 +45,6 @@
 #include <signet.h>
 #include <tinyformat.h>
 #include <txdb.h>
-#include <txmempool.h>
 #include <uint256.h>
 #include <undo.h>
 #include <util/byte_units.h>
@@ -299,12 +298,10 @@ void CoinsViews::InitCache(int32_t prevoutfetch_threads)
 }
 
 Chainstate::Chainstate(
-    CTxMemPool* mempool,
     BlockManager& blockman,
     ChainstateManager& chainman,
     std::optional<uint256> from_snapshot_blockhash)
-    : m_mempool(mempool),
-      m_datadir(chainman.m_options.datadir),
+    : m_datadir(chainman.m_options.datadir),
       m_notifications(chainman.m_options.notifications),
       m_chain_stats(chainman.m_chain_stats),
       m_signals(chainman.m_options.signals),
@@ -1225,7 +1222,7 @@ CoinsCacheSizeState Chainstate::GetCoinsCacheSizeState(
     size_t max_mempool_size_bytes)
 {
     AssertLockHeld(::cs_main);
-    const int64_t nMempoolUsage = m_mempool ? m_chainman.GetMempool().measureExternalDynamicMemoryUsage() : 0;
+    const int64_t nMempoolUsage = !GetRole().historical ? m_chainman.GetMempool().measureExternalDynamicMemoryUsage() : 0;
     int64_t cacheSize = CoinsTip().DynamicMemoryUsage();
     int64_t nTotalSpace =
         max_coins_cache_size_bytes + std::max<int64_t>(int64_t(max_mempool_size_bytes) - nMempoolUsage, 0);
@@ -1468,7 +1465,7 @@ void Chainstate::UpdateTip(const CBlockIndex* pindexNew)
     }
 
     // New best block
-    if (m_mempool) {
+    if (!GetRole().historical) {
         m_chainman.GetMempool().addTransactionsUpdated(1);
     }
 
@@ -1548,7 +1545,7 @@ FlushResult<> Chainstate::DisconnectTip(BlockValidationState& state, Disconnecte
         return result;
     }
 
-    if (disconnectpool && m_mempool) {
+    if (disconnectpool && !GetRole().historical) {
         // Save transactions to re-add to mempool at end of reorg. If any entries are evicted for
         // exceeding memory limits, remove them and their descendants from the mempool.
         for (auto&& evicted_tx : disconnectpool->AddTransactionsFromBlock(block.vtx)) {
@@ -1655,7 +1652,7 @@ FlushResult<void, AbortFailure> Chainstate::ConnectTip(
              Ticks<MillisecondsDouble>(m_chain_stats.time_chainstate) / m_chain_stats.num_blocks_total);
     // Remove conflicting transactions from the mempool.
     std::vector<RemovedMempoolTransactionInfo> txs_removed_for_block;
-    if (m_mempool) {
+    if (!GetRole().historical) {
         txs_removed_for_block = m_chainman.GetMempool().removeForBlock(*block_to_connect);
         disconnectpool.removeForBlock(block_to_connect->vtx);
     }
@@ -1663,7 +1660,7 @@ FlushResult<void, AbortFailure> Chainstate::ConnectTip(
     m_chain.SetTip(*pindexNew);
     m_chainman.UpdateIBDStatus();
     // Not fired while IBD is active. removeForBlock() above still runs.
-    if (m_mempool && m_signals && !m_chainman.IsInitialBlockDownload()) {
+    if (!GetRole().historical && m_signals && !m_chainman.IsInitialBlockDownload()) {
         m_signals->MempoolTransactionsRemovedForBlock(block_to_connect, std::move(txs_removed_for_block), pindexNew->nHeight);
     }
     UpdateTip(pindexNew);
@@ -1792,7 +1789,7 @@ FlushResult<void, AbortFailure> Chainstate::ActivateBestChainStep(BlockValidatio
         if (!(DisconnectTip(state, &disconnectpool) >> result)) {
             // This is likely a fatal error, but keep the mempool consistent,
             // just in case. Only remove from the mempool in this case.
-            if (m_mempool) m_chainman.GetMempool().MaybeUpdateMempoolForReorg(*this, disconnectpool, false);
+            if (!GetRole().historical) m_chainman.GetMempool().MaybeUpdateMempoolForReorg(*this, disconnectpool, false);
 
             // If we're unable to disconnect a block during normal operation,
             // then that is a failure of our local system -- we should abort
@@ -1838,7 +1835,7 @@ FlushResult<void, AbortFailure> Chainstate::ActivateBestChainStep(BlockValidatio
                     // A system error occurred (disk space, database error, ...).
                     // Make the mempool consistent with the current tip, just in case
                     // any observers try to use it before shutdown.
-                    if (m_mempool) m_chainman.GetMempool().MaybeUpdateMempoolForReorg(*this, disconnectpool, false);
+                    if (!GetRole().historical) m_chainman.GetMempool().MaybeUpdateMempoolForReorg(*this, disconnectpool, false);
                     result.update(util::Error{});
                     return result;
                 }
@@ -1856,9 +1853,9 @@ FlushResult<void, AbortFailure> Chainstate::ActivateBestChainStep(BlockValidatio
     if (fBlocksDisconnected) {
         // If any blocks were disconnected, disconnectpool may be non empty.  Add
         // any disconnected transactions back to the mempool.
-        if (m_mempool) m_chainman.GetMempool().MaybeUpdateMempoolForReorg(*this, disconnectpool, true);
+        if (!GetRole().historical) m_chainman.GetMempool().MaybeUpdateMempoolForReorg(*this, disconnectpool, true);
     }
-    if (m_mempool) m_chainman.GetMempool().check(this->CoinsTip(), this->m_chain.Height() + 1);
+    if (!GetRole().historical) m_chainman.GetMempool().check(this->CoinsTip(), this->m_chain.Height() + 1);
 
     CheckForkWarningConditions();
 
@@ -2209,7 +2206,7 @@ FlushResult<> Chainstate::InvalidateBlock(BlockValidationState& state, CBlockInd
         // transactions back to the mempool if disconnecting was successful,
         // and we're not doing a very deep invalidation (in which case
         // keeping the mempool up to date is probably futile anyway).
-        if (m_mempool) m_chainman.GetMempool().MaybeUpdateMempoolForReorg(*this, disconnectpool, /* fAddToMempool = */ (++disconnected <= 10) && ret);
+        if (!GetRole().historical) m_chainman.GetMempool().MaybeUpdateMempoolForReorg(*this, disconnectpool, /* fAddToMempool = */ (++disconnected <= 10) && ret);
         if (!ret) {
             result.update(util::Error{});
             return result;
@@ -4314,11 +4311,11 @@ double ChainstateManager::GetBackgroundVerificationProgress(const CBlockIndex& p
     return static_cast<double>(pindex.m_chain_tx_count) / static_cast<double>(target_block->m_chain_tx_count);
 }
 
-Chainstate& ChainstateManager::InitializeChainstate(CTxMemPool* mempool)
+Chainstate& ChainstateManager::InitializeChainstate()
 {
     AssertLockHeld(::cs_main);
     assert(m_chainstates.empty());
-    m_chainstates.emplace_back(std::make_unique<Chainstate>(mempool, m_blockman, *this));
+    m_chainstates.emplace_back(std::make_unique<Chainstate>(m_blockman, *this));
     return *m_chainstates.back();
 }
 
@@ -4446,8 +4443,7 @@ FlushResult<CBlockIndex*, AbortFailure> ChainstateManager::ActivateSnapshot(
     }
 
     auto snapshot_chainstate = WITH_LOCK(::cs_main,
-        return std::make_unique<Chainstate>(
-            /*mempool=*/nullptr, m_blockman, *this, base_blockhash));
+        return std::make_unique<Chainstate>(m_blockman, *this, base_blockhash));
 
     {
         LOCK(::cs_main);
@@ -4970,8 +4966,7 @@ Chainstate* ChainstateManager::LoadAssumeutxoChainstate()
     }
     LogInfo(m_log, "[snapshot] detected active snapshot chainstate (%s) - loading",
         fs::PathToString(*path));
-
-    auto snapshot_chainstate{std::make_unique<Chainstate>(nullptr, m_blockman, *this, base_blockhash)};
+    auto snapshot_chainstate{std::make_unique<Chainstate>(m_blockman, *this, base_blockhash)};
     LogInfo(m_log, "[snapshot] switching active chainstate to %s", snapshot_chainstate->ToString());
     return &this->AddChainstate(std::move(snapshot_chainstate));
 }
@@ -4987,12 +4982,6 @@ Chainstate& ChainstateManager::AddChainstate(std::unique_ptr<Chainstate> chainst
     m_chainstates.push_back(std::move(chainstate));
     Chainstate& curr_chainstate{CurrentChainstate()};
     assert(&curr_chainstate == m_chainstates.back().get());
-
-    // Transfer possession of the mempool to the chainstate.
-    // Mempool is empty at this point because we're still in IBD.
-    assert(!prev_chainstate.m_mempool || prev_chainstate.m_mempool->size() == 0);
-    assert(!curr_chainstate.m_mempool);
-    std::swap(curr_chainstate.m_mempool, prev_chainstate.m_mempool);
     return curr_chainstate;
 }
 
@@ -5051,10 +5040,6 @@ bool ChainstateManager::DeleteChainstate(Chainstate& chainstate)
         return false;
     }
     std::unique_ptr<Chainstate> prev_chainstate{Assert(RemoveChainstate(chainstate))};
-    Chainstate& curr_chainstate{CurrentChainstate()};
-    assert(!prev_chainstate->m_mempool || prev_chainstate->m_mempool->size() == 0);
-    assert(!curr_chainstate.m_mempool);
-    std::swap(curr_chainstate.m_mempool, prev_chainstate->m_mempool);
     return true;
 }
 

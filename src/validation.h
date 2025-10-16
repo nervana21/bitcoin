@@ -28,7 +28,6 @@
 #include <script/verify_flags.h>
 #include <sync.h>
 #include <txdb.h>
-#include <txmempool.h>
 #include <uint256.h>
 #include <util/byte_units.h>
 #include <util/check.h>
@@ -55,7 +54,6 @@
 #include <vector>
 
 class Chainstate;
-class CTxMemPool;
 class ChainstateManager;
 struct ChainTxData;
 class DisconnectedBlockTransactions;
@@ -429,10 +427,6 @@ protected:
      */
     Mutex m_chainstate_mutex;
 
-    //! Optional mempool that is kept in sync with the chain.
-    //! Only the active chainstate has a mempool.
-    CTxMemPool* m_mempool;
-
     //! Manages the UTXO set, which is a reflection of the contents of `m_chain`.
     std::unique_ptr<CoinsViews> m_coins_views;
 
@@ -487,7 +481,6 @@ public:
     VersionBitsCache& m_versionbitscache;
 
     explicit Chainstate(
-        CTxMemPool* mempool,
         node::BlockManager& blockman,
         ChainstateManager& chainman,
         std::optional<uint256> from_snapshot_blockhash = std::nullopt);
@@ -607,12 +600,6 @@ public:
     {
         AssertLockHeld(::cs_main);
         return Assert(m_coins_views)->m_dbview;
-    }
-
-    //! @returns A pointer to the mempool.
-    CTxMemPool* GetMempool()
-    {
-        return m_mempool;
     }
 
     //! @returns A reference to a wrapped view of the in-memory UTXO set that
@@ -769,23 +756,6 @@ protected:
 
     void CheckForkWarningConditions() EXCLUSIVE_LOCKS_REQUIRED(cs_main);
     void InvalidChainFound(CBlockIndex* pindexNew) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
-
-    /**
-     * Make mempool consistent after a reorg, by re-adding or recursively erasing
-     * disconnected block transactions from the mempool, and also removing any
-     * other transactions from the mempool that are no longer valid given the new
-     * tip/height.
-     *
-     * Note: we assume that disconnectpool only contains transactions that are NOT
-     * confirmed in the current chain nor already in the mempool (otherwise,
-     * in-mempool descendants of such transactions would be removed).
-     *
-     * Passing fAddToMempool=false will skip trying to add the transactions back,
-     * and instead just erase from the mempool as needed.
-     */
-    void MaybeUpdateMempoolForReorg(
-        DisconnectedBlockTransactions& disconnectpool,
-        bool fAddToMempool) EXCLUSIVE_LOCKS_REQUIRED(cs_main, m_mempool->cs);
 
     /** Check warning conditions and do some notifications on new chain tip set. */
     void UpdateTip(const CBlockIndex* pindexNew)
@@ -1006,10 +976,7 @@ public:
     [[nodiscard]] kernel::FlushResult<> LoadGenesisBlock();
 
     //! Instantiate a new chainstate.
-    //!
-    //! @param[in] mempool              The mempool to pass to the chainstate
-    //                                  constructor
-    Chainstate& InitializeChainstate(CTxMemPool* mempool) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    Chainstate& InitializeChainstate() EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
     //! Construct and activate a Chainstate on the basis of UTXO snapshot data.
     //!
