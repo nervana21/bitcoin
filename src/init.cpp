@@ -61,6 +61,7 @@
 #include <node/chainstatemanager_args.h>
 #include <node/context.h>
 #include <node/interface_ui.h>
+#include <node/kernel_mempool.h>
 #include <node/kernel_notifications.h>
 #include <node/mempool_args.h>
 #include <node/mempool_persist.h>
@@ -162,6 +163,7 @@ using node::DEFAULT_PRINT_MODIFIED_FEE;
 using node::DEFAULT_STOPATHEIGHT;
 using node::DumpMempool;
 using node::ImportBlocks;
+using node::KernelMempool;
 using node::KernelNotifications;
 using node::LoadChainstate;
 using node::LoadMempool;
@@ -1228,9 +1230,11 @@ bool AppInitParameterInteraction(const ArgsManager& args)
     // Also report errors from parsing before daemonization
     {
         kernel::Notifications notifications{};
+        kernel::Mempool mempool_interface{};
         ChainstateManager::Options chainman_opts_dummy{
             .chainparams = chainparams,
             .datadir = args.GetDataDirNet(),
+            .mempool_interface = mempool_interface,
             .notifications = notifications,
         };
         auto chainman_result{ApplyArgsManOptions(args, chainman_opts_dummy)};
@@ -1423,12 +1427,14 @@ FlushResult<kernel::InterruptResult, ChainstateLoadError> InitAndLoadChainstate(
     if (!mempool_error.empty()) {
         return {util::Error{mempool_error}, ChainstateLoadError::FAILURE_FATAL};
     }
+    node.mempool_interface = std::make_unique<KernelMempool>(*node.mempool);
     LogInfo("* Using %.1f MiB for in-memory UTXO set (plus up to %.1f MiB of unused mempool space)",
             cache_sizes.coins / double(1_MiB),
             mempool_opts.max_size_bytes / double(1_MiB));
     ChainstateManager::Options chainman_opts{
         .chainparams = chainparams,
         .datadir = args.GetDataDirNet(),
+        .mempool_interface = *node.mempool_interface,
         .notifications = *node.notifications,
         .signals = node.validation_signals.get(),
     };
