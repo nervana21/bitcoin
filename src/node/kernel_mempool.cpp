@@ -11,6 +11,8 @@
 #include <cstddef>
 #include <cstdint>
 
+class CCoinsViewCache;
+
 namespace node {
 
 void KernelMempool::removeRecursive(const CTransaction& tx)
@@ -33,6 +35,12 @@ size_t KernelMempool::measureExternalDynamicMemoryUsage()
 void KernelMempool::addTransactionsUpdated(uint32_t n)
 {
     m_mempool.AddTransactionsUpdated(n);
+}
+
+void KernelMempool::check(const CCoinsViewCache& active_coins_tip, int64_t spendheight)
+{
+    LOCK(::cs_main);
+    m_mempool.check(active_coins_tip, spendheight);
 }
 
 } // namespace node
