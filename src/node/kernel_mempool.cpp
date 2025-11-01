@@ -22,4 +22,9 @@ std::vector<RemovedMempoolTransactionInfo> KernelMempool::removeForBlock(const C
     return m_mempool.removeForBlock(block.vtx);
 }
 
+size_t KernelMempool::measureExternalDynamicMemoryUsage()
+{
+    return m_mempool.DynamicMemoryUsage();
+}
+
 } // namespace node
