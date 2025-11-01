@@ -3430,7 +3430,7 @@ FlushResult<void, AbortFailure> Chainstate::ActivateBestChainStep(BlockValidatio
         // any disconnected transactions back to the mempool.
         MaybeUpdateMempoolForReorg(disconnectpool, true);
     }
-    if (m_mempool) m_mempool->check(this->CoinsTip(), this->m_chain.Height() + 1);
+    if (m_mempool) m_chainman.GetMempool().check(this->CoinsTip(), this->m_chain.Height() + 1);
 
     CheckForkWarningConditions();
 
