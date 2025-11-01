@@ -11,6 +11,7 @@
 #include <cstdint>
 
 class CBlock;
+class CCoinsViewCache;
 class CTransaction;
 class CTxMemPool;
 
@@ -26,6 +27,7 @@ public:
     std::vector<RemovedMempoolTransactionInfo> removeForBlock(const CBlock& block) override;
     size_t measureExternalDynamicMemoryUsage() override;
     void addTransactionsUpdated(uint32_t n) override;
+    void check(const CCoinsViewCache& active_coins_tip, int64_t spendheight) override;
 
 private:
     CTxMemPool& m_mempool;
