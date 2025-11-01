@@ -4,6 +4,7 @@
 
 #include <node/kernel_mempool.h>
 
+#include <primitives/block.h>
 #include <primitives/transaction.h>
 #include <txmempool.h>
 
@@ -13,6 +14,12 @@ void KernelMempool::removeRecursive(const CTransaction& tx)
 {
     LOCK(m_mempool.cs);
     m_mempool.removeRecursive(tx, MemPoolRemovalReason::REORG);
+}
+
+std::vector<RemovedMempoolTransactionInfo> KernelMempool::removeForBlock(const CBlock& block)
+{
+    LOCK(m_mempool.cs);
+    return m_mempool.removeForBlock(block.vtx);
 }
 
 } // namespace node
