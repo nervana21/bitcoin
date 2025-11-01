@@ -101,7 +101,6 @@ public:
     }
 };
 
-
 } // namespace
 
 extern void MakeRandDeterministicDANGEROUS(const uint256& seed) noexcept;

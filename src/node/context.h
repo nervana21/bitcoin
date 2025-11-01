@@ -42,6 +42,7 @@ class SignalInterrupt;
 namespace node {
 class BlockTemplateManager;
 class KernelNotifications;
+class KernelMempool;
 class Warnings;
 
 //! NodeContext struct containing references to chain state and connection
@@ -85,6 +86,7 @@ struct NodeContext {
     std::unique_ptr<KernelNotifications> notifications;
     //! Must be destroyed before its dependencies (holds references to them).
     std::unique_ptr<BlockTemplateManager> block_template_manager;
+    std::unique_ptr<KernelMempool> mempool_interface;
     //! Issues calls about blocks and transactions
     std::unique_ptr<ValidationSignals> validation_signals;
     std::atomic<int> exit_status{EXIT_SUCCESS};
