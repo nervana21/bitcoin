@@ -8,6 +8,7 @@
 #include <kernel/mempool_entry.h>
 
 #include <cstddef>
+#include <cstdint>
 #include <vector>
 
 class CBlock;
@@ -27,6 +28,7 @@ public:
     virtual void removeRecursive(const CTransaction& tx) {}
     virtual std::vector<RemovedMempoolTransactionInfo> removeForBlock(const CBlock& block) { return {}; }
     virtual size_t measureExternalDynamicMemoryUsage() { return 0; }
+    virtual void addTransactionsUpdated(uint32_t n) {}
 };
 
 } // namespace kernel
