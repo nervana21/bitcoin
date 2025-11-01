@@ -12,6 +12,7 @@
 #include <vector>
 
 class CBlock;
+class CCoinsViewCache;
 class CTransaction;
 
 namespace kernel {
@@ -29,6 +30,7 @@ public:
     virtual std::vector<RemovedMempoolTransactionInfo> removeForBlock(const CBlock& block) { return {}; }
     virtual size_t measureExternalDynamicMemoryUsage() { return 0; }
     virtual void addTransactionsUpdated(uint32_t n) {}
+    virtual void check(const CCoinsViewCache& active_coins_tip, int64_t spendheight) {}
 };
 
 } // namespace kernel
