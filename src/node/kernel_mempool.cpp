@@ -8,6 +8,9 @@
 #include <primitives/transaction.h>
 #include <txmempool.h>
 
+#include <cstddef>
+#include <cstdint>
+
 namespace node {
 
 void KernelMempool::removeRecursive(const CTransaction& tx)
@@ -25,6 +28,11 @@ std::vector<RemovedMempoolTransactionInfo> KernelMempool::removeForBlock(const C
 size_t KernelMempool::measureExternalDynamicMemoryUsage()
 {
     return m_mempool.DynamicMemoryUsage();
+}
+
+void KernelMempool::addTransactionsUpdated(uint32_t n)
+{
+    m_mempool.AddTransactionsUpdated(n);
 }
 
 } // namespace node
