@@ -5,6 +5,11 @@
 #ifndef BITCOIN_KERNEL_MEMPOOL_INTERFACE_H
 #define BITCOIN_KERNEL_MEMPOOL_INTERFACE_H
 
+#include <kernel/mempool_entry.h>
+
+#include <vector>
+
+class CBlock;
 class CTransaction;
 
 namespace kernel {
@@ -19,6 +24,7 @@ public:
     virtual ~Mempool() = default;
 
     virtual void removeRecursive(const CTransaction& tx) {}
+    virtual std::vector<RemovedMempoolTransactionInfo> removeForBlock(const CBlock& block) { return {}; }
 };
 
 } // namespace kernel
