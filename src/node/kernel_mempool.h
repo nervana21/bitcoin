@@ -21,6 +21,7 @@ public:
 
     void removeRecursive(const CTransaction& tx) override;
     std::vector<RemovedMempoolTransactionInfo> removeForBlock(const CBlock& block) override;
+    size_t measureExternalDynamicMemoryUsage() override;
 
 private:
     CTxMemPool& m_mempool;
