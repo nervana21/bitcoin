@@ -2003,8 +2003,8 @@ FlushResult<> Chainstate::ActivateBestChain(BlockValidationState& state, std::sh
             //
             // This cannot be done while holding cs_main (within
             // MaybeValidateSnapshot) or a cs_main deadlock will occur.
-            if (m_chainman.snapshot_download_completed) {
-                m_chainman.snapshot_download_completed();
+            if (m_target_block_reached) {
+                m_target_block_reached();
             }
             break;
         }
@@ -4903,6 +4903,7 @@ Chainstate& ChainstateManager::AddChainstate(std::unique_ptr<Chainstate> chainst
     // Set target block for historical chainstate to snapshot block.
     assert(!prev_chainstate.TargetBlockHash());
     prev_chainstate.SetTargetBlockHash(*Assert(chainstate->m_from_snapshot_blockhash));
+    prev_chainstate.m_target_block_reached = m_target_block_reached;
     m_chainstates.push_back(std::move(chainstate));
     Chainstate& curr_chainstate{CurrentChainstate()};
     assert(&curr_chainstate == m_chainstates.back().get());
