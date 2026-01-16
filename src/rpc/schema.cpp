@@ -1,5 +1,6 @@
 #include <rpc/schema.h>
 
+#include <clientversion.h>
 #include <rpc/server.h>
 #include <rpc/util.h>
 #include <univalue.h>
@@ -32,6 +33,11 @@ class Schema {
 public:
     static UniValue Commands(const std::map<std::string, std::vector<const CRPCCommand*>>& commands) {
         UniValue value{UniValue::VOBJ};
+
+        value.pushKV("version", FormatFullVersion());
+        value.pushKV("version_major", CLIENT_VERSION_MAJOR);
+        value.pushKV("version_minor", CLIENT_VERSION_MINOR);
+        value.pushKV("version_build", CLIENT_VERSION_BUILD);
 
         UniValue rpcs{UniValue::VOBJ};
 
