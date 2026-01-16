@@ -5,6 +5,7 @@
 #include <rpc/util.h>
 #include <univalue.h>
 #include <util/string.h>
+#include <util/time.h>
 
 using util::SplitString;
 
@@ -38,6 +39,11 @@ public:
         value.pushKV("version_major", CLIENT_VERSION_MAJOR);
         value.pushKV("version_minor", CLIENT_VERSION_MINOR);
         value.pushKV("version_build", CLIENT_VERSION_BUILD);
+        
+        // Include timestamp when schema was generated
+        auto now = NodeClock::now();
+        int64_t timestamp_ms = TicksSinceEpoch<std::chrono::milliseconds>(now);
+        value.pushKV("timestamp_ms", timestamp_ms);
 
         UniValue rpcs{UniValue::VOBJ};
 
