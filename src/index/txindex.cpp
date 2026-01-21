@@ -196,14 +196,14 @@ std::optional<TxIndexResult> TxIndex::FindTx(const Txid& tx_hash) const
     });
 
     for (const auto& candidate : candidates) {
-        AutoFile file{m_chainstate->m_blockman.OpenBlockFile(candidate.tx_position, /*fReadOnly=*/true)};
-        if (file.IsNull()) {
+        auto reader{m_chainstate->m_blockman.m_block_store->MakeBlockStorageReader(candidate.tx_position)};
+        if (!reader->IsValid()) {
             LogWarning("OpenBlockFile failed for txid %s", tx_hash.ToString());
             continue;
         }
         CTransactionRef tx;
         try {
-            file >> TX_WITH_WITNESS(tx);
+            *reader >> TX_WITH_WITNESS(tx);
         } catch (const std::exception& e) {
             LogWarning("Deserialize or I/O error - %s", e.what());
             continue;
@@ -224,17 +224,17 @@ std::optional<TxIndexResult> TxIndex::FindLegacyTx(const Txid& tx_hash) const
         return std::nullopt;
     }
 
-    AutoFile file{m_chainstate->m_blockman.OpenBlockFile(postx, /*fReadOnly=*/true)};
-    if (file.IsNull()) {
+    auto reader{m_chainstate->m_blockman.m_block_store->MakeBlockStorageReader(postx)};
+    if (!reader->IsValid()) {
         LogWarning("%s: OpenBlockFile failed", GetName());
         return std::nullopt;
     }
     CBlockHeader header;
     CTransactionRef tx;
     try {
-        file >> header;
-        file.seek(postx.nTxOffset, SEEK_CUR);
-        file >> TX_WITH_WITNESS(tx);
+        *reader >> header;
+        reader->seek(postx.nTxOffset, SEEK_CUR);
+        *reader >> TX_WITH_WITNESS(tx);
     } catch (const std::exception& e) {
         LogWarning("%s: Deserialize or I/O error - %s", GetName(), e.what());
         return std::nullopt;
