@@ -214,14 +214,14 @@ std::optional<TxIndexResult> TxIndex::FindTx(const Txid& tx_hash) const
     std::ranges::sort(candidates, std::greater{}, [](const Candidate& c) { return std::pair{c.in_active_chain, c.block_seq}; });
 
     for (const auto& candidate : candidates) {
-        AutoFile file{m_chainstate->m_blockman.OpenBlockFile(candidate.tx_position, /*fReadOnly=*/true)};
-        if (file.IsNull()) {
+        auto reader{m_chainstate->m_blockman.m_block_store->MakeBlockStorageReader(candidate.tx_position)};
+        if (!reader->IsValid()) {
             WarnAndThrowErr("%s: Failed to open block file for txid %s at %s in block %s",
                             GetName(), tx_hash.ToString(), candidate.tx_position.ToString(), candidate.block_hash.ToString());
         }
         CTransactionRef tx;
         try {
-            file >> TX_WITH_WITNESS(tx);
+            *reader >> TX_WITH_WITNESS(tx);
         } catch (const std::exception& e) {
             WarnAndThrowErr("%s: Deserialize or I/O error (%s). txid %s at %s in block %s",
                             GetName(), e.what(), tx_hash.ToString(), candidate.tx_position.ToString(), candidate.block_hash.ToString());
@@ -247,17 +247,17 @@ std::optional<TxIndexResult> TxIndex::FindLegacyTx(const Txid& tx_hash) const
         return std::nullopt;
     }
 
-    AutoFile file{m_chainstate->m_blockman.OpenBlockFile(postx, /*fReadOnly=*/true)};
-    if (file.IsNull()) {
+    auto reader{m_chainstate->m_blockman.m_block_store->MakeBlockStorageReader(postx)};
+    if (!reader->IsValid()) {
         WarnAndThrowErr("%s: Failed to open block file for txid %s at %s",
                         GetName(), tx_hash.ToString(), postx.ToString());
     }
     CBlockHeader header;
     CTransactionRef tx;
     try {
-        file >> header;
-        file.seek(postx.nTxOffset, SEEK_CUR);
-        file >> TX_WITH_WITNESS(tx);
+        *reader >> header;
+        reader->seek(postx.nTxOffset, SEEK_CUR);
+        *reader >> TX_WITH_WITNESS(tx);
     } catch (const std::exception& e) {
         WarnAndThrowErr("%s: Deserialize or I/O error (%s). txid %s at %s",
                         GetName(), e.what(), tx_hash.ToString(), postx.ToString());
