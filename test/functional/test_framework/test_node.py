@@ -22,6 +22,7 @@ import collections
 import shlex
 import shutil
 import sys
+from collections.abc import Iterable
 from pathlib import Path
 
 from .authproxy import (
@@ -91,7 +92,27 @@ class TestNode():
     To make things easier for the test writer, any unrecognised messages will
     be dispatched to the RPC connection."""
 
-    def __init__(self, i, datadir_path, *, chain, rpchost, timewait, timeout_factor, binaries, coverage_dir, cwd, extra_conf=None, extra_args=None, use_cli=False, start_perf=False, use_valgrind=False, version=None, v2transport=False, uses_wallet=False, ipcbind=False):
+    def __init__(
+        self,
+        i,
+        datadir_path,
+        *,
+        chain,
+        rpchost,
+        timewait,
+        timeout_factor,
+        binaries,
+        coverage_dir,
+        cwd,
+        extra_conf=None,
+        extra_args=None,
+        use_cli=False,
+        start_perf=False,
+        version=None,
+        v2transport=False,
+        uses_wallet=False,
+        ipcbind=False,
+    ):
         """
         Kwargs:
             start_perf (bool): If True, begin profiling the node with `perf` as soon as
@@ -146,15 +167,6 @@ class TestNode():
                 self.ipc_tmp_dir = pathlib.Path(tempfile.mkdtemp(prefix="test-ipc-"))
                 self.ipc_socket_path = self.ipc_tmp_dir / "node.sock"
                 self.args.append(f"-ipcbind=unix:{self.ipc_socket_path}")
-
-        # Use valgrind, expect for previous release binaries
-        if use_valgrind and version is None:
-            default_suppressions_file = Path(__file__).parents[3] / "contrib" / "valgrind.supp"
-            suppressions_file = os.getenv("VALGRIND_SUPPRESSIONS_FILE",
-                                          default_suppressions_file)
-            self.args = ["valgrind", "--suppressions={}".format(suppressions_file),
-                         "--gen-suppressions=all", "--exit-on-first-error=yes",
-                         "--error-exitcode=1", "--quiet"] + self.args
 
         if self.version_is_at_least(190000):
             self.args.append("-logthreadnames")
@@ -469,6 +481,12 @@ class TestNode():
         """Checks whether the node has stopped.
 
         Returns True if the node has stopped. False otherwise.
+
+        If the process has exited, asserts that the exit code matches
+        `expected_ret_code` (which may be a single value or an iterable of values),
+        and that stderr matches `expected_stderr` exactly or, if a regex pattern is
+        provided, contains the pattern.
+
         This method is responsible for freeing resources (self.process)."""
         if not self.running:
             return True
@@ -477,12 +495,17 @@ class TestNode():
             return False
 
         # process has stopped. Assert that it didn't return an error code.
-        assert return_code == expected_ret_code, self._node_msg(
+        if not isinstance(expected_ret_code, Iterable):
+            expected_ret_code = (expected_ret_code,)
+        assert return_code in expected_ret_code, self._node_msg(
             f"Node returned unexpected exit code ({return_code}) vs ({expected_ret_code}) when stopping")
         # Check that stderr is as expected
         self.stderr.seek(0)
         stderr = self.stderr.read().decode('utf-8').strip()
-        if stderr != expected_stderr:
+        if isinstance(expected_stderr, re.Pattern):
+            if not expected_stderr.search(stderr):
+                raise AssertionError(f"Unexpected stderr {stderr!r} does not contain {expected_stderr.pattern!r}")
+        elif stderr != expected_stderr:
             raise AssertionError("Unexpected stderr {} != {}".format(stderr, expected_stderr))
 
         self.stdout.close()

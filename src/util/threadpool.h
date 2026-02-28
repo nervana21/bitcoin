@@ -7,6 +7,7 @@
 
 #include <sync.h>
 #include <tinyformat.h>
+#include <util/expected.h>
 #include <util/check.h>
 #include <util/thread.h>
 
@@ -15,8 +16,8 @@
 #include <functional>
 #include <future>
 #include <queue>
-#include <stdexcept>
 #include <thread>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -104,8 +105,8 @@ public:
     {
         assert(num_workers > 0);
         LOCK(m_mutex);
+        if (m_interrupt) throw std::runtime_error("Thread pool has been interrupted or is stopping");
         if (!m_workers.empty()) throw std::runtime_error("Thread pool already started");
-        m_interrupt = false; // Reset
 
         // Create workers
         m_workers.reserve(num_workers);
@@ -121,6 +122,7 @@ public:
      * Any remaining tasks in the queue will be processed before returning.
      *
      * Must be called from a controller (non-worker) thread.
+     * Concurrent calls to Start() will be rejected while Stop() is in progress.
      */
     void Stop() EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
     {
@@ -137,52 +139,70 @@ public:
             threads_to_join.swap(m_workers);
         }
         m_cv.notify_all();
+        // Help draining queue
+        while (ProcessTask()) {}
+        // Free resources
         for (auto& worker : threads_to_join) worker.join();
+
         // Since we currently wait for tasks completion, sanity-check empty queue
-        WITH_LOCK(m_mutex, Assume(m_work_queue.empty()));
-        // Note: m_interrupt is left true until next Start()
+        LOCK(m_mutex);
+        Assume(m_work_queue.empty());
+        // Re-allow Start() now that all workers have exited
+        m_interrupt = false;
     }
+
+    enum class SubmitError {
+        Inactive,
+        Interrupted,
+    };
 
     /**
      * @brief Enqueues a new task for asynchronous execution.
      *
-     * Returns a `std::future` that provides the task's result or propagates
-     * any exception it throws.
-     * Note: Ignoring the returned future requires guarding the task against
-     * uncaught exceptions, as they would otherwise be silently discarded.
+     * @param  fn Callable to execute asynchronously.
+     * @return On success, a future containing fn's result.
+     *         On failure, an error indicating why the task was rejected:
+     *         - SubmitError::Inactive: Pool has no workers (never started or already stopped).
+     *         - SubmitError::Interrupted: Pool task acceptance has been interrupted.
+     *
+     * Thread-safe: Can be called from any thread, including within the provided 'fn' callable.
+     *
+     * @warning Ignoring the returned future requires guarding the task against
+     *          uncaught exceptions, as they would otherwise be silently discarded.
      */
-    template <class F> [[nodiscard]] EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
-    auto Submit(F&& fn)
+    template <class F>
+    [[nodiscard]] util::Expected<std::future<std::invoke_result_t<F>>, SubmitError> Submit(F&& fn) noexcept EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
     {
-        std::packaged_task task{std::forward<F>(fn)};
+        std::packaged_task<std::invoke_result_t<F>()> task{std::forward<F>(fn)};
         auto future{task.get_future()};
         {
             LOCK(m_mutex);
-            if (m_interrupt || m_workers.empty()) {
-                throw std::runtime_error("No active workers; cannot accept new tasks");
-            }
+            if (m_workers.empty()) return util::Unexpected{SubmitError::Inactive};
+            if (m_interrupt) return util::Unexpected{SubmitError::Interrupted};
+
             m_work_queue.emplace(std::move(task));
         }
         m_cv.notify_one();
-        return future;
+        return {std::move(future)};
     }
 
     /**
      * @brief Execute a single queued task synchronously.
      * Removes one task from the queue and executes it on the calling thread.
      */
-    void ProcessTask() EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
+    bool ProcessTask() EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
     {
         std::packaged_task<void()> task;
         {
             LOCK(m_mutex);
-            if (m_work_queue.empty()) return;
+            if (m_work_queue.empty()) return false;
 
             // Pop the task
             task = std::move(m_work_queue.front());
             m_work_queue.pop();
         }
         task();
+        return true;
     }
 
     /**
@@ -190,6 +210,10 @@ public:
      *
      * Wakes all worker threads so they can drain the queue and exit.
      * Unlike Stop(), this function does not wait for threads to finish.
+     *
+     * Note: The next step in the pool lifecycle is calling Stop(), which
+     *       releases any dangling resources and resets the pool state
+     *       for shutdown or restart.
      */
     void Interrupt() EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
     {
@@ -207,5 +231,16 @@ public:
         return WITH_LOCK(m_mutex, return m_workers.size());
     }
 };
+
+constexpr std::string_view SubmitErrorString(const ThreadPool::SubmitError err) noexcept {
+    switch (err) {
+        case ThreadPool::SubmitError::Inactive:
+            return "No active workers";
+        case ThreadPool::SubmitError::Interrupted:
+            return "Interrupted";
+    }
+    Assume(false); // Unreachable
+    return "Unknown error";
+}
 
 #endif // BITCOIN_UTIL_THREADPOOL_H

@@ -542,6 +542,8 @@ public:
     bool GetNodeStateStats(NodeId nodeid, CNodeStateStats& stats) const override EXCLUSIVE_LOCKS_REQUIRED(!m_peer_mutex);
     std::vector<node::TxOrphanage::OrphanInfo> GetOrphanTransactions() override EXCLUSIVE_LOCKS_REQUIRED(!m_tx_download_mutex);
     PeerManagerInfo GetInfo() const override EXCLUSIVE_LOCKS_REQUIRED(!m_peer_mutex);
+    std::vector<PrivateBroadcast::TxBroadcastInfo> GetPrivateBroadcastInfo() const override EXCLUSIVE_LOCKS_REQUIRED(!m_peer_mutex);
+    std::vector<CTransactionRef> AbortPrivateBroadcast(const uint256& id) override EXCLUSIVE_LOCKS_REQUIRED(!m_peer_mutex);
     void SendPings() override EXCLUSIVE_LOCKS_REQUIRED(!m_peer_mutex);
     void InitiateTxBroadcastToAll(const Txid& txid, const Wtxid& wtxid) override EXCLUSIVE_LOCKS_REQUIRED(!m_peer_mutex);
     void InitiateTxBroadcastPrivate(const CTransactionRef& tx) override EXCLUSIVE_LOCKS_REQUIRED(!m_peer_mutex);
@@ -1855,6 +1857,31 @@ PeerManagerInfo PeerManagerImpl::GetInfo() const
     };
 }
 
+std::vector<PrivateBroadcast::TxBroadcastInfo> PeerManagerImpl::GetPrivateBroadcastInfo() const
+{
+    return m_tx_for_private_broadcast.GetBroadcastInfo();
+}
+
+std::vector<CTransactionRef> PeerManagerImpl::AbortPrivateBroadcast(const uint256& id)
+{
+    const auto snapshot{m_tx_for_private_broadcast.GetBroadcastInfo()};
+    std::vector<CTransactionRef> removed_txs;
+
+    size_t connections_cancelled{0};
+    for (const auto& [tx, _] : snapshot) {
+        if (tx->GetHash().ToUint256() != id && tx->GetWitnessHash().ToUint256() != id) continue;
+        if (const auto peer_acks{m_tx_for_private_broadcast.Remove(tx)}) {
+            removed_txs.push_back(tx);
+            if (NUM_PRIVATE_BROADCAST_PER_TX > *peer_acks) {
+                connections_cancelled += (NUM_PRIVATE_BROADCAST_PER_TX - *peer_acks);
+            }
+        }
+    }
+    m_connman.m_private_broadcast.NumToOpenSub(connections_cancelled);
+
+    return removed_txs;
+}
+
 void PeerManagerImpl::AddToCompactExtraTransactions(const CTransactionRef& tx)
 {
     if (m_opts.max_extra_txs <= 0)
@@ -2057,12 +2084,12 @@ void PeerManagerImpl::BlockConnected(
     }
 
     // The following task can be skipped since we don't maintain a mempool for
-    // the historical chainstate.
-    if (role.historical) {
-        return;
+    // the historical chainstate, or during ibd since we don't receive incoming
+    // transactions from peers into the mempool.
+    if (!role.historical && !m_chainman.IsInitialBlockDownload()) {
+        LOCK(m_tx_download_mutex);
+        m_txdownloadman.BlockConnected(pblock);
     }
-    LOCK(m_tx_download_mutex);
-    m_txdownloadman.BlockConnected(pblock);
 }
 
 void PeerManagerImpl::BlockDisconnected(const std::shared_ptr<const CBlock> &block, const CBlockIndex* pindex)
@@ -3531,7 +3558,7 @@ void PeerManagerImpl::PushPrivateBroadcastTx(CNode& node)
 {
     Assume(node.IsPrivateBroadcastConn());
 
-    const auto opt_tx{m_tx_for_private_broadcast.PickTxForSend(node.GetId())};
+    const auto opt_tx{m_tx_for_private_broadcast.PickTxForSend(node.GetId(), CService{node.addr})};
     if (!opt_tx) {
         LogDebug(BCLog::PRIVBROADCAST, "Disconnecting: no more transactions for private broadcast (connected in vain), peer=%d%s", node.GetId(), node.LogIP(fLogIPs));
         node.fDisconnect = true;
