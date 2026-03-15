@@ -643,4 +643,20 @@ BOOST_AUTO_TEST_CASE(rpc_arg_helper)
     CheckRpc(params, UniValue{JSON(R"([5, "hello", 4, "test", true, 1.23, "world"])")}, check_positional);
 }
 
+BOOST_AUTO_TEST_CASE(rpc_result_print_elision_help_output)
+{
+    // One field has an elision description, the other elides with empty string
+    const RPCResult r1{RPCResult::Type::STR_HEX, "txid", "The transaction id", {}, RPCResultOptions{.print_elision = std::optional<std::string>("Same output as decoderawtransaction.")}};
+    const RPCResult r2{RPCResult::Type::STR_HEX, "hash", "The transaction hash", {}, RPCResultOptions{.print_elision = std::optional<std::string>("")}};
+    const RPCResult obj{RPCResult::Type::OBJ, "tx", "Decoded transaction", {r1, r2}};
+    const RPCResults results{obj};
+
+    // Help should show "..." plus the elision description once, and must not list the two fields
+    const std::string help{results.ToDescriptionString()};
+    BOOST_CHECK(help.find("...") != std::string::npos);
+    BOOST_CHECK(help.find("Same output as decoderawtransaction.") != std::string::npos);
+    BOOST_CHECK(help.find("The transaction id") == std::string::npos);
+    BOOST_CHECK(help.find("The transaction hash") == std::string::npos);
+}
+
 BOOST_AUTO_TEST_SUITE_END()
