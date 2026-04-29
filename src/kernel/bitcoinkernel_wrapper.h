@@ -1504,6 +1504,14 @@ public:
     MAKE_RANGE_METHOD(TxsSpentOutputs, BlockSpentOutputs, &BlockSpentOutputs::Count, &BlockSpentOutputs::GetTxSpentOutputs, *this)
 };
 
+class CoinFetcher
+{
+public:
+    virtual ~CoinFetcher() = default;
+
+    virtual std::optional<Coin> FetchCoin(OutPointView out_point) = 0;
+};
+
 class ChainMan : UniqueHandle<btck_ChainstateManager, btck_chainstate_manager_destroy>
 {
 public:
@@ -1555,6 +1563,21 @@ public:
         if (btck_chainstate_manager_set_clock_time(get(), now ? now->count() : 0) != 0) {
             throw std::runtime_error("timestamp out of range");
         }
+    }
+
+    bool ValidateBlock(const Block& block,
+                       const BlockTreeEntry& entry,
+                       CoinFetcher& fetcher,
+                       BlockValidationState& state)
+    {
+        return btck_chainstate_manager_validate_block(
+                   get(), block.get(), entry.get(),
+                   +[](void* user_data, const btck_TransactionOutPoint* out_point) -> btck_Coin* {
+                       auto coin{static_cast<CoinFetcher*>(user_data)->FetchCoin(OutPointView{out_point})};
+                       if (!coin) return nullptr;
+                       return btck_coin_copy(coin->get());
+                   },
+                   &fetcher, state.get()) == 0;
     }
 
     ChainView GetChain() const

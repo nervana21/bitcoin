@@ -3162,7 +3162,44 @@ bool ChainstateManager::CheckTxAtTip(const CTransaction& tx, TxValidationState& 
     return CheckInputScripts(tx, state, view, flags, CheckInputScriptsFor::Block, /*cacheSigStore=*/false, /*cacheFullScriptStore=*/false, txdata, m_validation_cache);
 }
 
-FlushResult<void, BlockValidationState> TestBlockValidity(    Chainstate& chainstate,
+BlockValidationState ChainstateManager::ValidateBlock(
+    const CBlock& block,
+    const CBlockIndex& index,
+    CCoinsViewCache& coins)
+{
+    LOCK(cs_main);
+    assert(index.GetBlockHash() == block.GetHash());
+    BlockValidationState state;
+    if (!index.IsValid(BLOCK_VALID_TREE)) {
+        auto msg{strprintf("Block %s is marked invalid", index.GetBlockHash().ToString())};
+        LogDebug(m_log, "%s", msg);
+        state.Invalid(BlockValidationResult::BLOCK_CACHED_INVALID, "duplicate-invalid", msg);
+        return state;
+    }
+
+    if (!CheckBlock(block, state, GetConsensus(), /*fCheckPOW=*/true, /*fCheckMerkleRoot=*/true)) {
+        if (state.IsValid()) NONFATAL_UNREACHABLE();
+        return state;
+    }
+
+    if (!ContextualCheckBlock(block, state, GetConsensus(), m_versionbitscache, index.pprev)) {
+        if (state.IsValid()) NONFATAL_UNREACHABLE();
+        return state;
+    }
+
+    // Needs to be mutable for ConnectBlock, but is not actually mutated with fJustCheck
+    CBlockIndex* index_mut{const_cast<CBlockIndex*>(&index)};
+    FlushResult<void, AbortFailure> connect_flush;
+    if (!(ActiveChainstate().ConnectBlock(block, state, index_mut, coins, /*fJustCheck=*/true) >> connect_flush)) {
+        if (state.IsValid()) NONFATAL_UNREACHABLE();
+        return state;
+    }
+
+    return state;
+}
+
+FlushResult<void, BlockValidationState> TestBlockValidity(
+    Chainstate& chainstate,
     const CBlock& block,
     const bool check_pow,
     const bool check_merkle_root)
