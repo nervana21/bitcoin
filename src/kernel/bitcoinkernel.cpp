@@ -30,10 +30,12 @@
 #include <serialize.h>
 #include <streams.h>
 #include <sync.h>
+#include <tinyformat.h>
 #include <uint256.h>
 #include <undo.h>
 #include <util/check.h>
 #include <util/fs.h>
+#include <util/hasher.h>
 #include <util/log.h>
 #include <util/result.h>
 #include <util/signalinterrupt.h>
@@ -56,6 +58,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <unordered_set>
 #include <utility>
 #include <variant>
@@ -634,6 +637,37 @@ struct btck_ConsensusParams: Handle<btck_ConsensusParams, Consensus::Params> {};
 struct btck_ScriptTraceFrame: Handle<btck_ScriptTraceFrame, ScriptTraceFrame> {};
 struct btck_ScriptEvalStack : Handle<btck_ScriptEvalStack, std::span<const std::vector<unsigned char>>> {};
 struct btck_ScriptEvalStackItem : Handle<btck_ScriptEvalStackItem, std::vector<unsigned char>> {};
+
+class CoinsViewBlock : public CCoinsViewCache
+{
+private:
+    btck_FetchCoin m_coin_fetcher;
+    void* m_user_data;
+    // Omit any queries for the self-spends as done by the BIP30 checks - we don't have enough information for them anyway.
+    std::unordered_set<Txid, SaltedTxidHasher> m_block_txids;
+
+    std::optional<Coin> FetchCoinFromBase(const COutPoint& outpoint) const override
+    {
+        if (m_block_txids.contains(outpoint.hash)) return std::nullopt;
+        btck_Coin* coin{m_coin_fetcher(m_user_data, btck_TransactionOutPoint::ref(&outpoint))};
+        if (!coin) return std::nullopt;
+        std::optional<Coin> result{std::move(btck_Coin::get(coin))};
+        delete coin;
+        return result;
+    }
+
+public:
+    CoinsViewBlock(const CBlock& block, btck_FetchCoin coin_fetcher, void* user_data)
+        : CCoinsViewCache(&CoinsViewEmpty::Get()),
+          m_coin_fetcher{coin_fetcher},
+          m_user_data{user_data}
+    {
+        SetBestBlock(block.hashPrevBlock);
+
+        m_block_txids.reserve(block.vtx.size());
+        for (const auto& tx : block.vtx) m_block_txids.insert(tx->GetHash());
+    }
+};
 
 btck_Transaction* btck_transaction_create(const void* raw_transaction, size_t raw_transaction_len)
 {
@@ -1629,6 +1663,27 @@ btck_BlockValidationState* btck_accept_header(
         LogError(btck_ChainstateManager::get(chainstate_manager).m_context->m_log, "Failed to accept block header: %s", e.what());
         return nullptr;
     }
+}
+
+int btck_chainstate_manager_validate_block(
+    btck_ChainstateManager* chainstate_manager,
+    const btck_Block* _block,
+    const btck_BlockTreeEntry* entry,
+    btck_FetchCoin coin_fetcher,
+    void* user_data,
+    btck_BlockValidationState* state)
+{
+    const CBlock& block{*btck_Block::get(_block)};
+
+    try {
+        CoinsViewBlock coins{block, coin_fetcher, user_data};
+        auto& chainman{*btck_ChainstateManager::get(chainstate_manager).m_chainman};
+        btck_BlockValidationState::get(state) = chainman.ValidateBlock(block, btck_BlockTreeEntry::get(entry), coins);
+    } catch (const std::exception& e) {
+        LogError(btck_ChainstateManager::get(chainstate_manager).m_context->m_log, "Failed to validate block: %s", e.what());
+        btck_BlockValidationState::get(state).Error(strprintf("Exception in ValidateBlock: %s", e.what()));
+    }
+    return btck_BlockValidationState::get(state).IsValid() ? 0 : -1;
 }
 
 int btck_chainstate_manager_set_clock_time(btck_ChainstateManager* chainstate_manager, int64_t now_seconds)
