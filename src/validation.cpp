@@ -2940,6 +2940,41 @@ bool ChainstateManager::CheckTxAgainstTip(const CTransaction& tx, TxValidationSt
     return CheckInputScripts(tx, state, view, flags, /*cacheSigStore=*/false, /*cacheFullScriptStore=*/false, txdata, m_validation_cache);
 }
 
+BlockValidationState ChainstateManager::ValidateBlock(
+    const CBlock& block,
+    const CBlockIndex& index,
+    CCoinsViewCache& coins)
+{
+    LOCK(cs_main);
+    assert(index.GetBlockHash() == block.GetHash());
+    BlockValidationState state;
+    if (!index.IsValid(BLOCK_VALID_TREE)) {
+        auto msg{strprintf("Block %s is marked invalid", index.GetBlockHash().ToString())};
+        LogDebug(BCLog::VALIDATION, "%s", msg);
+        state.Invalid(BlockValidationResult::BLOCK_CACHED_INVALID, "duplicate-invalid", msg);
+        return state;
+    }
+
+    if (!CheckBlock(block, state, GetConsensus(), /*fCheckPOW=*/true, /*fCheckMerkleRoot=*/true)) {
+        if (state.IsValid()) NONFATAL_UNREACHABLE();
+        return state;
+    }
+
+    if (!ContextualCheckBlock(block, state, *this, index.pprev)) {
+        if (state.IsValid()) NONFATAL_UNREACHABLE();
+        return state;
+    }
+
+    // Needs to be mutable for ConnectBlock, but is not actually mutated with fJustCheck
+    CBlockIndex* index_mut{const_cast<CBlockIndex*>(&index)};
+    if (!ActiveChainstate().ConnectBlock(block, state, index_mut, coins, /*fJustCheck=*/true)) {
+        if (state.IsValid()) NONFATAL_UNREACHABLE();
+        return state;
+    }
+
+    return state;
+}
+
 BlockValidationState TestBlockValidity(
     Chainstate& chainstate,
     const CBlock& block,
