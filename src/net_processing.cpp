@@ -6204,7 +6204,17 @@ bool PeerManagerImpl::SendMessages(CNode& node)
                 // headers that aren't on m_chainman.ActiveChain(), give up.
                 for (const uint256& hash : peer.m_blocks_for_headers_relay) {
                     const CBlockIndex* pindex = m_chainman.m_blockman.LookupBlockIndex(hash);
-                    assert(pindex);
+                    if (!pindex) {
+                        // The block index entry is normally guaranteed to
+                        // exist for hashes we queued for relay, but degraded
+                        // on-disk state or a pathological invalidate/reconsider
+                        // sequence could remove it. Fall back to inv rather
+                        // than crash.
+                        LogDebug(BCLog::NET, "Block index lookup failed for %s while building headers relay; reverting to inv\n",
+                                 hash.ToString());
+                        fRevertToInv = true;
+                        break;
+                    }
                     if (m_chainman.ActiveChain()[pindex->nHeight] != pindex) {
                         // Bail out if we reorged away from this block
                         fRevertToInv = true;
