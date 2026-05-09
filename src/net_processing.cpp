@@ -4587,10 +4587,11 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
         }
 
         FlatFilePos block_pos{};
+        const CBlockIndex* pindex{nullptr};
         {
             LOCK(cs_main);
 
-            const CBlockIndex* pindex = m_chainman.m_blockman.LookupBlockIndex(req.blockhash);
+            pindex = m_chainman.m_blockman.LookupBlockIndex(req.blockhash);
             if (!pindex || !(pindex->nStatus & BLOCK_HAVE_DATA)) {
                 LogDebug(BCLog::NET, "Peer %d sent us a getblocktxn for a block we don't have\n", pfrom.GetId());
                 return;
@@ -4603,10 +4604,19 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
 
         if (!block_pos.IsNull()) {
             CBlock block;
-            const bool ret{m_chainman.m_blockman.ReadBlock(block, block_pos, req.blockhash)};
-            // If height is above MAX_BLOCKTXN_DEPTH then this block cannot get
-            // pruned after we release cs_main above, so this read should never fail.
-            assert(ret);
+            // Tip-window blocks cannot be pruned (MAX_BLOCKTXN_DEPTH <=
+            // MIN_BLOCKS_TO_KEEP), but ReadBlock can still fail for corrupt
+            // data or I/O errors. Match ProcessGetBlockData: log and
+            // disconnect so the peer is not left waiting for a reply.
+            if (!m_chainman.m_blockman.ReadBlock(block, block_pos, req.blockhash)) {
+                if (WITH_LOCK(m_chainman.GetMutex(), return m_chainman.m_blockman.IsBlockPruned(*pindex))) {
+                    LogDebug(BCLog::NET, "Block was pruned before it could be read, %s", pfrom.DisconnectMsg());
+                } else {
+                    LogError("Cannot load block from disk, %s", pfrom.DisconnectMsg());
+                }
+                pfrom.fDisconnect = true;
+                return;
+            }
 
             SendBlockTransactions(pfrom, peer, block, req);
             return;
