@@ -6270,14 +6270,23 @@ bool PeerManagerImpl::SendMessages(CNode& node)
                     }
                     if (cached_cmpctblock_msg.has_value()) {
                         PushMessage(node, std::move(cached_cmpctblock_msg.value()));
+                        state.pindexBestHeaderSent = pBestIndex;
                     } else {
                         CBlock block;
                         const bool ret{m_chainman.m_blockman.ReadBlock(block, *pBestIndex)};
-                        assert(ret);
-                        CBlockHeaderAndShortTxIDs cmpctblock{block, m_rng.rand64()};
-                        MakeAndPushMessage(node, NetMsgType::CMPCTBLOCK, cmpctblock);
+                        // ReadBlock can fail on disk I/O errors,
+                        // deserialization failures, or on-disk corruption.
+                        // Fall back to inv rather than aborting the process.
+                        if (!ret) {
+                            LogError("Failed to read block %s from disk while sending compact block to peer=%d; reverting to inv\n",
+                                     pBestIndex->GetBlockHash().ToString(), node.GetId());
+                            fRevertToInv = true;
+                        } else {
+                            CBlockHeaderAndShortTxIDs cmpctblock{block, m_rng.rand64()};
+                            MakeAndPushMessage(node, NetMsgType::CMPCTBLOCK, cmpctblock);
+                            state.pindexBestHeaderSent = pBestIndex;
+                        }
                     }
-                    state.pindexBestHeaderSent = pBestIndex;
                 } else if (peer.m_prefers_headers) {
                     if (vHeaders.size() > 1) {
                         LogDebug(BCLog::NET, "%s: %u headers, range (%s, %s), to peer=%d\n", __func__,
