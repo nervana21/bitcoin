@@ -4604,9 +4604,16 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
         if (!block_pos.IsNull()) {
             CBlock block;
             const bool ret{m_chainman.m_blockman.ReadBlock(block, block_pos, req.blockhash)};
-            // If height is above MAX_BLOCKTXN_DEPTH then this block cannot get
-            // pruned after we release cs_main above, so this read should never fail.
-            assert(ret);
+            // For blocks within MAX_BLOCKTXN_DEPTH of the tip we read from
+            // disk and send blocktxn. Deeper blocks are handled below with a
+            // full block response.
+            // ReadBlock can still fail (corrupt data, I/O errors). Return
+            // without sending a reply. ReadBlock logs the failure.
+            if (!ret) {
+                LogDebug(BCLog::NET, "ReadBlock failed for %s (pos=%s); not sending GETBLOCKTXN reply to peer=%d\n",
+                         req.blockhash.ToString(), block_pos.ToString(), pfrom.GetId());
+                return;
+            }
 
             SendBlockTransactions(pfrom, peer, block, req);
             return;
