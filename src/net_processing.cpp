@@ -6309,21 +6309,28 @@ bool PeerManagerImpl::SendMessages(CNode& node)
                 if (!peer.m_blocks_for_headers_relay.empty()) {
                     const uint256& hashToAnnounce = peer.m_blocks_for_headers_relay.back();
                     const CBlockIndex* pindex = m_chainman.m_blockman.LookupBlockIndex(hashToAnnounce);
-                    assert(pindex);
+                    if (!pindex) {
+                        // Block index entry should normally exist for hashes
+                        // we queued for relay, but degraded on-disk state or
+                        // a pathological invalidate/reconsider sequence could
+                        // remove it. Skip the announce rather than crash.
+                        LogDebug(BCLog::NET, "Block index lookup failed for %s while reverting to inv announce\n",
+                                 hashToAnnounce.ToString());
+                    } else {
+                        // Warn if we're announcing a block that is not on the main chain.
+                        // This should be very rare and could be optimized out.
+                        // Just log for now.
+                        if (m_chainman.ActiveChain()[pindex->nHeight] != pindex) {
+                            LogDebug(BCLog::NET, "Announcing block %s not on main chain (tip=%s)\n",
+                                hashToAnnounce.ToString(), m_chainman.ActiveChain().Tip()->GetBlockHash().ToString());
+                        }
 
-                    // Warn if we're announcing a block that is not on the main chain.
-                    // This should be very rare and could be optimized out.
-                    // Just log for now.
-                    if (m_chainman.ActiveChain()[pindex->nHeight] != pindex) {
-                        LogDebug(BCLog::NET, "Announcing block %s not on main chain (tip=%s)\n",
-                            hashToAnnounce.ToString(), m_chainman.ActiveChain().Tip()->GetBlockHash().ToString());
-                    }
-
-                    // If the peer's chain has this block, don't inv it back.
-                    if (!PeerHasHeader(&state, pindex)) {
-                        peer.m_blocks_for_inv_relay.push_back(hashToAnnounce);
-                        LogDebug(BCLog::NET, "%s: sending inv peer=%d hash=%s\n", __func__,
-                            node.GetId(), hashToAnnounce.ToString());
+                        // If the peer's chain has this block, don't inv it back.
+                        if (!PeerHasHeader(&state, pindex)) {
+                            peer.m_blocks_for_inv_relay.push_back(hashToAnnounce);
+                            LogDebug(BCLog::NET, "%s: sending inv peer=%d hash=%s\n", __func__,
+                                node.GetId(), hashToAnnounce.ToString());
+                        }
                     }
                 }
             }
