@@ -1241,7 +1241,7 @@ bool CWallet::AddToWalletIfInvolvingMe(const CTransactionRef& ptx, const SyncTxS
                         // If this is a receiving address and it's not in the address book yet
                         // (e.g. it wasn't generated on this node or we're restoring from backup)
                         // add it to the address book for proper transaction accounting
-                        if (!*dest.internal && !FindAddressBookEntry(dest.dest, /* allow_change= */ false)) {
+                        if (!*dest.internal && !FindAddressBookEntry(dest.dest)) {
                             SetAddressBook(dest.dest, "", AddressPurpose::RECEIVE);
                         }
                     }
@@ -3315,11 +3315,11 @@ bool CWallet::AttachChain(const std::shared_ptr<CWallet>& walletInstance, interf
     return true;
 }
 
-const CAddressBookData* CWallet::FindAddressBookEntry(const CTxDestination& dest, bool allow_change) const
+const CAddressBookData* CWallet::FindAddressBookEntry(const CTxDestination& dest) const
 {
     const auto& address_book_it = m_address_book.find(dest);
     if (address_book_it == m_address_book.end()) return nullptr;
-    if ((!allow_change) && address_book_it->second.IsChange()) {
+    if (address_book_it->second.IsChange()) {
         return nullptr;
     }
     return &address_book_it->second;

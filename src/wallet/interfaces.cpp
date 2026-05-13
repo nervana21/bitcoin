@@ -189,7 +189,7 @@ public:
         AddressPurpose* purpose) override
     {
         LOCK(m_wallet->cs_wallet);
-        const auto& entry = m_wallet->FindAddressBookEntry(dest, /*allow_change=*/false);
+        const auto& entry = m_wallet->FindAddressBookEntry(dest);
         if (!entry) return false; // addr not found
         if (name) {
             *name = entry->GetLabel();

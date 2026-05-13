@@ -175,7 +175,7 @@ static UniValue ListReceived(const CWallet& wallet, const UniValue& params, cons
     };
 
     if (filtered_address) {
-        const auto& entry = wallet.FindAddressBookEntry(*filtered_address, /*allow_change=*/false);
+        const auto& entry = wallet.FindAddressBookEntry(*filtered_address);
         if (entry) func(*filtered_address, entry->GetLabel(), entry->IsChange(), entry->purpose);
     } else {
         // No filtered addr, walk-through the addressbook entry
