@@ -140,6 +140,7 @@ static UniValue ListReceived(const CWallet& wallet, const UniValue& params, cons
     std::map<std::string, tallyitem> label_tally;
 
     const auto& func = [&](const CTxDestination& address, const std::string& label, bool is_change, const std::optional<AddressPurpose>& purpose) {
+        if (filtered_address && address != *filtered_address) return;
         if (is_change) return; // no change addresses
 
         auto it = mapTally.find(address);
@@ -174,13 +175,7 @@ static UniValue ListReceived(const CWallet& wallet, const UniValue& params, cons
         }
     };
 
-    if (filtered_address) {
-        const auto& entry = wallet.FindAddressBookEntry(*filtered_address);
-        if (entry) func(*filtered_address, entry->GetLabel(), entry->IsChange(), entry->purpose);
-    } else {
-        // No filtered addr, walk-through the addressbook entry
-        wallet.ForEachAddrBookEntry(func);
-    }
+    wallet.ForEachAddrBookEntry(func);
 
     if (by_label) {
         for (const auto& entry : label_tally) {
