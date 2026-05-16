@@ -60,7 +60,7 @@ struct TestOpts {
  */
 struct BasicTestingSetup {
     util::SignalInterrupt m_interrupt;
-    node::NodeContext m_node; // keep as first member to be destructed last
+    node::NodeContext m_node; // should outlive subsequent members that may use NodeContext during teardown
 
     FastRandomContext m_rng;
     /** Seed the global RNG state and m_rng for testing and log the seed value. This affects all randomness, except GetStrongRandBytes(). */
