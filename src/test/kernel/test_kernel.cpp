@@ -129,6 +129,16 @@ public:
         BOOST_CHECK_GT(timestamp, 0);
     }
 
+    void WarningSetHandler(Warning warning, std::string_view message) override
+    {
+        BOOST_FAIL("Received unexpected warning");
+    }
+
+    void WarningUnsetHandler(Warning warning) override
+    {
+        BOOST_CHECK_EQUAL(Warning::LARGE_WORK_INVALID_CHAIN, warning);
+    }
+
     void FlushErrorHandler(std::string_view error) override
     {
         std::cout << error << std::endl;
@@ -1046,6 +1056,22 @@ BOOST_AUTO_TEST_CASE(btck_chainman_tests)
             BOOST_CHECK_THROW(ChainstateManagerOptions(context, data_dir, blocks_dir),
                               std::runtime_error);
         };
+    }
+    {
+        Context context{};
+        ChainstateManagerOptions chainman_opts{context, PathToString(test_directory.m_directory), PathToString(test_directory.m_directory / "blocks")};
+        chainman_opts.SetAssumeValid(std::nullopt);
+        ChainMan chainman{context, chainman_opts};
+    }
+    {
+        Context context{};
+        ChainstateManagerOptions chainman_opts{context, PathToString(test_directory.m_directory), PathToString(test_directory.m_directory / "blocks")};
+        std::array<std::byte, 32> test_hash;
+        for (int i = 0; i < 32; ++i) {
+            test_hash[i] = static_cast<std::byte>(i);
+        }
+        chainman_opts.SetAssumeValid(BlockHash{test_hash});
+        ChainMan chainman{context, chainman_opts};
     }
 
     auto notifications{std::make_shared<TestKernelNotifications>()};
