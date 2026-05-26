@@ -1597,6 +1597,15 @@ void PeerManagerImpl::InitializeNode(const CNode& node, ServiceFlags our_service
     {
         LOCK(cs_main); // For m_node_states
         m_node_states.try_emplace(m_node_states.end(), nodeid);
+        // Register with block download manager using conservative defaults.
+        // The preferred_download flag is updated during VERSION processing when
+        // we know the peer's capabilities.
+        m_blockdownloadman.ConnectedPeer(nodeid, {
+            /*m_is_inbound=*/node.IsInboundConn(),
+            /*m_preferred_download=*/false,
+            /*m_can_serve_witnesses=*/false,
+            /*m_is_limited_peer=*/false
+        });
     }
     WITH_LOCK(m_tx_download_mutex, m_txdownloadman.CheckIsEmpty(nodeid));
 
