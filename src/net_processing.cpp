@@ -2030,7 +2030,7 @@ void PeerManagerImpl::BlockConnected(
     m_blockdownloadman.SetLastTipUpdate(GetTime<std::chrono::seconds>());
 
     // In case the dynamic timeout was doubled once or more, reduce it slowly back to its default value
-    auto stalling_timeout = m_block_stalling_timeout.load();
+    auto stalling_timeout = m_blockdownloadman.GetBlockStallingTimeout();
     Assume(stalling_timeout >= BLOCK_STALLING_TIMEOUT_DEFAULT);
     if (stalling_timeout != BLOCK_STALLING_TIMEOUT_DEFAULT) {
         const auto new_timeout = std::max(std::chrono::duration_cast<std::chrono::seconds>(stalling_timeout * 0.85), BLOCK_STALLING_TIMEOUT_DEFAULT);
