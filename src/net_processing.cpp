@@ -1703,9 +1703,7 @@ void PeerManagerImpl::FinalizeNode(const CNode& node)
 
     if (m_node_states.empty()) {
         // Do a consistency check after the last peer is removed.
-        assert(mapBlocksInFlight.empty());
-        assert(m_num_preferred_download_peers == 0);
-        assert(m_peers_downloading_from == 0);
+        m_blockdownloadman.CheckIsEmpty();
         assert(m_outbound_peers_with_protect_from_disconnect == 0);
         assert(m_wtxid_relay_peers == 0);
         WITH_LOCK(m_tx_download_mutex, m_txdownloadman.CheckIsEmpty());
