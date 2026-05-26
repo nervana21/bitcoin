@@ -520,4 +520,9 @@ int BlockDownloadManager::GetNumPreferredDownload() const
     return m_impl->m_num_preferred_download_peers;
 }
 
+int BlockDownloadManager::GetPeersDownloadingFrom() const
+{
+    return m_impl->m_peers_downloading_from;
+}
+
 } // namespace node

@@ -144,6 +144,9 @@ public:
 
     /** Get the number of preferred download peers. */
     int GetNumPreferredDownload() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
+    /** Get the number of peers we are downloading blocks from. */
+    int GetPeersDownloadingFrom() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 };
 
 } // namespace node
