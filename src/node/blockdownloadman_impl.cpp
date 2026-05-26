@@ -560,4 +560,10 @@ void BlockDownloadManager::SetStallingSince(NodeId nodeid, std::chrono::microsec
     if (state) state->m_stalling_since = time;
 }
 
+bool BlockDownloadManager::IsPreferredDownload(NodeId nodeid) const
+{
+    const auto* state = m_impl->GetPeerState(nodeid);
+    return state ? state->fPreferredDownload : false;
+}
+
 } // namespace node

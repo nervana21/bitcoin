@@ -166,6 +166,9 @@ public:
 
     /** Set the stalling-since time for a peer. */
     void SetStallingSince(NodeId nodeid, std::chrono::microseconds time) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
+    /** Get whether a peer is a preferred download peer. */
+    bool IsPreferredDownload(NodeId nodeid) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 };
 
 } // namespace node
