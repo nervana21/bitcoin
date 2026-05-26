@@ -10,8 +10,10 @@
 #include <kernel/cs_main.h>
 #include <uint256.h>
 
+#include <chrono>
 #include <list>
 #include <map>
+#include <optional>
 
 namespace node {
 
@@ -23,6 +25,8 @@ public:
         BlockDownloadConnectionInfo m_connection_info;
         bool fSyncStarted{false};
         std::list<QueuedBlock> vBlocksInFlight;
+        std::chrono::microseconds m_downloading_since{0us};
+        std::chrono::microseconds m_stalling_since{0us};
         bool fPreferredDownload{false};
 
         explicit PeerBlockDownloadState(const BlockDownloadConnectionInfo& info)
@@ -49,6 +53,8 @@ public:
     bool IsBlockRequested(const uint256& hash) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
     bool IsBlockRequestedFromOutbound(const uint256& hash) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
+    void RemoveBlockRequest(const uint256& hash, std::optional<NodeId> from_peer) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 };
 
 } // namespace node

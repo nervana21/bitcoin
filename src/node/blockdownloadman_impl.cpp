@@ -8,8 +8,21 @@
 #include <blockencodings.h>
 #include <chain.h>
 #include <util/check.h>
+#include <util/time.h>
 
 namespace node {
+
+namespace {
+/** Mirrors net_processing.h; moved here with block-download state. */
+constexpr unsigned int MAX_CMPCTBLOCKS_INFLIGHT_PER_BLOCK{3};
+
+BlockDownloadManagerImpl::PeerBlockDownloadState* GetPeerState(BlockDownloadManagerImpl& man, NodeId nodeid)
+    EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
+{
+    auto it = man.m_peer_info.find(nodeid);
+    return it == man.m_peer_info.end() ? nullptr : &it->second;
+}
+} // namespace
 
 BlockDownloadManager::BlockDownloadManager(const BlockDownloadOptions& options)
     : m_impl{std::make_unique<BlockDownloadManagerImpl>(options)}
@@ -97,6 +110,48 @@ bool BlockDownloadManagerImpl::IsBlockRequestedFromOutbound(const uint256& hash)
         if (it != m_peer_info.end() && !it->second.m_connection_info.m_is_inbound) return true;
     }
     return false;
+}
+
+void BlockDownloadManager::RemoveBlockRequest(const uint256& hash, std::optional<NodeId> from_peer)
+{
+    m_impl->RemoveBlockRequest(hash, from_peer);
+}
+
+void BlockDownloadManagerImpl::RemoveBlockRequest(const uint256& hash, std::optional<NodeId> from_peer)
+{
+    auto range = mapBlocksInFlight.equal_range(hash);
+    if (range.first == range.second) {
+        // Block was not requested from any peer
+        return;
+    }
+
+    // We should not have requested too many of this block
+    Assume(mapBlocksInFlight.count(hash) <= MAX_CMPCTBLOCKS_INFLIGHT_PER_BLOCK);
+
+    while (range.first != range.second) {
+        const auto& [node_id, list_it]{range.first->second};
+
+        if (from_peer && *from_peer != node_id) {
+            range.first++;
+            continue;
+        }
+
+        auto* state = Assert(GetPeerState(*this, node_id));
+
+        if (state->vBlocksInFlight.begin() == list_it) {
+            // First block on the queue was received, update the start download time for the next one
+            state->m_downloading_since = std::max(state->m_downloading_since, GetTime<std::chrono::microseconds>());
+        }
+        state->vBlocksInFlight.erase(list_it);
+
+        if (state->vBlocksInFlight.empty()) {
+            // Last validated block on the queue for this peer was received.
+            m_peers_downloading_from--;
+        }
+        state->m_stalling_since = 0us;
+
+        range.first = mapBlocksInFlight.erase(range.first);
+    }
 }
 
 } // namespace node

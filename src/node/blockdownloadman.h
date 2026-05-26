@@ -11,6 +11,7 @@
 #include <uint256.h>
 
 #include <list>
+#include <optional>
 
 class CBlockIndex;
 class ChainstateManager;
@@ -62,6 +63,10 @@ public:
 
     /** Have we requested this block from an outbound peer? */
     bool IsBlockRequestedFromOutbound(const uint256& hash) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
+    /** Remove this block from our tracked requested blocks.
+     *  If from_peer is set, only remove the block if it is in flight from that peer. */
+    void RemoveBlockRequest(const uint256& hash, std::optional<NodeId> from_peer) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 };
 
 } // namespace node
