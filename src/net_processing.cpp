@@ -1168,39 +1168,7 @@ bool PeerManagerImpl::IsBlockRequestedFromOutbound(const uint256& hash)
 
 void PeerManagerImpl::RemoveBlockRequest(const uint256& hash, std::optional<NodeId> from_peer)
 {
-    auto range = mapBlocksInFlight.equal_range(hash);
-    if (range.first == range.second) {
-        // Block was not requested from any peer
-        return;
-    }
-
-    // We should not have requested too many of this block
-    Assume(mapBlocksInFlight.count(hash) <= MAX_CMPCTBLOCKS_INFLIGHT_PER_BLOCK);
-
-    while (range.first != range.second) {
-        const auto& [node_id, list_it]{range.first->second};
-
-        if (from_peer && *from_peer != node_id) {
-            range.first++;
-            continue;
-        }
-
-        CNodeState& state = *Assert(State(node_id));
-
-        if (state.vBlocksInFlight.begin() == list_it) {
-            // First block on the queue was received, update the start download time for the next one
-            state.m_downloading_since = std::max(state.m_downloading_since, GetTime<std::chrono::microseconds>());
-        }
-        state.vBlocksInFlight.erase(list_it);
-
-        if (state.vBlocksInFlight.empty()) {
-            // Last validated block on the queue for this peer was received.
-            m_peers_downloading_from--;
-        }
-        state.m_stalling_since = 0us;
-
-        range.first = mapBlocksInFlight.erase(range.first);
-    }
+    m_blockdownloadman.RemoveBlockRequest(hash, from_peer);
 }
 
 bool PeerManagerImpl::BlockRequested(NodeId nodeid, const CBlockIndex& block, std::list<node::QueuedBlock>::iterator** pit)
