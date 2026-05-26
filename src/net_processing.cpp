@@ -1329,19 +1329,9 @@ static bool PeerHasHeader(CNodeState *state, const CBlockIndex *pindex) EXCLUSIV
     return false;
 }
 
-void PeerManagerImpl::ProcessBlockAvailability(NodeId nodeid) {
-    CNodeState *state = State(nodeid);
-    assert(state != nullptr);
-
-    if (!state->hashLastUnknownBlock.IsNull()) {
-        const CBlockIndex* pindex = m_chainman.m_blockman.LookupBlockIndex(state->hashLastUnknownBlock);
-        if (pindex && pindex->nChainWork > 0) {
-            if (state->pindexBestKnownBlock == nullptr || pindex->nChainWork >= state->pindexBestKnownBlock->nChainWork) {
-                state->pindexBestKnownBlock = pindex;
-            }
-            state->hashLastUnknownBlock.SetNull();
-        }
-    }
+void PeerManagerImpl::ProcessBlockAvailability(NodeId nodeid)
+{
+    m_blockdownloadman.ProcessBlockAvailability(nodeid);
 }
 
 void PeerManagerImpl::UpdateBlockAvailability(NodeId nodeid, const uint256 &hash) {
