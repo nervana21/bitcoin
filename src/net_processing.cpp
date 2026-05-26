@@ -835,9 +835,6 @@ private:
     /** Number of preferable block download peers. */
     int m_num_preferred_download_peers GUARDED_BY(cs_main){0};
 
-    /** Stalling timeout for blocks in IBD */
-    std::atomic<std::chrono::seconds> m_block_stalling_timeout{BLOCK_STALLING_TIMEOUT_DEFAULT};
-
     /**
      * For sending `inv`s to inbound peers, we use a single (exponentially
      * distributed) timer for all peers with the same network key. If we used a separate timer for each
