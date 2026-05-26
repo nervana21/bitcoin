@@ -139,8 +139,6 @@ static constexpr double BLOCK_DOWNLOAD_TIMEOUT_BASE = 1;
 static constexpr double BLOCK_DOWNLOAD_TIMEOUT_PER_PEER = 0.5;
 /** Maximum number of headers to announce when relaying blocks with headers message.*/
 static const unsigned int MAX_BLOCKS_TO_ANNOUNCE = 8;
-/** Minimum blocks required to signal NODE_NETWORK_LIMITED */
-static const unsigned int NODE_NETWORK_LIMITED_MIN_BLOCKS = 288;
 /** Window, in blocks, for connecting to NODE_NETWORK_LIMITED peers */
 static const unsigned int NODE_NETWORK_LIMITED_ALLOW_CONN_BLOCKS = 144;
 /** Average delay between local address broadcasts */
