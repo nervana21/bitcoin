@@ -1273,52 +1273,7 @@ void PeerManagerImpl::UpdateBlockAvailability(NodeId nodeid, const uint256& hash
 // Logic for calculating which blocks to download from a given peer, given our current tip.
 void PeerManagerImpl::FindNextBlocksToDownload(const Peer& peer, unsigned int count, std::vector<const CBlockIndex*>& vBlocks, NodeId& nodeStaller)
 {
-    if (count == 0)
-        return;
-
-    vBlocks.reserve(vBlocks.size() + count);
-    CNodeState *state = State(peer.m_id);
-    assert(state != nullptr);
-
-    // Make sure pindexBestKnownBlock is up to date, we'll need it.
-    ProcessBlockAvailability(peer.m_id);
-
-    if (state->pindexBestKnownBlock == nullptr || state->pindexBestKnownBlock->nChainWork < m_chainman.ActiveChain().Tip()->nChainWork || state->pindexBestKnownBlock->nChainWork < m_chainman.MinimumChainWork()) {
-        // This peer has nothing interesting.
-        return;
-    }
-
-    // When syncing with AssumeUtxo and the snapshot has not yet been validated,
-    // abort downloading blocks from peers that don't have the snapshot block in their best chain.
-    // We can't reorg to this chain due to missing undo data until validation completes,
-    // so downloading blocks from it would be futile.
-    const CBlockIndex* snap_base{m_chainman.CurrentChainstate().SnapshotBase()};
-    if (snap_base && m_chainman.CurrentChainstate().m_assumeutxo == Assumeutxo::UNVALIDATED &&
-        state->pindexBestKnownBlock->GetAncestor(snap_base->nHeight) != snap_base) {
-        LogDebug(BCLog::NET, "Not downloading blocks from peer=%d, which doesn't have the snapshot block in its best chain.\n", peer.m_id);
-        return;
-    }
-
-    // Determine the forking point between the peer's chain and our chain:
-    // pindexLastCommonBlock is required to be an ancestor of pindexBestKnownBlock, and will be used as a starting point.
-    // It is being set to the fork point between the peer's best known block and the current tip, unless it is already set to
-    // an ancestor with more work than the fork point.
-    auto fork_point = LastCommonAncestor(state->pindexBestKnownBlock, m_chainman.ActiveTip());
-    if (state->pindexLastCommonBlock == nullptr ||
-        fork_point->nChainWork > state->pindexLastCommonBlock->nChainWork ||
-        state->pindexBestKnownBlock->GetAncestor(state->pindexLastCommonBlock->nHeight) != state->pindexLastCommonBlock) {
-        state->pindexLastCommonBlock = fork_point;
-    }
-    if (state->pindexLastCommonBlock == state->pindexBestKnownBlock)
-        return;
-
-    const CBlockIndex *pindexWalk = state->pindexLastCommonBlock;
-    // Never fetch further than the best block we know the peer has, or more than BLOCK_DOWNLOAD_WINDOW + 1 beyond the last
-    // linked block we have in common with this peer. The +1 is so we can detect stalling, namely if we would be able to
-    // download that next block if the window were 1 larger.
-    int nWindowEnd = state->pindexLastCommonBlock->nHeight + BLOCK_DOWNLOAD_WINDOW;
-
-    FindNextBlocks(vBlocks, peer, state, pindexWalk, count, nWindowEnd, &m_chainman.ActiveChain(), &nodeStaller);
+    m_blockdownloadman.FindNextBlocksToDownload(peer.m_id, count, vBlocks, nodeStaller);
 }
 
 void PeerManagerImpl::TryDownloadingHistoricalBlocks(const Peer& peer, unsigned int count, std::vector<const CBlockIndex*>& vBlocks, const CBlockIndex *from_tip, const CBlockIndex* target_block)
@@ -3595,8 +3550,15 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
         {
             LOCK(cs_main);
             CNodeState* state = State(pfrom.GetId());
-            state->fPreferredDownload = (!pfrom.IsInboundConn() || pfrom.HasPermission(NetPermissionFlags::NoBan)) && !pfrom.IsAddrFetchConn() && CanServeBlocks(peer);
+            const bool preferred{(!pfrom.IsInboundConn() || pfrom.HasPermission(NetPermissionFlags::NoBan)) && !pfrom.IsAddrFetchConn() && CanServeBlocks(peer)};
+            state->fPreferredDownload = preferred;
             m_num_preferred_download_peers += state->fPreferredDownload;
+            m_blockdownloadman.ConnectedPeer(pfrom.GetId(), {
+                /*m_is_inbound=*/pfrom.IsInboundConn(),
+                /*m_preferred_download=*/preferred,
+                /*m_can_serve_witnesses=*/CanServeWitnesses(peer),
+                /*m_is_limited_peer=*/IsLimitedPeer(peer),
+            });
         }
 
         // Attempt to initialize address relay for outbound peers and use result
