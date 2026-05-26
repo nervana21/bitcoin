@@ -6058,7 +6058,7 @@ bool PeerManagerImpl::SendMessages(CNode& node)
             // Increase timeout for the next peer so that we don't disconnect multiple peers if our own
             // bandwidth is insufficient.
             const auto new_timeout = std::min(2 * stalling_timeout, BLOCK_STALLING_TIMEOUT_MAX);
-            if (stalling_timeout != new_timeout && m_block_stalling_timeout.compare_exchange_strong(stalling_timeout, new_timeout)) {
+            if (stalling_timeout != new_timeout && m_blockdownloadman.CompareExchangeBlockStallingTimeout(stalling_timeout, new_timeout)) {
                 LogDebug(BCLog::NET, "Increased stalling timeout temporarily to %d seconds\n", count_seconds(new_timeout));
             }
             return true;
