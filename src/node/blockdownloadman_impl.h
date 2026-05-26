@@ -93,6 +93,9 @@ public:
                                         std::vector<const CBlockIndex*>& vBlocks,
                                         const CBlockIndex* from_tip,
                                         const CBlockIndex* target_block) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
+    PeerBlockDownloadState* GetPeerState(NodeId nodeid) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    const PeerBlockDownloadState* GetPeerState(NodeId nodeid) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 };
 
 } // namespace node

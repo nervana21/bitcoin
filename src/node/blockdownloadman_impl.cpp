@@ -23,13 +23,6 @@ namespace node {
 namespace {
 /** Mirrors net_processing.h; moved here with block-download state. */
 constexpr unsigned int MAX_CMPCTBLOCKS_INFLIGHT_PER_BLOCK{3};
-
-BlockDownloadManagerImpl::PeerBlockDownloadState* GetPeerState(BlockDownloadManagerImpl& man, NodeId nodeid)
-    EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
-{
-    auto it = man.m_peer_info.find(nodeid);
-    return it == man.m_peer_info.end() ? nullptr : &it->second;
-}
 } // namespace
 
 BlockDownloadManager::BlockDownloadManager(const BlockDownloadOptions& options)
@@ -144,7 +137,7 @@ void BlockDownloadManagerImpl::RemoveBlockRequest(const uint256& hash, std::opti
             continue;
         }
 
-        auto* state = Assert(GetPeerState(*this, node_id));
+        auto* state = Assert(GetPeerState(node_id));
 
         if (state->vBlocksInFlight.begin() == list_it) {
             // First block on the queue was received, update the start download time for the next one
@@ -175,7 +168,7 @@ bool BlockDownloadManagerImpl::BlockRequested(NodeId nodeid, const CBlockIndex& 
 {
     const uint256& hash{block.GetBlockHash()};
 
-    auto* state = Assert(GetPeerState(*this, nodeid));
+    auto* state = Assert(GetPeerState(nodeid));
 
     Assume(mapBlocksInFlight.count(hash) <= MAX_CMPCTBLOCKS_INFLIGHT_PER_BLOCK);
 
@@ -237,7 +230,7 @@ void BlockDownloadManager::ProcessBlockAvailability(NodeId nodeid)
 
 void BlockDownloadManagerImpl::ProcessBlockAvailability(NodeId nodeid)
 {
-    auto* state = Assert(GetPeerState(*this, nodeid));
+    auto* state = Assert(GetPeerState(nodeid));
 
     if (!state->hashLastUnknownBlock.IsNull()) {
         const CBlockIndex* pindex = m_opts.m_chainman.m_blockman.LookupBlockIndex(state->hashLastUnknownBlock);
@@ -257,7 +250,7 @@ void BlockDownloadManager::UpdateBlockAvailability(NodeId nodeid, const uint256&
 
 void BlockDownloadManagerImpl::UpdateBlockAvailability(NodeId nodeid, const uint256& hash)
 {
-    auto* state = Assert(GetPeerState(*this, nodeid));
+    auto* state = Assert(GetPeerState(nodeid));
 
     ProcessBlockAvailability(nodeid);
 
@@ -287,7 +280,7 @@ void BlockDownloadManagerImpl::FindNextBlocksToDownload(NodeId nodeid, unsigned 
     if (count == 0) return;
 
     vBlocks.reserve(vBlocks.size() + count);
-    auto* state = Assert(GetPeerState(*this, nodeid));
+    auto* state = Assert(GetPeerState(nodeid));
 
     // Make sure pindexBestKnownBlock is up to date, we'll need it.
     ProcessBlockAvailability(nodeid);
@@ -353,7 +346,7 @@ void BlockDownloadManagerImpl::TryDownloadingHistoricalBlocks(NodeId nodeid, uns
     }
 
     vBlocks.reserve(count);
-    auto* state = Assert(GetPeerState(*this, nodeid));
+    auto* state = Assert(GetPeerState(nodeid));
 
     if (state->pindexBestKnownBlock == nullptr ||
         state->pindexBestKnownBlock->GetAncestor(target_block->nHeight) != target_block) {
@@ -451,6 +444,24 @@ void BlockDownloadManagerImpl::FindNextBlocks(std::vector<const CBlockIndex*>& v
             }
         }
     }
+}
+
+BlockDownloadManagerImpl::PeerBlockDownloadState* BlockDownloadManagerImpl::GetPeerState(NodeId nodeid)
+{
+    auto it = m_peer_info.find(nodeid);
+    return it != m_peer_info.end() ? &it->second : nullptr;
+}
+
+const BlockDownloadManagerImpl::PeerBlockDownloadState* BlockDownloadManagerImpl::GetPeerState(NodeId nodeid) const
+{
+    auto it = m_peer_info.find(nodeid);
+    return it != m_peer_info.end() ? &it->second : nullptr;
+}
+
+const CBlockIndex* BlockDownloadManager::GetBestKnownBlock(NodeId nodeid) const
+{
+    const auto* state = m_impl->GetPeerState(nodeid);
+    return state ? state->pindexBestKnownBlock : nullptr;
 }
 
 } // namespace node

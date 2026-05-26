@@ -111,6 +111,9 @@ public:
                                         std::vector<const CBlockIndex*>& vBlocks,
                                         const CBlockIndex* from_tip,
                                         const CBlockIndex* target_block) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
+    /** Get the best known block for a peer (or nullptr). */
+    const CBlockIndex* GetBestKnownBlock(NodeId nodeid) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 };
 
 } // namespace node
