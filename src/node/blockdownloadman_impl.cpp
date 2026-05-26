@@ -575,4 +575,9 @@ std::optional<std::pair<NodeId, bool>> BlockDownloadManager::GetBlockSource(cons
     return std::nullopt;
 }
 
+void BlockDownloadManager::SetBlockSource(const uint256& hash, NodeId nodeid, bool punish_on_invalid)
+{
+    m_impl->mapBlockSource.emplace(hash, std::make_pair(nodeid, punish_on_invalid));
+}
+
 } // namespace node

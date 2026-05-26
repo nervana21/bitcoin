@@ -172,6 +172,9 @@ public:
 
     /** Get block source information for a given block hash. */
     std::optional<std::pair<NodeId, bool>> GetBlockSource(const uint256& hash) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
+    /** Record the source of a received block. */
+    void SetBlockSource(const uint256& hash, NodeId nodeid, bool punish_on_invalid) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 };
 
 } // namespace node
