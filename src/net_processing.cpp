@@ -764,6 +764,10 @@ private:
     Mutex m_tx_download_mutex ACQUIRED_BEFORE(m_mempool.cs);
     node::TxDownloadManager m_txdownloadman GUARDED_BY(m_tx_download_mutex);
 
+    /** Tracks block download state: in-flight blocks, request scheduling, stalling detection.
+     *  Synchronized by cs_main. */
+    node::BlockDownloadManager m_blockdownloadman;
+
     std::unique_ptr<TxReconciliationTracker> m_txreconciliation;
 
     /** The height of the best chain */
@@ -1974,6 +1978,7 @@ PeerManagerImpl::PeerManagerImpl(CConnman& connman, AddrMan& addrman,
       m_chainman(chainman),
       m_mempool(pool),
       m_txdownloadman(node::TxDownloadOptions{pool, m_rng, opts.deterministic_rng}),
+      m_blockdownloadman(node::BlockDownloadOptions{chainman}),
       m_warnings{warnings},
       m_opts{opts}
 {
