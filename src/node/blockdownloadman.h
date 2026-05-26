@@ -8,6 +8,7 @@
 #include <kernel/cs_main.h>
 #include <memory>
 #include <net.h>
+#include <uint256.h>
 
 #include <list>
 
@@ -55,6 +56,9 @@ public:
 
     /** Clean up all block download state for a disconnected peer. */
     void DisconnectedPeer(NodeId nodeid) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
+    /** Have we requested this block from any peer? */
+    bool IsBlockRequested(const uint256& hash) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 };
 
 } // namespace node

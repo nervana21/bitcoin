@@ -72,4 +72,14 @@ void BlockDownloadManagerImpl::DisconnectedPeer(NodeId nodeid)
     m_peer_info.erase(it);
 }
 
+bool BlockDownloadManager::IsBlockRequested(const uint256& hash) const
+{
+    return m_impl->IsBlockRequested(hash);
+}
+
+bool BlockDownloadManagerImpl::IsBlockRequested(const uint256& hash) const
+{
+    return mapBlocksInFlight.contains(hash);
+}
+
 } // namespace node
