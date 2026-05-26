@@ -7,14 +7,22 @@
 
 #include <memory>
 
+class ChainstateManager;
+
 namespace node {
 
 class BlockDownloadManagerImpl;
+
+struct BlockDownloadOptions {
+    /** Reference to ChainstateManager for chain state access and LookupBlockIndex. */
+    ChainstateManager& m_chainman;
+};
 
 class BlockDownloadManager {
     const std::unique_ptr<BlockDownloadManagerImpl> m_impl;
 
 public:
+    explicit BlockDownloadManager(const BlockDownloadOptions& options);
     ~BlockDownloadManager();
 };
 

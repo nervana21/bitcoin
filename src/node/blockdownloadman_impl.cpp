@@ -7,6 +7,10 @@
 
 namespace node {
 
+BlockDownloadManager::BlockDownloadManager(const BlockDownloadOptions& options)
+    : m_impl{std::make_unique<BlockDownloadManagerImpl>(options)}
+{}
+
 BlockDownloadManager::~BlockDownloadManager() = default;
 
 } // namespace node
