@@ -10,6 +10,8 @@
 #include <kernel/cs_main.h>
 #include <uint256.h>
 
+class CBlockIndex;
+
 #include <atomic>
 #include <chrono>
 #include <list>
@@ -24,6 +26,8 @@ public:
 
     struct PeerBlockDownloadState {
         BlockDownloadConnectionInfo m_connection_info;
+        const CBlockIndex* pindexBestKnownBlock{nullptr};
+        uint256 hashLastUnknownBlock{};
         bool fSyncStarted{false};
         std::list<QueuedBlock> vBlocksInFlight;
         std::chrono::microseconds m_downloading_since{0us};
@@ -64,6 +68,8 @@ public:
                         CTxMemPool* mempool) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
     bool TipMayBeStale(std::chrono::seconds now, int64_t n_pow_target_spacing) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
+    void ProcessBlockAvailability(NodeId nodeid) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 };
 
 } // namespace node

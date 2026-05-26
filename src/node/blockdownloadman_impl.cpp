@@ -7,7 +7,9 @@
 
 #include <blockencodings.h>
 #include <chain.h>
+#include <node/blockstorage.h>
 #include <util/check.h>
+#include <validation.h>
 #include <txmempool.h>
 #include <util/time.h>
 
@@ -221,6 +223,26 @@ void BlockDownloadManager::SetLastTipUpdate(std::chrono::seconds time)
 std::chrono::seconds BlockDownloadManager::GetLastTipUpdate() const
 {
     return m_impl->m_last_tip_update.load();
+}
+
+void BlockDownloadManager::ProcessBlockAvailability(NodeId nodeid)
+{
+    m_impl->ProcessBlockAvailability(nodeid);
+}
+
+void BlockDownloadManagerImpl::ProcessBlockAvailability(NodeId nodeid)
+{
+    auto* state = Assert(GetPeerState(*this, nodeid));
+
+    if (!state->hashLastUnknownBlock.IsNull()) {
+        const CBlockIndex* pindex = m_opts.m_chainman.m_blockman.LookupBlockIndex(state->hashLastUnknownBlock);
+        if (pindex && pindex->nChainWork > 0) {
+            if (state->pindexBestKnownBlock == nullptr || pindex->nChainWork >= state->pindexBestKnownBlock->nChainWork) {
+                state->pindexBestKnownBlock = pindex;
+            }
+            state->hashLastUnknownBlock.SetNull();
+        }
+    }
 }
 
 } // namespace node

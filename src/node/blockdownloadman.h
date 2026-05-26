@@ -86,6 +86,9 @@ public:
 
     /** Get the last tip update time. */
     std::chrono::seconds GetLastTipUpdate() const;
+
+    /** Check whether the last unknown block a peer advertised is not yet known. */
+    void ProcessBlockAvailability(NodeId nodeid) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 };
 
 } // namespace node
