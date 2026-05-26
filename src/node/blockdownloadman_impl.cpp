@@ -482,4 +482,10 @@ const CBlockIndex* BlockDownloadManager::GetLastCommonBlock(NodeId nodeid) const
     return state ? state->pindexLastCommonBlock : nullptr;
 }
 
+bool BlockDownloadManager::GetSyncStarted(NodeId nodeid) const
+{
+    const auto* state = m_impl->GetPeerState(nodeid);
+    return state && state->fSyncStarted;
+}
+
 } // namespace node

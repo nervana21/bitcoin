@@ -123,6 +123,9 @@ public:
 
     /** Get the last common block with a peer (or nullptr). */
     const CBlockIndex* GetLastCommonBlock(NodeId nodeid) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
+    /** Get whether we have started syncing headers with this peer. */
+    bool GetSyncStarted(NodeId nodeid) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 };
 
 } // namespace node
