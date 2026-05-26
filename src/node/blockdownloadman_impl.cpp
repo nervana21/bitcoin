@@ -218,4 +218,9 @@ void BlockDownloadManager::SetLastTipUpdate(std::chrono::seconds time)
     m_impl->m_last_tip_update = time;
 }
 
+std::chrono::seconds BlockDownloadManager::GetLastTipUpdate() const
+{
+    return m_impl->m_last_tip_update.load();
+}
+
 } // namespace node

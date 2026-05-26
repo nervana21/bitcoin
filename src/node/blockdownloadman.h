@@ -83,6 +83,9 @@ public:
 
     /** Record that the tip was updated. */
     void SetLastTipUpdate(std::chrono::seconds time);
+
+    /** Get the last tip update time. */
+    std::chrono::seconds GetLastTipUpdate() const;
 };
 
 } // namespace node
