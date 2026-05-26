@@ -542,4 +542,10 @@ const std::list<QueuedBlock>& BlockDownloadManager::GetBlocksInFlight(NodeId nod
     return state->vBlocksInFlight;
 }
 
+std::chrono::microseconds BlockDownloadManager::GetDownloadingSince(NodeId nodeid) const
+{
+    const auto* state = m_impl->GetPeerState(nodeid);
+    return state ? state->m_downloading_since : std::chrono::microseconds{0};
+}
+
 } // namespace node

@@ -157,6 +157,9 @@ public:
 
     /** Get the blocks-in-flight list for a peer. */
     const std::list<QueuedBlock>& GetBlocksInFlight(NodeId nodeid) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
+    /** Get the downloading-since time for a peer. */
+    std::chrono::microseconds GetDownloadingSince(NodeId nodeid) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 };
 
 } // namespace node
