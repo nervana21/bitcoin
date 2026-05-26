@@ -2027,7 +2027,7 @@ void PeerManagerImpl::BlockConnected(
 {
     // Update this for all chainstate roles so that we don't mistakenly see peers
     // helping us do background IBD as having a stale tip.
-    m_last_tip_update = GetTime<std::chrono::seconds>();
+    m_blockdownloadman.SetLastTipUpdate(GetTime<std::chrono::seconds>());
 
     // In case the dynamic timeout was doubled once or more, reduce it slowly back to its default value
     auto stalling_timeout = m_block_stalling_timeout.load();
