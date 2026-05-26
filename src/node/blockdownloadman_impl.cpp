@@ -5,6 +5,8 @@
 #include <node/blockdownloadman.h>
 #include <node/blockdownloadman_impl.h>
 
+#include <blockencodings.h>
+#include <chain.h>
 #include <util/check.h>
 
 namespace node {
@@ -80,6 +82,21 @@ bool BlockDownloadManager::IsBlockRequested(const uint256& hash) const
 bool BlockDownloadManagerImpl::IsBlockRequested(const uint256& hash) const
 {
     return mapBlocksInFlight.contains(hash);
+}
+
+bool BlockDownloadManager::IsBlockRequestedFromOutbound(const uint256& hash) const
+{
+    return m_impl->IsBlockRequestedFromOutbound(hash);
+}
+
+bool BlockDownloadManagerImpl::IsBlockRequestedFromOutbound(const uint256& hash) const
+{
+    for (auto range = mapBlocksInFlight.equal_range(hash); range.first != range.second; range.first++) {
+        const auto [nodeid, block_it]{range.first->second};
+        const auto it = m_peer_info.find(nodeid);
+        if (it != m_peer_info.end() && !it->second.m_connection_info.m_is_inbound) return true;
+    }
+    return false;
 }
 
 } // namespace node

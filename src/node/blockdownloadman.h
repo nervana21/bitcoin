@@ -59,6 +59,9 @@ public:
 
     /** Have we requested this block from any peer? */
     bool IsBlockRequested(const uint256& hash) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
+    /** Have we requested this block from an outbound peer? */
+    bool IsBlockRequestedFromOutbound(const uint256& hash) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 };
 
 } // namespace node
