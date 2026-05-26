@@ -105,6 +105,12 @@ public:
     void FindNextBlocksToDownload(NodeId nodeid, unsigned int count,
                                   std::vector<const CBlockIndex*>& vBlocks,
                                   NodeId& nodeStaller) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
+    /** Request blocks for the background chainstate, if one is in use. */
+    void TryDownloadingHistoricalBlocks(NodeId nodeid, unsigned int count,
+                                        std::vector<const CBlockIndex*>& vBlocks,
+                                        const CBlockIndex* from_tip,
+                                        const CBlockIndex* target_block) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 };
 
 } // namespace node

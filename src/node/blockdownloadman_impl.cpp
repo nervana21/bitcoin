@@ -332,6 +332,48 @@ void BlockDownloadManagerImpl::FindNextBlocksToDownload(NodeId nodeid, unsigned 
     FindNextBlocks(vBlocks, nodeid, *state, pindexWalk, count, nWindowEnd, &m_opts.m_chainman.ActiveChain(), &nodeStaller);
 }
 
+void BlockDownloadManager::TryDownloadingHistoricalBlocks(NodeId nodeid, unsigned int count,
+                                                          std::vector<const CBlockIndex*>& vBlocks,
+                                                          const CBlockIndex* from_tip,
+                                                          const CBlockIndex* target_block)
+{
+    m_impl->TryDownloadingHistoricalBlocks(nodeid, count, vBlocks, from_tip, target_block);
+}
+
+void BlockDownloadManagerImpl::TryDownloadingHistoricalBlocks(NodeId nodeid, unsigned int count,
+                                                              std::vector<const CBlockIndex*>& vBlocks,
+                                                              const CBlockIndex* from_tip,
+                                                              const CBlockIndex* target_block)
+{
+    Assert(from_tip);
+    Assert(target_block);
+
+    if (vBlocks.size() >= count) {
+        return;
+    }
+
+    vBlocks.reserve(count);
+    auto* state = Assert(GetPeerState(*this, nodeid));
+
+    if (state->pindexBestKnownBlock == nullptr ||
+        state->pindexBestKnownBlock->GetAncestor(target_block->nHeight) != target_block) {
+        // This peer can't provide us the complete series of blocks leading up to the
+        // assumeutxo snapshot base.
+        //
+        // Presumably this peer's chain has less work than our ActiveChain()'s tip, or else we
+        // will eventually crash when we try to reorg to it. Let other logic
+        // deal with whether we disconnect this peer.
+        //
+        // TODO at some point in the future, we might choose to request what blocks
+        // this peer does have from the historical chain, despite it not having a
+        // complete history beneath the snapshot base.
+        return;
+    }
+
+    FindNextBlocks(vBlocks, nodeid, *state, from_tip, count,
+                   std::min<int>(from_tip->nHeight + BLOCK_DOWNLOAD_WINDOW, target_block->nHeight));
+}
+
 void BlockDownloadManagerImpl::FindNextBlocks(std::vector<const CBlockIndex*>& vBlocks,
                                               NodeId nodeid,
                                               PeerBlockDownloadState& state,
