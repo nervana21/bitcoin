@@ -464,4 +464,10 @@ const CBlockIndex* BlockDownloadManager::GetBestKnownBlock(NodeId nodeid) const
     return state ? state->pindexBestKnownBlock : nullptr;
 }
 
+const CBlockIndex* BlockDownloadManager::GetBestHeaderSent(NodeId nodeid) const
+{
+    const auto* state = m_impl->GetPeerState(nodeid);
+    return state ? state->pindexBestHeaderSent : nullptr;
+}
+
 } // namespace node

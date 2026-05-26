@@ -31,6 +31,7 @@ public:
         BlockDownloadConnectionInfo m_connection_info;
         const CBlockIndex* pindexBestKnownBlock{nullptr};
         const CBlockIndex* pindexLastCommonBlock{nullptr};
+        const CBlockIndex* pindexBestHeaderSent{nullptr};
         uint256 hashLastUnknownBlock{};
         bool fSyncStarted{false};
         std::list<QueuedBlock> vBlocksInFlight;

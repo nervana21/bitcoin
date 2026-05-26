@@ -114,6 +114,9 @@ public:
 
     /** Get the best known block for a peer (or nullptr). */
     const CBlockIndex* GetBestKnownBlock(NodeId nodeid) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
+    /** Get the best header we have sent a peer (or nullptr). */
+    const CBlockIndex* GetBestHeaderSent(NodeId nodeid) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 };
 
 } // namespace node
