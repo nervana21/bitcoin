@@ -103,6 +103,8 @@ public:
     const PeerBlockDownloadState* GetPeerState(NodeId nodeid) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
     void CheckIsEmpty() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
+    bool PeerHasHeader(const PeerBlockDownloadState& state, const CBlockIndex* pindex) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 };
 
 } // namespace node

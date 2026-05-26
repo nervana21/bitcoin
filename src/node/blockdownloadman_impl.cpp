@@ -602,4 +602,19 @@ void BlockDownloadManagerImpl::CheckIsEmpty() const
     assert(m_peers_downloading_from == 0);
 }
 
+bool BlockDownloadManager::PeerHasHeader(NodeId nodeid, const CBlockIndex* pindex) const
+{
+    const auto* state = m_impl->GetPeerState(nodeid);
+    return state && m_impl->PeerHasHeader(*state, pindex);
+}
+
+bool BlockDownloadManagerImpl::PeerHasHeader(const PeerBlockDownloadState& state, const CBlockIndex* pindex) const
+{
+    if (state.pindexBestKnownBlock && pindex == state.pindexBestKnownBlock->GetAncestor(pindex->nHeight))
+        return true;
+    if (state.pindexBestHeaderSent && pindex == state.pindexBestHeaderSent->GetAncestor(pindex->nHeight))
+        return true;
+    return false;
+}
+
 } // namespace node

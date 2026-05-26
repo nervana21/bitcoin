@@ -184,6 +184,9 @@ public:
 
     /** Check that all data structures are empty. Used for post-disconnect assertions. */
     void CheckIsEmpty() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
+    /** Check whether a peer has a particular header. */
+    bool PeerHasHeader(NodeId nodeid, const CBlockIndex* pindex) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 };
 
 } // namespace node
