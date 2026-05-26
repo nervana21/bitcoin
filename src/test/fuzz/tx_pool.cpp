@@ -176,7 +176,7 @@ void Finish(FuzzedDataProvider& fuzzed_data_provider, MockedTxPool& tx_pool, Cha
         // Now try to add those transactions back, as though a reorg happened.
         std::vector<Txid> hashes_to_update;
         for (const auto& tx : block_template->block.vtx) {
-            auto [res, flush_result]{AcceptToMemoryPool(chainstate, tx, tx_pool, GetTime(), true, /*test_accept=*/false)};
+            auto [res, flush_result]{AcceptToMemoryPool(chainstate, tx, GetTime(), true, /*test_accept=*/false)};
             Assert(flush_result);
             if (res.m_result_type == MempoolAcceptResult::ResultType::VALID) {
                 hashes_to_update.push_back(tx->GetHash());
@@ -432,7 +432,7 @@ FUZZ_TARGET(tx_pool_standard, .init = initialize_tx_pool_standard)
                    it->second.m_result_type == MempoolAcceptResult::ResultType::INVALID);
         }
 
-        auto [res, flush_result]{WITH_LOCK(::cs_main, return AcceptToMemoryPool(chainstate, tx, tx_pool, GetTime(), /*bypass_limits=*/false, /*test_accept=*/false))};
+        auto [res, flush_result]{WITH_LOCK(::cs_main, return AcceptToMemoryPool(chainstate, tx, GetTime(), /*bypass_limits=*/false, /*test_accept=*/false))};
         Assert(flush_result);
         const bool accepted = res.m_result_type == MempoolAcceptResult::ResultType::VALID;
         accepted_transaction |= accepted;
@@ -542,7 +542,7 @@ FUZZ_TARGET(tx_pool, .init = initialize_tx_pool)
         ever_bypassed_limits |= bypass_limits;
 
         const auto tx = MakeTransactionRef(mut_tx);
-        auto [res, flush_result]{WITH_LOCK(::cs_main, return AcceptToMemoryPool(chainstate, tx, tx_pool, GetTime(), bypass_limits, /*test_accept=*/false))};
+        auto [res, flush_result]{WITH_LOCK(::cs_main, return AcceptToMemoryPool(chainstate, tx, GetTime(), bypass_limits, /*test_accept=*/false))};
         Assert(flush_result);
         const bool accepted = res.m_result_type == MempoolAcceptResult::ResultType::VALID;
         accepted_transaction |= accepted;
