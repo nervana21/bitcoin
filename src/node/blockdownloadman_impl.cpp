@@ -500,4 +500,9 @@ void BlockDownloadManager::SetSyncStarted(NodeId nodeid, bool started)
     state->fSyncStarted = started;
 }
 
+int BlockDownloadManager::GetNumSyncStarted() const
+{
+    return m_impl->nSyncStarted;
+}
+
 } // namespace node

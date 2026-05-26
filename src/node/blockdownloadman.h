@@ -129,6 +129,9 @@ public:
 
     /** Mark that we've started syncing headers with this peer, updating the global counter. */
     void SetSyncStarted(NodeId nodeid, bool started) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
+    /** Get the global number of peers with sync started. */
+    int GetNumSyncStarted() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 };
 
 } // namespace node
