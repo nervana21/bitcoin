@@ -535,4 +535,11 @@ size_t BlockDownloadManager::GetTotalBlocksInFlight() const
     return m_impl->mapBlocksInFlight.size();
 }
 
+const std::list<QueuedBlock>& BlockDownloadManager::GetBlocksInFlight(NodeId nodeid) const
+{
+    const auto* state = m_impl->GetPeerState(nodeid);
+    Assert(state);
+    return state->vBlocksInFlight;
+}
+
 } // namespace node

@@ -154,6 +154,9 @@ public:
 
     /** Get total number of blocks in flight (across all hashes and peers). */
     size_t GetTotalBlocksInFlight() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
+    /** Get the blocks-in-flight list for a peer. */
+    const std::list<QueuedBlock>& GetBlocksInFlight(NodeId nodeid) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 };
 
 } // namespace node
