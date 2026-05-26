@@ -141,6 +141,9 @@ public:
     /** Atomically compare-and-exchange the stalling timeout.
      *  Returns true on success (value was expected, now set to desired). */
     bool CompareExchangeBlockStallingTimeout(std::chrono::seconds& expected, std::chrono::seconds desired);
+
+    /** Get the number of preferred download peers. */
+    int GetNumPreferredDownload() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 };
 
 } // namespace node

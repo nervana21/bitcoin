@@ -515,4 +515,9 @@ bool BlockDownloadManager::CompareExchangeBlockStallingTimeout(std::chrono::seco
     return m_impl->m_block_stalling_timeout.compare_exchange_strong(expected, desired);
 }
 
+int BlockDownloadManager::GetNumPreferredDownload() const
+{
+    return m_impl->m_num_preferred_download_peers;
+}
+
 } // namespace node
