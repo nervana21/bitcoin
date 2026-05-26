@@ -81,8 +81,7 @@ BOOST_FIXTURE_TEST_CASE(write_during_multiblock_activation, TestChain100Setup)
     const CBlockIndex* tip{chainstate.m_chain.Tip()};
     CBlockIndex* second_from_tip{tip->pprev};
 
-    {
-        LOCK2(m_node.chainman->GetMutex(), chainstate.MempoolMutex());
+    {        LOCK(m_node.chainman->GetMutex());
         BOOST_CHECK(chainstate.DisconnectTip(state_dummy, nullptr));
         BOOST_CHECK(chainstate.DisconnectTip(state_dummy, nullptr));
     }
