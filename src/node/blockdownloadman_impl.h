@@ -56,6 +56,8 @@ public:
 
     std::atomic<std::chrono::seconds> m_last_tip_update{0s};
 
+    std::atomic<std::chrono::seconds> m_block_stalling_timeout{BLOCK_STALLING_TIMEOUT_DEFAULT};
+
     explicit BlockDownloadManagerImpl(const BlockDownloadOptions& options)
         : m_opts{options} {}
 

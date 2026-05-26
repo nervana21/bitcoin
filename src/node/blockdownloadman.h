@@ -21,6 +21,8 @@ class ChainstateManager;
 class CTxMemPool;
 class PartiallyDownloadedBlock;
 
+/** Default time during which a peer must stall block download progress before being disconnected. */
+static constexpr auto BLOCK_STALLING_TIMEOUT_DEFAULT{2s};
 /** Size of the "block download window": how far ahead of our current height do we fetch? */
 static const unsigned int BLOCK_DOWNLOAD_WINDOW = 1024;
 /** Minimum blocks required to signal NODE_NETWORK_LIMITED */
@@ -132,6 +134,9 @@ public:
 
     /** Get the global number of peers with sync started. */
     int GetNumSyncStarted() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
+    /** Get the stalling timeout for blocks. */
+    std::chrono::seconds GetBlockStallingTimeout() const;
 };
 
 } // namespace node

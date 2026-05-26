@@ -505,4 +505,9 @@ int BlockDownloadManager::GetNumSyncStarted() const
     return m_impl->nSyncStarted;
 }
 
+std::chrono::seconds BlockDownloadManager::GetBlockStallingTimeout() const
+{
+    return m_impl->m_block_stalling_timeout.load();
+}
+
 } // namespace node
