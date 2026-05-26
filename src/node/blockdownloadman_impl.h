@@ -55,6 +55,10 @@ public:
     bool IsBlockRequestedFromOutbound(const uint256& hash) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
     void RemoveBlockRequest(const uint256& hash, std::optional<NodeId> from_peer) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
+    bool BlockRequested(NodeId nodeid, const CBlockIndex& block,
+                        std::list<QueuedBlock>::iterator** pit,
+                        CTxMemPool* mempool) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 };
 
 } // namespace node

@@ -15,6 +15,7 @@
 
 class CBlockIndex;
 class ChainstateManager;
+class CTxMemPool;
 class PartiallyDownloadedBlock;
 
 namespace node {
@@ -67,6 +68,13 @@ public:
     /** Remove this block from our tracked requested blocks.
      *  If from_peer is set, only remove the block if it is in flight from that peer. */
     void RemoveBlockRequest(const uint256& hash, std::optional<NodeId> from_peer) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
+    /** Mark a block as in flight from a given peer.
+     *  Returns false (still setting pit) if the block was already in flight from the same peer.
+     *  pit is only valid while cs_main is held. */
+    bool BlockRequested(NodeId nodeid, const CBlockIndex& block,
+                        std::list<QueuedBlock>::iterator** pit = nullptr,
+                        CTxMemPool* mempool = nullptr) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 };
 
 } // namespace node
