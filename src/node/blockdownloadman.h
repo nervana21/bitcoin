@@ -98,6 +98,13 @@ public:
 
     /** Update tracking information about which blocks a peer is assumed to have. */
     void UpdateBlockAvailability(NodeId nodeid, const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
+    /** Calculate which blocks to download from a given peer, given our current tip.
+     *  Update pindexLastCommonBlock and add not-in-flight missing successors to vBlocks.
+     *  Sets nodeStaller to a stalling peer NodeId if applicable, or -1. */
+    void FindNextBlocksToDownload(NodeId nodeid, unsigned int count,
+                                  std::vector<const CBlockIndex*>& vBlocks,
+                                  NodeId& nodeStaller) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 };
 
 } // namespace node

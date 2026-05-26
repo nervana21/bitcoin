@@ -84,6 +84,10 @@ public:
                         unsigned int count, int nWindowEnd,
                         const CChain* activeChain = nullptr,
                         NodeId* nodeStaller = nullptr) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
+    void FindNextBlocksToDownload(NodeId nodeid, unsigned int count,
+                                  std::vector<const CBlockIndex*>& vBlocks,
+                                  NodeId& nodeStaller) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 };
 
 } // namespace node
