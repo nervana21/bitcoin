@@ -101,6 +101,8 @@ public:
 
     PeerBlockDownloadState* GetPeerState(NodeId nodeid) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
     const PeerBlockDownloadState* GetPeerState(NodeId nodeid) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
+    void CheckIsEmpty() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 };
 
 } // namespace node

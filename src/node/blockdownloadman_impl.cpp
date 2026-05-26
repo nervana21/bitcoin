@@ -590,4 +590,16 @@ size_t BlockDownloadManager::CountBlocksInFlight(const uint256& hash) const
     return m_impl->mapBlocksInFlight.count(hash);
 }
 
+void BlockDownloadManager::CheckIsEmpty() const
+{
+    m_impl->CheckIsEmpty();
+}
+
+void BlockDownloadManagerImpl::CheckIsEmpty() const
+{
+    assert(mapBlocksInFlight.empty());
+    assert(m_num_preferred_download_peers == 0);
+    assert(m_peers_downloading_from == 0);
+}
+
 } // namespace node
