@@ -11,6 +11,7 @@
 #include <uint256.h>
 
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <list>
 #include <optional>
@@ -150,6 +151,9 @@ public:
 
     /** Whether blocks are in flight from any peer. */
     bool HasBlocksInFlight() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
+    /** Get total number of blocks in flight (across all hashes and peers). */
+    size_t GetTotalBlocksInFlight() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 };
 
 } // namespace node

@@ -530,4 +530,9 @@ bool BlockDownloadManager::HasBlocksInFlight() const
     return !m_impl->mapBlocksInFlight.empty();
 }
 
+size_t BlockDownloadManager::GetTotalBlocksInFlight() const
+{
+    return m_impl->mapBlocksInFlight.size();
+}
+
 } // namespace node
