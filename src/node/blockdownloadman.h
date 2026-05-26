@@ -117,6 +117,9 @@ public:
 
     /** Get the best header we have sent a peer (or nullptr). */
     const CBlockIndex* GetBestHeaderSent(NodeId nodeid) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
+    /** Set the best header we have sent a peer. */
+    void SetBestHeaderSent(NodeId nodeid, const CBlockIndex* pindex) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 };
 
 } // namespace node
