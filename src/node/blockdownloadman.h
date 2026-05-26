@@ -5,7 +5,9 @@
 #ifndef BITCOIN_NODE_BLOCKDOWNLOADMAN_H
 #define BITCOIN_NODE_BLOCKDOWNLOADMAN_H
 
+#include <kernel/cs_main.h>
 #include <memory>
+#include <net.h>
 
 class ChainstateManager;
 
@@ -18,12 +20,26 @@ struct BlockDownloadOptions {
     ChainstateManager& m_chainman;
 };
 
+struct BlockDownloadConnectionInfo {
+    /** Whether this is an inbound peer. */
+    bool m_is_inbound;
+    /** Whether this peer is preferred for download. */
+    bool m_preferred_download;
+    /** Whether this peer can serve witness data (NODE_WITNESS). */
+    bool m_can_serve_witnesses;
+    /** Whether this peer can only serve limited recent blocks (pruned). */
+    bool m_is_limited_peer;
+};
+
 class BlockDownloadManager {
     const std::unique_ptr<BlockDownloadManagerImpl> m_impl;
 
 public:
     explicit BlockDownloadManager(const BlockDownloadOptions& options);
     ~BlockDownloadManager();
+
+    /** Register a new peer for block download tracking. */
+    void ConnectedPeer(NodeId nodeid, const BlockDownloadConnectionInfo& info) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 };
 
 } // namespace node

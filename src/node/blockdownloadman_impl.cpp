@@ -13,4 +13,25 @@ BlockDownloadManager::BlockDownloadManager(const BlockDownloadOptions& options)
 
 BlockDownloadManager::~BlockDownloadManager() = default;
 
+void BlockDownloadManager::ConnectedPeer(NodeId nodeid, const BlockDownloadConnectionInfo& info)
+{
+    m_impl->ConnectedPeer(nodeid, info);
+}
+
+void BlockDownloadManagerImpl::ConnectedPeer(NodeId nodeid, const BlockDownloadConnectionInfo& info)
+{
+    auto [it, inserted] = m_peer_info.try_emplace(nodeid, info);
+    auto& state = it->second;
+    if (!inserted) {
+        // Re-registration: update connection info.
+        state.m_connection_info = info;
+    }
+    // Set preferred download flag and update counter (handles both first
+    // registration and re-registration).
+    if (info.m_preferred_download && !state.fPreferredDownload) {
+        state.fPreferredDownload = true;
+        m_num_preferred_download_peers++;
+    }
+}
+
 } // namespace node
