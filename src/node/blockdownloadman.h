@@ -175,6 +175,9 @@ public:
 
     /** Record the source of a received block. */
     void SetBlockSource(const uint256& hash, NodeId nodeid, bool punish_on_invalid) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
+    /** Remove a block source entry. */
+    void EraseBlockSource(const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 };
 
 } // namespace node

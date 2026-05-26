@@ -580,4 +580,9 @@ void BlockDownloadManager::SetBlockSource(const uint256& hash, NodeId nodeid, bo
     m_impl->mapBlockSource.emplace(hash, std::make_pair(nodeid, punish_on_invalid));
 }
 
+void BlockDownloadManager::EraseBlockSource(const uint256& hash)
+{
+    m_impl->mapBlockSource.erase(hash);
+}
+
 } // namespace node
