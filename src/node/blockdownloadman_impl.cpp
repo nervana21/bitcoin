@@ -5,6 +5,8 @@
 #include <node/blockdownloadman.h>
 #include <node/blockdownloadman_impl.h>
 
+#include <util/check.h>
+
 namespace node {
 
 BlockDownloadManager::BlockDownloadManager(const BlockDownloadOptions& options)
@@ -32,6 +34,42 @@ void BlockDownloadManagerImpl::ConnectedPeer(NodeId nodeid, const BlockDownloadC
         state.fPreferredDownload = true;
         m_num_preferred_download_peers++;
     }
+}
+
+void BlockDownloadManager::DisconnectedPeer(NodeId nodeid)
+{
+    m_impl->DisconnectedPeer(nodeid);
+}
+
+void BlockDownloadManagerImpl::DisconnectedPeer(NodeId nodeid)
+{
+    auto it = m_peer_info.find(nodeid);
+    if (it == m_peer_info.end()) return;
+
+    auto& state = it->second;
+
+    if (state.fSyncStarted) {
+        nSyncStarted--;
+    }
+
+    // Remove all in-flight block entries for this peer from the global map.
+    for (const QueuedBlock& entry : state.vBlocksInFlight) {
+        auto range = mapBlocksInFlight.equal_range(entry.pindex->GetBlockHash());
+        while (range.first != range.second) {
+            auto [node_id, list_it] = range.first->second;
+            if (node_id != nodeid) {
+                range.first++;
+            } else {
+                range.first = mapBlocksInFlight.erase(range.first);
+            }
+        }
+    }
+
+    m_num_preferred_download_peers -= state.fPreferredDownload;
+    m_peers_downloading_from -= (!state.vBlocksInFlight.empty());
+    assert(m_peers_downloading_from >= 0);
+
+    m_peer_info.erase(it);
 }
 
 } // namespace node

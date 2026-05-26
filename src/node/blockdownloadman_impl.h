@@ -8,7 +8,9 @@
 #include <node/blockdownloadman.h>
 
 #include <kernel/cs_main.h>
+#include <uint256.h>
 
+#include <list>
 #include <map>
 
 namespace node {
@@ -19,6 +21,8 @@ public:
 
     struct PeerBlockDownloadState {
         BlockDownloadConnectionInfo m_connection_info;
+        bool fSyncStarted{false};
+        std::list<QueuedBlock> vBlocksInFlight;
         bool fPreferredDownload{false};
 
         explicit PeerBlockDownloadState(const BlockDownloadConnectionInfo& info)
@@ -27,12 +31,20 @@ public:
 
     std::map<NodeId, PeerBlockDownloadState> m_peer_info GUARDED_BY(::cs_main);
 
+    using BlockDownloadMap = std::multimap<uint256, std::pair<NodeId, std::list<QueuedBlock>::iterator>>;
+    BlockDownloadMap mapBlocksInFlight GUARDED_BY(::cs_main);
+
+    int nSyncStarted GUARDED_BY(::cs_main){0};
+
     int m_num_preferred_download_peers GUARDED_BY(::cs_main){0};
+
+    int m_peers_downloading_from GUARDED_BY(::cs_main){0};
 
     explicit BlockDownloadManagerImpl(const BlockDownloadOptions& options)
         : m_opts{options} {}
 
     void ConnectedPeer(NodeId nodeid, const BlockDownloadConnectionInfo& info) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    void DisconnectedPeer(NodeId nodeid) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 };
 
 } // namespace node

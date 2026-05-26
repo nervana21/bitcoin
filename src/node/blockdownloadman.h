@@ -9,7 +9,11 @@
 #include <memory>
 #include <net.h>
 
+#include <list>
+
+class CBlockIndex;
 class ChainstateManager;
+class PartiallyDownloadedBlock;
 
 namespace node {
 
@@ -18,6 +22,14 @@ class BlockDownloadManagerImpl;
 struct BlockDownloadOptions {
     /** Reference to ChainstateManager for chain state access and LookupBlockIndex. */
     ChainstateManager& m_chainman;
+};
+
+/** Blocks that are in flight, and that are in the queue to be downloaded. */
+struct QueuedBlock {
+    /** BlockIndex. We must have this since we only request blocks when we've already validated the header. */
+    const CBlockIndex* pindex;
+    /** Optional, used for CMPCTBLOCK downloads */
+    std::unique_ptr<PartiallyDownloadedBlock> partialBlock;
 };
 
 struct BlockDownloadConnectionInfo {
@@ -40,6 +52,9 @@ public:
 
     /** Register a new peer for block download tracking. */
     void ConnectedPeer(NodeId nodeid, const BlockDownloadConnectionInfo& info) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
+    /** Clean up all block download state for a disconnected peer. */
+    void DisconnectedPeer(NodeId nodeid) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 };
 
 } // namespace node
