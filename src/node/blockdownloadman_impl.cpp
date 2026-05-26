@@ -585,4 +585,9 @@ void BlockDownloadManager::EraseBlockSource(const uint256& hash)
     m_impl->mapBlockSource.erase(hash);
 }
 
+size_t BlockDownloadManager::CountBlocksInFlight(const uint256& hash) const
+{
+    return m_impl->mapBlocksInFlight.count(hash);
+}
+
 } // namespace node

@@ -178,6 +178,9 @@ public:
 
     /** Remove a block source entry. */
     void EraseBlockSource(const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
+    /** Get the count of blocks in flight matching a hash. */
+    size_t CountBlocksInFlight(const uint256& hash) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 };
 
 } // namespace node
