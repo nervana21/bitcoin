@@ -245,4 +245,27 @@ void BlockDownloadManagerImpl::ProcessBlockAvailability(NodeId nodeid)
     }
 }
 
+void BlockDownloadManager::UpdateBlockAvailability(NodeId nodeid, const uint256& hash)
+{
+    m_impl->UpdateBlockAvailability(nodeid, hash);
+}
+
+void BlockDownloadManagerImpl::UpdateBlockAvailability(NodeId nodeid, const uint256& hash)
+{
+    auto* state = Assert(GetPeerState(*this, nodeid));
+
+    ProcessBlockAvailability(nodeid);
+
+    const CBlockIndex* pindex = m_opts.m_chainman.m_blockman.LookupBlockIndex(hash);
+    if (pindex && pindex->nChainWork > 0) {
+        // An actually better block was announced.
+        if (state->pindexBestKnownBlock == nullptr || pindex->nChainWork >= state->pindexBestKnownBlock->nChainWork) {
+            state->pindexBestKnownBlock = pindex;
+        }
+    } else {
+        // An unknown block was announced; just assume that the latest one is the best one.
+        state->hashLastUnknownBlock = hash;
+    }
+}
+
 } // namespace node
