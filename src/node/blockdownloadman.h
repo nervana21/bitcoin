@@ -187,6 +187,21 @@ public:
 
     /** Check whether a peer has a particular header. */
     bool PeerHasHeader(NodeId nodeid, const CBlockIndex* pindex) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
+    /** Result of looking up in-flight block information. */
+    struct BlockInFlightInfo {
+        /** How many peers have this block in flight. */
+        size_t already_in_flight{0};
+        /** Whether the first entry (if any) is from the specified peer. */
+        bool first_in_flight{false};
+        /** Whether the specified peer has this block in flight (with a partialBlock). */
+        bool requested_from_peer{false};
+        /** If requested_from_peer, pointer to the QueuedBlock for this peer (valid while cs_main held). */
+        QueuedBlock* queued_block{nullptr};
+    };
+
+    /** Find detailed in-flight information for a block hash + specific peer. */
+    BlockInFlightInfo FindBlockInFlight(const uint256& hash, NodeId peer_id) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 };
 
 } // namespace node

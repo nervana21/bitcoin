@@ -14,6 +14,7 @@
 #include <validation.h>
 
 #include <algorithm>
+#include <iterator>
 #include <vector>
 #include <txmempool.h>
 #include <util/time.h>
@@ -615,6 +616,25 @@ bool BlockDownloadManagerImpl::PeerHasHeader(const PeerBlockDownloadState& state
     if (state.pindexBestHeaderSent && pindex == state.pindexBestHeaderSent->GetAncestor(pindex->nHeight))
         return true;
     return false;
+}
+
+BlockDownloadManager::BlockInFlightInfo BlockDownloadManager::FindBlockInFlight(const uint256& hash, NodeId peer_id) const
+{
+    BlockInFlightInfo result;
+    auto range = m_impl->mapBlocksInFlight.equal_range(hash);
+    result.already_in_flight = std::distance(range.first, range.second);
+    result.first_in_flight = result.already_in_flight == 0 || (range.first->second.first == peer_id);
+
+    for (auto it = range.first; it != range.second; ++it) {
+        if (it->second.first == peer_id) {
+            result.requested_from_peer = true;
+            if (it->second.second->partialBlock) {
+                result.queued_block = &*it->second.second;
+            }
+            break;
+        }
+    }
+    return result;
 }
 
 } // namespace node
