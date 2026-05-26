@@ -10,6 +10,7 @@
 #include <kernel/cs_main.h>
 #include <uint256.h>
 
+#include <atomic>
 #include <chrono>
 #include <list>
 #include <map>
@@ -44,6 +45,8 @@ public:
 
     int m_peers_downloading_from GUARDED_BY(::cs_main){0};
 
+    std::atomic<std::chrono::seconds> m_last_tip_update{0s};
+
     explicit BlockDownloadManagerImpl(const BlockDownloadOptions& options)
         : m_opts{options} {}
 
@@ -59,6 +62,8 @@ public:
     bool BlockRequested(NodeId nodeid, const CBlockIndex& block,
                         std::list<QueuedBlock>::iterator** pit,
                         CTxMemPool* mempool) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
+    bool TipMayBeStale(std::chrono::seconds now, int64_t n_pow_target_spacing) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 };
 
 } // namespace node

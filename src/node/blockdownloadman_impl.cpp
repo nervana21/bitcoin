@@ -199,4 +199,18 @@ bool BlockDownloadManagerImpl::BlockRequested(NodeId nodeid, const CBlockIndex& 
     return true;
 }
 
+bool BlockDownloadManager::TipMayBeStale(std::chrono::seconds now, int64_t n_pow_target_spacing)
+{
+    return m_impl->TipMayBeStale(now, n_pow_target_spacing);
+}
+
+bool BlockDownloadManagerImpl::TipMayBeStale(std::chrono::seconds now, int64_t n_pow_target_spacing)
+{
+    if (m_last_tip_update.load() == 0s) {
+        m_last_tip_update = now;
+        return false;
+    }
+    return m_last_tip_update.load() < now - std::chrono::seconds{n_pow_target_spacing * 3} && mapBlocksInFlight.empty();
+}
+
 } // namespace node
