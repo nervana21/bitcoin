@@ -160,6 +160,9 @@ public:
 
     /** Get the downloading-since time for a peer. */
     std::chrono::microseconds GetDownloadingSince(NodeId nodeid) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
+    /** Get the stalling-since time for a peer. */
+    std::chrono::microseconds GetStallingSince(NodeId nodeid) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 };
 
 } // namespace node

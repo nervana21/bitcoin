@@ -548,4 +548,10 @@ std::chrono::microseconds BlockDownloadManager::GetDownloadingSince(NodeId nodei
     return state ? state->m_downloading_since : std::chrono::microseconds{0};
 }
 
+std::chrono::microseconds BlockDownloadManager::GetStallingSince(NodeId nodeid) const
+{
+    const auto* state = m_impl->GetPeerState(nodeid);
+    return state ? state->m_stalling_since : std::chrono::microseconds{0};
+}
+
 } // namespace node
