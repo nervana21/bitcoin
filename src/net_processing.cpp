@@ -1755,7 +1755,8 @@ bool PeerManagerImpl::GetNodeStateStats(NodeId nodeid, CNodeStateStats& stats) c
         const CNodeState* state = State(nodeid);
         if (state == nullptr)
             return false;
-        stats.nSyncHeight = state->pindexBestKnownBlock ? state->pindexBestKnownBlock->nHeight : -1;
+        const CBlockIndex* best_known = m_blockdownloadman.GetBestKnownBlock(nodeid);
+        stats.nSyncHeight = best_known ? best_known->nHeight : -1;
         stats.nCommonHeight = state->pindexLastCommonBlock ? state->pindexLastCommonBlock->nHeight : -1;
         for (const node::QueuedBlock& queue : state->vBlocksInFlight) {
             if (queue.pindex)
