@@ -169,6 +169,9 @@ public:
 
     /** Get whether a peer is a preferred download peer. */
     bool IsPreferredDownload(NodeId nodeid) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
+    /** Get block source information for a given block hash. */
+    std::optional<std::pair<NodeId, bool>> GetBlockSource(const uint256& hash) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 };
 
 } // namespace node

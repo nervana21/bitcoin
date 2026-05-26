@@ -566,4 +566,13 @@ bool BlockDownloadManager::IsPreferredDownload(NodeId nodeid) const
     return state ? state->fPreferredDownload : false;
 }
 
+std::optional<std::pair<NodeId, bool>> BlockDownloadManager::GetBlockSource(const uint256& hash) const
+{
+    auto it = m_impl->mapBlockSource.find(hash);
+    if (it != m_impl->mapBlockSource.end()) {
+        return it->second;
+    }
+    return std::nullopt;
+}
+
 } // namespace node

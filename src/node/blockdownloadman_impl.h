@@ -48,6 +48,8 @@ public:
     using BlockDownloadMap = std::multimap<uint256, std::pair<NodeId, std::list<QueuedBlock>::iterator>>;
     BlockDownloadMap mapBlocksInFlight GUARDED_BY(::cs_main);
 
+    std::map<uint256, std::pair<NodeId, bool>> mapBlockSource GUARDED_BY(::cs_main);
+
     int nSyncStarted GUARDED_BY(::cs_main){0};
 
     int m_num_preferred_download_peers GUARDED_BY(::cs_main){0};
