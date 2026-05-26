@@ -137,6 +137,10 @@ public:
 
     /** Get the stalling timeout for blocks. */
     std::chrono::seconds GetBlockStallingTimeout() const;
+
+    /** Atomically compare-and-exchange the stalling timeout.
+     *  Returns true on success (value was expected, now set to desired). */
+    bool CompareExchangeBlockStallingTimeout(std::chrono::seconds& expected, std::chrono::seconds desired);
 };
 
 } // namespace node

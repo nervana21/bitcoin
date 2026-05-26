@@ -510,4 +510,9 @@ std::chrono::seconds BlockDownloadManager::GetBlockStallingTimeout() const
     return m_impl->m_block_stalling_timeout.load();
 }
 
+bool BlockDownloadManager::CompareExchangeBlockStallingTimeout(std::chrono::seconds& expected, std::chrono::seconds desired)
+{
+    return m_impl->m_block_stalling_timeout.compare_exchange_strong(expected, desired);
+}
+
 } // namespace node
