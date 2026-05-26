@@ -1334,22 +1334,9 @@ void PeerManagerImpl::ProcessBlockAvailability(NodeId nodeid)
     m_blockdownloadman.ProcessBlockAvailability(nodeid);
 }
 
-void PeerManagerImpl::UpdateBlockAvailability(NodeId nodeid, const uint256 &hash) {
-    CNodeState *state = State(nodeid);
-    assert(state != nullptr);
-
-    ProcessBlockAvailability(nodeid);
-
-    const CBlockIndex* pindex = m_chainman.m_blockman.LookupBlockIndex(hash);
-    if (pindex && pindex->nChainWork > 0) {
-        // An actually better block was announced.
-        if (state->pindexBestKnownBlock == nullptr || pindex->nChainWork >= state->pindexBestKnownBlock->nChainWork) {
-            state->pindexBestKnownBlock = pindex;
-        }
-    } else {
-        // An unknown block was announced; just assume that the latest one is the best one.
-        state->hashLastUnknownBlock = hash;
-    }
+void PeerManagerImpl::UpdateBlockAvailability(NodeId nodeid, const uint256& hash)
+{
+    m_blockdownloadman.UpdateBlockAvailability(nodeid, hash);
 }
 
 // Logic for calculating which blocks to download from a given peer, given our current tip.
