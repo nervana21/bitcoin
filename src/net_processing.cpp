@@ -2034,7 +2034,7 @@ void PeerManagerImpl::BlockConnected(
     Assume(stalling_timeout >= BLOCK_STALLING_TIMEOUT_DEFAULT);
     if (stalling_timeout != BLOCK_STALLING_TIMEOUT_DEFAULT) {
         const auto new_timeout = std::max(std::chrono::duration_cast<std::chrono::seconds>(stalling_timeout * 0.85), BLOCK_STALLING_TIMEOUT_DEFAULT);
-        if (m_block_stalling_timeout.compare_exchange_strong(stalling_timeout, new_timeout)) {
+        if (m_blockdownloadman.CompareExchangeBlockStallingTimeout(stalling_timeout, new_timeout)) {
             LogDebug(BCLog::NET, "Decreased stalling timeout to %d seconds\n", count_seconds(new_timeout));
         }
     }
