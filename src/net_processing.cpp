@@ -1690,28 +1690,12 @@ void PeerManagerImpl::FinalizeNode(const CNode& node)
     CNodeState *state = State(nodeid);
     assert(state != nullptr);
 
-    if (state->fSyncStarted)
-        nSyncStarted--;
-
-    for (const QueuedBlock& entry : state->vBlocksInFlight) {
-        auto range = mapBlocksInFlight.equal_range(entry.pindex->GetBlockHash());
-        while (range.first != range.second) {
-            auto [node_id, list_it] = range.first->second;
-            if (node_id != nodeid) {
-                range.first++;
-            } else {
-                range.first = mapBlocksInFlight.erase(range.first);
-            }
-        }
-    }
+    m_blockdownloadman.DisconnectedPeer(nodeid);
     {
         LOCK(m_tx_download_mutex);
         m_txdownloadman.DisconnectedPeer(nodeid);
     }
     if (m_txreconciliation) m_txreconciliation->ForgetPeer(nodeid);
-    m_num_preferred_download_peers -= state->fPreferredDownload;
-    m_peers_downloading_from -= (!state->vBlocksInFlight.empty());
-    assert(m_peers_downloading_from >= 0);
     m_outbound_peers_with_protect_from_disconnect -= state->m_chain_sync.m_protect;
     assert(m_outbound_peers_with_protect_from_disconnect >= 0);
 
