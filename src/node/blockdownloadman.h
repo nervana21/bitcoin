@@ -163,6 +163,9 @@ public:
 
     /** Get the stalling-since time for a peer. */
     std::chrono::microseconds GetStallingSince(NodeId nodeid) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
+    /** Set the stalling-since time for a peer. */
+    void SetStallingSince(NodeId nodeid, std::chrono::microseconds time) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 };
 
 } // namespace node
