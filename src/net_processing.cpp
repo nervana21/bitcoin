@@ -6048,7 +6048,7 @@ bool PeerManagerImpl::SendMessages(CNode& node)
             MakeAndPushMessage(node, NetMsgType::INV, vInv);
 
         // Detect whether we're stalling
-        auto stalling_timeout = m_block_stalling_timeout.load();
+        auto stalling_timeout = m_blockdownloadman.GetBlockStallingTimeout();
         if (state.m_stalling_since.count() && state.m_stalling_since < current_time - stalling_timeout) {
             // Stalling only triggers when the block download window cannot move. During normal steady state,
             // the download window should be much larger than the to-be-downloaded set of blocks, so disconnection
