@@ -1501,7 +1501,6 @@ void Chainstate::UpdateTip(const CBlockIndex* pindexNew)
 FlushResult<> Chainstate::DisconnectTip(BlockValidationState& state, DisconnectedBlockTransactions* disconnectpool)
 {
     AssertLockHeld(cs_main);
-    if (m_mempool) AssertLockHeld(m_mempool->cs);
 
     const util::log::Context log_bench{BCLog::BENCH, m_log.logger};
     const util::log::Context log_prune{BCLog::PRUNE, m_log.logger};
@@ -1588,7 +1587,6 @@ FlushResult<void, AbortFailure> Chainstate::ConnectTip(
     DisconnectedBlockTransactions& disconnectpool)
 {
     AssertLockHeld(cs_main);
-    if (m_mempool) AssertLockHeld(m_mempool->cs);
 
     assert(pindexNew->pprev == m_chain.Tip());
     FlushResult<void, AbortFailure> result;
@@ -1782,7 +1780,6 @@ void Chainstate::PruneBlockIndexCandidates() {
 FlushResult<void, AbortFailure> Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex& index_most_work, const std::shared_ptr<const CBlock>& pblock, bool& fInvalidFound, std::vector<ConnectedBlock>& connected_blocks)
 {
     AssertLockHeld(cs_main);
-    if (m_mempool) AssertLockHeld(m_mempool->cs);
 
     FlushResult<void, AbortFailure> result;
     const CBlockIndex* pindexOldTip = m_chain.Tip();
@@ -1915,6 +1912,23 @@ static void LimitValidationInterfaceQueue(ValidationSignals& signals) LOCKS_EXCL
     }
 }
 
+struct ChainstateUpdateGuard {
+    kernel::Mempool& m_mempool;
+    ChainstateRole m_role;
+
+    explicit ChainstateUpdateGuard(kernel::Mempool& mempool, ChainstateRole role) : m_mempool{mempool}, m_role{role}
+    {
+        if (!m_role.historical) m_mempool.BeginChainstateUpdate();
+    }
+
+    ~ChainstateUpdateGuard() {
+        if (!m_role.historical) m_mempool.EndChainstateUpdate();
+    }
+
+    ChainstateUpdateGuard(const ChainstateUpdateGuard&) = delete;
+    ChainstateUpdateGuard& operator=(const ChainstateUpdateGuard&) = delete;
+};
+
 FlushResult<> Chainstate::ActivateBestChain(BlockValidationState& state, std::shared_ptr<const CBlock> pblock)
 {
     AssertLockNotHeld(m_chainstate_mutex);
@@ -1959,7 +1973,7 @@ FlushResult<> Chainstate::ActivateBestChain(BlockValidationState& state, std::sh
             LOCK(cs_main);
             {
             // Lock transaction pool for at least as long as it takes for connected_blocks to be consumed
-            LOCK(MempoolMutex());
+            ChainstateUpdateGuard guard{m_chainman.GetMempool(), GetRole()};
             const bool was_in_ibd = m_chainman.IsInitialBlockDownload();
             CBlockIndex* starting_tip = m_chain.Tip();
             bool blocks_connected = false;
@@ -2037,7 +2051,7 @@ FlushResult<> Chainstate::ActivateBestChain(BlockValidationState& state, std::sh
                     break;
                 }
             }
-            } // release MempoolMutex
+            } // release the chainstate update guard
             // Notify external listeners about the new tip, even if pindexFork == pindexNewTip.
             if (m_signals && !m_target_blockhash) {
                 m_signals->ActiveTipChange(*Assert(pindexNewTip), m_chainman.IsInitialBlockDownload());
@@ -2181,7 +2195,7 @@ FlushResult<> Chainstate::InvalidateBlock(BlockValidationState& state, CBlockInd
         LOCK(cs_main);
         // Lock for as long as disconnectpool is in scope to make sure MaybeUpdateMempoolForReorg is
         // called after DisconnectTip without unlocking in between
-        LOCK(MempoolMutex());
+        ChainstateUpdateGuard guard{m_chainman.GetMempool(), GetRole()};
         if (!m_chain.Contains(*pindex)) break;
         pindex_was_in_chain = true;
         CBlockIndex* const disconnected_tip{m_chain.Tip()};
