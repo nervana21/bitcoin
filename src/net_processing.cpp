@@ -942,9 +942,6 @@ private:
     typedef std::multimap<uint256, std::pair<NodeId, std::list<QueuedBlock>::iterator>> BlockDownloadMap;
     BlockDownloadMap mapBlocksInFlight GUARDED_BY(cs_main);
 
-    /** When our tip was last updated. */
-    std::atomic<std::chrono::seconds> m_last_tip_update{0s};
-
     /** Determine whether or not a peer can request a transaction, and return it (or nullptr if not found or not allowed). */
     CTransactionRef FindTxForGetData(const Peer::TxRelay& tx_relay, const GenTxid& gtxid)
         EXCLUSIVE_LOCKS_REQUIRED(!m_most_recent_block_mutex, !tx_relay.m_tx_inventory_mutex);
