@@ -1321,11 +1321,7 @@ void PeerManagerImpl::MaybeSetPeerAsAnnouncingHeaderAndIDs(NodeId nodeid)
 bool PeerManagerImpl::TipMayBeStale()
 {
     AssertLockHeld(cs_main);
-    const Consensus::Params& consensusParams = m_chainparams.GetConsensus();
-    if (m_last_tip_update.load() == 0s) {
-        m_last_tip_update = GetTime<std::chrono::seconds>();
-    }
-    return m_last_tip_update.load() < GetTime<std::chrono::seconds>() - std::chrono::seconds{consensusParams.nPowTargetSpacing * 3} && mapBlocksInFlight.empty();
+    return m_blockdownloadman.TipMayBeStale(GetTime<std::chrono::seconds>(), m_chainparams.GetConsensus().nPowTargetSpacing);
 }
 
 int64_t PeerManagerImpl::ApproximateBestBlockDepth() const
