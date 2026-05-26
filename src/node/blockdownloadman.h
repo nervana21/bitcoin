@@ -14,11 +14,17 @@
 #include <cstdint>
 #include <list>
 #include <optional>
+#include <vector>
 
 class CBlockIndex;
 class ChainstateManager;
 class CTxMemPool;
 class PartiallyDownloadedBlock;
+
+/** Size of the "block download window": how far ahead of our current height do we fetch? */
+static const unsigned int BLOCK_DOWNLOAD_WINDOW = 1024;
+/** Minimum blocks required to signal NODE_NETWORK_LIMITED */
+static const unsigned int NODE_NETWORK_LIMITED_MIN_BLOCKS = 288;
 
 namespace node {
 

@@ -17,6 +17,9 @@ class CBlockIndex;
 #include <list>
 #include <map>
 #include <optional>
+#include <vector>
+
+class CChain;
 
 namespace node {
 
@@ -27,6 +30,7 @@ public:
     struct PeerBlockDownloadState {
         BlockDownloadConnectionInfo m_connection_info;
         const CBlockIndex* pindexBestKnownBlock{nullptr};
+        const CBlockIndex* pindexLastCommonBlock{nullptr};
         uint256 hashLastUnknownBlock{};
         bool fSyncStarted{false};
         std::list<QueuedBlock> vBlocksInFlight;
@@ -72,6 +76,14 @@ public:
     void ProcessBlockAvailability(NodeId nodeid) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
     void UpdateBlockAvailability(NodeId nodeid, const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
+    void FindNextBlocks(std::vector<const CBlockIndex*>& vBlocks,
+                        NodeId nodeid,
+                        PeerBlockDownloadState& state,
+                        const CBlockIndex* pindexWalk,
+                        unsigned int count, int nWindowEnd,
+                        const CChain* activeChain = nullptr,
+                        NodeId* nodeStaller = nullptr) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 };
 
 } // namespace node
