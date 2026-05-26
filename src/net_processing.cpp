@@ -1163,13 +1163,7 @@ bool PeerManagerImpl::IsBlockRequested(const uint256& hash)
 
 bool PeerManagerImpl::IsBlockRequestedFromOutbound(const uint256& hash)
 {
-    for (auto range = mapBlocksInFlight.equal_range(hash); range.first != range.second; range.first++) {
-        auto [nodeid, block_it] = range.first->second;
-        PeerRef peer{GetPeerRef(nodeid)};
-        if (peer && !peer->m_is_inbound) return true;
-    }
-
-    return false;
+    return m_blockdownloadman.IsBlockRequestedFromOutbound(hash);
 }
 
 void PeerManagerImpl::RemoveBlockRequest(const uint256& hash, std::optional<NodeId> from_peer)
