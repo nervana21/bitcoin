@@ -31,6 +31,7 @@
 #include <netbase.h>
 #include <netmessagemaker.h>
 #include <node/blockstorage.h>
+#include <node/blockdownloadman.h>
 #include <node/connection_types.h>
 #include <node/protocol_version.h>
 #include <node/timeoffsets.h>
@@ -126,8 +127,6 @@ static const unsigned int MAX_LOCATOR_SZ = 101;
 static const unsigned int MAX_INV_SZ = 50000;
 /** Limit to avoid sending big packets. Not used in processing incoming GETDATA for compatibility */
 static const unsigned int MAX_GETDATA_SZ = 1000;
-/** Number of blocks that can be requested at any given time from a single peer. */
-static const int MAX_BLOCKS_IN_TRANSIT_PER_PEER = 16;
 /** Default time during which a peer must stall block download progress before being disconnected.
  * the actual timeout is increased temporarily if peers are disconnected for hitting the timeout */
 static constexpr auto BLOCK_STALLING_TIMEOUT_DEFAULT{2s};
