@@ -213,4 +213,9 @@ bool BlockDownloadManagerImpl::TipMayBeStale(std::chrono::seconds now, int64_t n
     return m_last_tip_update.load() < now - std::chrono::seconds{n_pow_target_spacing * 3} && mapBlocksInFlight.empty();
 }
 
+void BlockDownloadManager::SetLastTipUpdate(std::chrono::seconds time)
+{
+    m_impl->m_last_tip_update = time;
+}
+
 } // namespace node
