@@ -488,4 +488,16 @@ bool BlockDownloadManager::GetSyncStarted(NodeId nodeid) const
     return state && state->fSyncStarted;
 }
 
+void BlockDownloadManager::SetSyncStarted(NodeId nodeid, bool started)
+{
+    auto* state = m_impl->GetPeerState(nodeid);
+    if (!state) return;
+    if (state->fSyncStarted && !started) {
+        m_impl->nSyncStarted--;
+    } else if (!state->fSyncStarted && started) {
+        m_impl->nSyncStarted++;
+    }
+    state->fSyncStarted = started;
+}
+
 } // namespace node
