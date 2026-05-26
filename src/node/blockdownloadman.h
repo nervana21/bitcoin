@@ -120,6 +120,9 @@ public:
 
     /** Set the best header we have sent a peer. */
     void SetBestHeaderSent(NodeId nodeid, const CBlockIndex* pindex) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
+    /** Get the last common block with a peer (or nullptr). */
+    const CBlockIndex* GetLastCommonBlock(NodeId nodeid) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 };
 
 } // namespace node

@@ -476,4 +476,10 @@ void BlockDownloadManager::SetBestHeaderSent(NodeId nodeid, const CBlockIndex* p
     if (state) state->pindexBestHeaderSent = pindex;
 }
 
+const CBlockIndex* BlockDownloadManager::GetLastCommonBlock(NodeId nodeid) const
+{
+    const auto* state = m_impl->GetPeerState(nodeid);
+    return state ? state->pindexLastCommonBlock : nullptr;
+}
+
 } // namespace node
