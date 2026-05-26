@@ -147,6 +147,9 @@ public:
 
     /** Get the number of peers we are downloading blocks from. */
     int GetPeersDownloadingFrom() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
+    /** Whether blocks are in flight from any peer. */
+    bool HasBlocksInFlight() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 };
 
 } // namespace node

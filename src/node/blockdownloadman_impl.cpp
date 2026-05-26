@@ -525,4 +525,9 @@ int BlockDownloadManager::GetPeersDownloadingFrom() const
     return m_impl->m_peers_downloading_from;
 }
 
+bool BlockDownloadManager::HasBlocksInFlight() const
+{
+    return !m_impl->mapBlocksInFlight.empty();
+}
+
 } // namespace node
