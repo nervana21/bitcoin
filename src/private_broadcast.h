@@ -71,7 +71,8 @@ public:
 
     /**
      * Pick the transaction with the fewest send attempts, and confirmations,
-     * and oldest send/confirm times.
+     * and oldest send/confirm times. When priority is equal, prefer the transaction
+     * queued earlier (older time_added), then the one with the lower wtxid.
      * @param[in] will_send_to_nodeid Will remember that the returned transaction
      * was picked for sending to this node.
      * @param[in] will_send_to_address Address of the peer to which this transaction

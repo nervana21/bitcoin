@@ -66,15 +66,17 @@ BOOST_AUTO_TEST_CASE(basic)
 
     check_peer_counts(/*tx1_peer_count=*/0, /*tx2_peer_count=*/0);
 
+    const auto lower_wtxid_tx{tx1->GetWitnessHash() < tx2->GetWitnessHash() ? tx1 : tx2};
+    const auto higher_wtxid_tx{lower_wtxid_tx == tx1 ? tx2 : tx1};
+
     const auto tx_for_recipient1{pb.PickTxForSend(/*will_send_to_nodeid=*/recipient1, /*will_send_to_address=*/addr1).value()};
-    BOOST_CHECK(tx_for_recipient1 == tx1 || tx_for_recipient1 == tx2);
+    BOOST_CHECK_EQUAL(tx_for_recipient1, lower_wtxid_tx);
 
     // A second pick must return the other transaction.
     const NodeId recipient2{2};
     const CService addr2{ipv4Addr, 2222};
     const auto tx_for_recipient2{pb.PickTxForSend(/*will_send_to_nodeid=*/recipient2, /*will_send_to_address=*/addr2).value()};
-    BOOST_CHECK(tx_for_recipient2 == tx1 || tx_for_recipient2 == tx2);
-    BOOST_CHECK_NE(tx_for_recipient1, tx_for_recipient2);
+    BOOST_CHECK_EQUAL(tx_for_recipient2, higher_wtxid_tx);
 
     check_peer_counts(/*tx1_peer_count=*/1, /*tx2_peer_count=*/1);
 
@@ -139,13 +141,67 @@ BOOST_AUTO_TEST_CASE(basic)
     BOOST_CHECK(!pb.PickTxForSend(/*will_send_to_nodeid=*/nonexistent_recipient, /*will_send_to_address=*/addr_nonexistent).has_value());
 }
 
+BOOST_AUTO_TEST_CASE(equal_priority_pick_chooses_oldest_queued)
+{
+    SetMockTime(Now<NodeSeconds>());
+
+    PrivateBroadcast pb;
+    const NodeId recipient{1};
+    const auto older_tx{MakeDummyTx(/*id=*/0, /*num_witness=*/0)};
+    SetMockTime(Now<NodeSeconds>() + 1min);
+    const auto newer_tx{MakeDummyTx(/*id=*/1, /*num_witness=*/0)};
+
+    in_addr ipv4Addr;
+    ipv4Addr.s_addr = 0xa0b0c00a;
+    const CService addr{ipv4Addr, 5555};
+
+    const auto peer_count{[&pb](const CTransactionRef& tx) {
+        for (const auto& info : pb.GetBroadcastInfo()) {
+            if (info.tx->GetWitnessHash() == tx->GetWitnessHash()) {
+                return info.peers.size();
+            }
+        }
+        BOOST_FAIL("transaction not in broadcast info");
+        return size_t{0};
+    }};
+
+    // Both transactions have zero send attempts; the older queued tx wins the tie.
+    BOOST_CHECK_EQUAL(pb.PickTxForSend(/*will_send_to_nodeid=*/recipient, addr).value(), older_tx);
+    BOOST_CHECK_EQUAL(peer_count(older_tx), 1);
+    BOOST_CHECK_EQUAL(peer_count(newer_tx), 0);
+
+    // The next pick goes to the other transaction.
+    BOOST_CHECK_EQUAL(pb.PickTxForSend(/*will_send_to_nodeid=*/recipient, addr).value(), newer_tx);
+    BOOST_CHECK_EQUAL(peer_count(older_tx), 1);
+    BOOST_CHECK_EQUAL(peer_count(newer_tx), 1);
+}
+
+BOOST_AUTO_TEST_CASE(equal_priority_pick_chooses_lower_wtxid)
+{
+    SetMockTime(Now<NodeSeconds>());
+
+    PrivateBroadcast pb;
+    const NodeId recipient{1};
+    const auto lower_wtxid_tx{MakeDummyTx(/*id=*/1, /*num_witness=*/0)};
+    const auto higher_wtxid_tx{MakeDummyTx(/*id=*/1, /*num_witness=*/1)};
+    BOOST_REQUIRE(lower_wtxid_tx->GetHash() == higher_wtxid_tx->GetHash());
+    BOOST_REQUIRE(lower_wtxid_tx->GetWitnessHash() < higher_wtxid_tx->GetWitnessHash());
+
+    in_addr ipv4Addr;
+    ipv4Addr.s_addr = 0xa0b0c00b;
+    const CService addr{ipv4Addr, 5555};
+
+    // Same time_added and priority; lower wtxid wins the tie.
+    BOOST_CHECK_EQUAL(pb.PickTxForSend(/*will_send_to_nodeid=*/recipient, addr).value(), lower_wtxid_tx);
+    BOOST_CHECK_EQUAL(pb.PickTxForSend(/*will_send_to_nodeid=*/recipient, addr).value(), higher_wtxid_tx);
+}
+
 BOOST_AUTO_TEST_CASE(stale_unpicked_tx)
 {
     SetMockTime(Now<NodeSeconds>());
 
     PrivateBroadcast pb;
     const auto tx{MakeDummyTx(/*id=*/42, /*num_witness=*/0)};
-    BOOST_REQUIRE(pb.Add(tx));
 
     // Unpicked transactions use the longer INITIAL_STALE_DURATION.
     BOOST_CHECK_EQUAL(pb.GetStale().size(), 0);

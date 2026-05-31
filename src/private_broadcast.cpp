@@ -35,8 +35,17 @@ std::optional<CTransactionRef> PrivateBroadcast::PickTxForSend(const NodeId& wil
 
     const auto it{std::ranges::max_element(
             m_transactions,
-            [](const auto& a, const auto& b) { return a < b; },
-            [](const auto& el) { return DerivePriority(el.second.send_statuses); })};
+            [](const auto& a, const auto& b) {
+                const Priority pa{DerivePriority(a.second.send_statuses)};
+                const Priority pb{DerivePriority(b.second.send_statuses)};
+                if (const auto cmp{pa <=> pb}; cmp != 0) {
+                    return cmp < 0;
+                }
+                if (a.second.time_added != b.second.time_added) {
+                    return a.second.time_added > b.second.time_added;
+                }
+                return a.first->GetWitnessHash() > b.first->GetWitnessHash();
+            })};
 
     if (it != m_transactions.end()) {
         auto& [tx, state]{*it};
