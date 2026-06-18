@@ -62,7 +62,7 @@ struct MockedTxPool : public CTxMemPool {
     void RollingFeeUpdate() EXCLUSIVE_LOCKS_REQUIRED(!cs)
     {
         LOCK(cs);
-        lastRollingFeeUpdate = GetTime();
+        lastRollingFeeUpdate = Now();
         blockSinceLastRollingFeeBump = true;
     }
 };
@@ -208,7 +208,7 @@ void Finish(FuzzedDataProvider& fuzzed_data_provider, MockedTxPool& tx_pool, Cha
     if (fuzzed_data_provider.ConsumeBool()) {
         // Try expiry
         LOCK2(::cs_main, tx_pool.cs);
-        tx_pool.Expire(GetMockTime() - std::chrono::seconds(fuzzed_data_provider.ConsumeIntegral<uint32_t>()));
+        tx_pool.Expire(tx_pool.Now() - std::chrono::seconds(fuzzed_data_provider.ConsumeIntegral<uint32_t>()));
     }
     WITH_LOCK(::cs_main, tx_pool.check(chainstate.CoinsTip(), chainstate.m_chain.Height() + 1));
     g_setup->m_node.validation_signals->SyncWithValidationInterfaceQueue();
