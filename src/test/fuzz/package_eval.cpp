@@ -60,7 +60,7 @@ struct MockedTxPool : public CTxMemPool {
     void RollingFeeUpdate() EXCLUSIVE_LOCKS_REQUIRED(!cs)
     {
         LOCK(cs);
-        lastRollingFeeUpdate = GetTime();
+        lastRollingFeeUpdate = Now();
         blockSinceLastRollingFeeBump = true;
     }
 };
