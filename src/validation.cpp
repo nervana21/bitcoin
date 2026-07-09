@@ -1378,9 +1378,9 @@ MempoolAcceptResult MemPoolAccept::AcceptSingleTransactionInternal(const CTransa
     }
 
     if (!args.m_bypass_limits && m_pool.m_opts.require_standard) {
-        Wtxid dummy_wtxid;
-        if (!CheckEphemeralSpends(/*package=*/{ptx}, m_pool.m_opts.dust_relay_feerate, m_pool, ws.m_state, dummy_wtxid)) {
-            return MempoolAcceptResult::Failure(ws.m_state);
+        const TxValidationState state{CheckEphemeralSpends(/*package=*/{ptx}, m_pool.m_opts.dust_relay_feerate, m_pool)};
+        if (!state.IsValid()) {
+            return MempoolAcceptResult::Failure(state);
         }
     }
 
@@ -1531,11 +1531,11 @@ PackageMempoolAcceptResult MemPoolAccept::AcceptMultipleTransactionsInternal(con
 
     // Now that we've bounded the resulting possible ancestry count, check package for dust spends
     if (m_pool.m_opts.require_standard) {
-        TxValidationState child_state;
         Wtxid child_wtxid;
-        if (!CheckEphemeralSpends(txns, m_pool.m_opts.dust_relay_feerate, m_pool, child_state, child_wtxid)) {
+        const TxValidationState state{CheckEphemeralSpends(txns, m_pool.m_opts.dust_relay_feerate, m_pool, &child_wtxid)};
+        if (!state.IsValid()) {
             package_state.Invalid(PackageValidationResult::PCKG_TX, "unspent-dust");
-            results.emplace(child_wtxid, MempoolAcceptResult::Failure(child_state));
+            results.emplace(child_wtxid, MempoolAcceptResult::Failure(state));
             return PackageMempoolAcceptResult(package_state, std::move(results));
         }
     }

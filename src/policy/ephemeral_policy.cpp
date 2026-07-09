@@ -30,11 +30,11 @@ bool PreCheckEphemeralTx(const CTransaction& tx, CFeeRate dust_relay_rate, CAmou
     return true;
 }
 
-bool CheckEphemeralSpends(const Package& package, CFeeRate dust_relay_rate, const CTxMemPool& tx_pool, TxValidationState& out_child_state, Wtxid& out_child_wtxid)
+TxValidationState CheckEphemeralSpends(const Package& package, CFeeRate dust_relay_rate, const CTxMemPool& tx_pool, Wtxid* out_child_wtxid)
 {
     if (!Assume(std::ranges::all_of(package, [](const auto& tx){return tx != nullptr;}))) {
         // Bail out of spend checks if caller gave us an invalid package
-        return true;
+        return TxValidationState{};
     }
 
     std::map<Txid, CTransactionRef> map_txid_ref;
@@ -84,12 +84,16 @@ bool CheckEphemeralSpends(const Package& package, CFeeRate dust_relay_rate, cons
 
         if (!unspent_parent_dust.empty()) {
             const Txid& out_child_txid = tx->GetHash();
-            out_child_wtxid = tx->GetWitnessHash();
-            out_child_state.Invalid(TxValidationResult::TX_MEMPOOL_POLICY, "missing-ephemeral-spends",
-                                strprintf("tx %s (wtxid=%s) did not spend parent's ephemeral dust", out_child_txid.ToString(), out_child_wtxid.ToString()));
-            return false;
+            const Wtxid child_wtxid = tx->GetWitnessHash();
+            if (out_child_wtxid != nullptr) {
+                *out_child_wtxid = child_wtxid;
+            }
+            TxValidationState state;
+            state.Invalid(TxValidationResult::TX_MEMPOOL_POLICY, "missing-ephemeral-spends",
+                    strprintf("tx %s (wtxid=%s) did not spend parent's ephemeral dust", out_child_txid.ToString(), child_wtxid.ToString()));
+            return state;
         }
     }
 
-    return true;
+    return TxValidationState{};
 }
