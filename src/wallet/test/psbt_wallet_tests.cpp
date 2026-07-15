@@ -4,6 +4,8 @@
 
 #include <key_io.h>
 #include <node/types.h>
+#include <psbt.h>
+#include <script/script.h>
 #include <util/bip32.h>
 #include <util/strencodings.h>
 #include <wallet/wallet.h>
@@ -77,6 +79,40 @@ BOOST_AUTO_TEST_CASE(psbt_updater_test)
     // Try to sign the mutated input
     SignatureData sigdata;
     BOOST_CHECK(m_wallet.FillPSBT(psbtx, {.sign = true, .bip32_derivs = true}, complete));
+}
+
+BOOST_AUTO_TEST_CASE(fillpsbt_prefers_non_witness_utxo)
+{
+    LOCK(m_wallet.cs_wallet);
+    m_wallet.SetWalletFlag(WALLET_FLAG_DESCRIPTORS);
+
+    FlatSigningProvider provider;
+    std::string error;
+    auto descs = Parse("wpkh(xprv9s21ZrQH143K2LE7W4Xf3jATf9jECxSb7wj91ZnmY4qEJrS66Qru9RFqq8xbkgT32ya6HqYJweFdJUEDf5Q6JFV7jMiUws7kQfe6Tv4RbfN/0h/0h/*h)", provider, error, /*require_checksum=*/false);
+    BOOST_REQUIRE_EQUAL(descs.size(), 1);
+    WalletDescriptor w_desc(std::move(descs.at(0)), 0, 0, 10, 0);
+    auto& spk_man = Assert(m_wallet.AddWalletDescriptor(w_desc, provider, "", false))->get();
+    const auto scripts{spk_man.GetScriptPubKeys()};
+    BOOST_REQUIRE(!scripts.empty());
+    const CScript wallet_spk{*scripts.begin()};
+
+    CMutableTransaction prev_mtx;
+    prev_mtx.vout = {CTxOut{100, wallet_spk}};
+    const auto prev_tx{MakeTransactionRef(prev_mtx)};
+
+    CMutableTransaction mtx;
+    mtx.vin = {CTxIn{prev_tx->GetHash(), /*nOut=*/0}};
+    mtx.vout = {CTxOut{50, CScript() << OP_TRUE}};
+
+    PartiallySignedTransaction psbt(mtx, /*version=*/2);
+    psbt.inputs[0].non_witness_utxo = prev_tx;
+    // Disagreeing witness UTXO: pre-fix FillPSBT preferred this for SigningProvider lookup,
+    // so signing against non_witness_utxo failed with an empty provider.
+    psbt.inputs[0].witness_utxo = CTxOut{100, CScript() << OP_TRUE};
+
+    bool complete{false};
+    BOOST_REQUIRE(!m_wallet.FillPSBT(psbt, /*options=*/{.sign = true}, complete));
+    BOOST_CHECK(complete);
 }
 
 BOOST_AUTO_TEST_CASE(parse_hd_keypath)
