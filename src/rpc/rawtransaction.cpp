@@ -1168,39 +1168,26 @@ static RPCMethod decodepsbt()
         const PSBTInput& input = psbtx.inputs[i];
         UniValue in(UniValue::VOBJ);
         // UTXOs
-        bool have_a_utxo = false;
-        CTxOut txout;
         if (!input.witness_utxo.IsNull()) {
-            txout = input.witness_utxo;
-
             UniValue o(UniValue::VOBJ);
-            ScriptToUniv(txout.scriptPubKey, /*out=*/o, /*include_hex=*/true, /*include_address=*/true);
+            ScriptToUniv(input.witness_utxo.scriptPubKey, /*out=*/o, /*include_hex=*/true, /*include_address=*/true);
 
             UniValue out(UniValue::VOBJ);
-            out.pushKV("amount", ValueFromAmount(txout.nValue));
+            out.pushKV("amount", ValueFromAmount(input.witness_utxo.nValue));
             out.pushKV("scriptPubKey", std::move(o));
 
             in.pushKV("witness_utxo", std::move(out));
-
-            have_a_utxo = true;
         }
         if (input.non_witness_utxo) {
-            txout = input.non_witness_utxo->vout[input.prev_out];
-
             UniValue non_wit(UniValue::VOBJ);
             TxToUniv(*input.non_witness_utxo, /*block_hash=*/uint256(), /*entry=*/non_wit, /*include_hex=*/false);
             in.pushKV("non_witness_utxo", std::move(non_wit));
-
-            have_a_utxo = true;
         }
-        if (have_a_utxo) {
-            if (MoneyRange(txout.nValue) && MoneyRange(total_in + txout.nValue)) {
-                total_in += txout.nValue;
-            } else {
-                // Hack to just not show fee later
-                have_all_utxos = false;
-            }
+        CTxOut utxo;
+        if (input.GetUTXO(utxo) && MoneyRange(utxo.nValue) && MoneyRange(total_in + utxo.nValue)) {
+            total_in += utxo.nValue;
         } else {
+            // Hack to just not show fee later
             have_all_utxos = false;
         }
 
