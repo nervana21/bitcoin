@@ -2,14 +2,18 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <key.h>
 #include <key_io.h>
 #include <node/types.h>
+#include <psbt.h>
+#include <script/script.h>
 #include <util/bip32.h>
 #include <util/strencodings.h>
 #include <wallet/wallet.h>
 
 #include <boost/test/unit_test.hpp>
 #include <test/util/setup_common.h>
+#include <wallet/test/util.h>
 #include <wallet/test/wallet_test_fixture.h>
 
 using namespace util::hex_literals;
@@ -77,6 +81,39 @@ BOOST_AUTO_TEST_CASE(psbt_updater_test)
     // Try to sign the mutated input
     SignatureData sigdata;
     BOOST_CHECK(m_wallet.FillPSBT(psbtx, {.sign = true, .bip32_derivs = true}, complete));
+}
+
+BOOST_AUTO_TEST_CASE(fillpsbt_prefers_non_witness_utxo)
+{
+    LOCK(m_wallet.cs_wallet);
+
+    CKey key{GenerateRandomKey()};
+    CKey unknown_key{GenerateRandomKey()};
+    const std::string wpkh_desc{"wpkh(" + EncodeSecret(key) + ")"};
+    CreateDescriptor(m_wallet, wpkh_desc, /*success=*/true);
+
+    const CScript spk{GetScriptForDestination(WitnessV0KeyHash(key.GetPubKey()))};
+    const CScript unknown_spk{GetScriptForDestination(WitnessV0KeyHash(unknown_key.GetPubKey()))};
+    const CTxOut non_witness_utxo{100, spk};
+    const CTxOut witness_utxo{100, unknown_spk};
+
+    CMutableTransaction prev_mtx;
+    prev_mtx.vout = {non_witness_utxo};
+    const CTransactionRef prev_tx{MakeTransactionRef(prev_mtx)};
+
+    const CTxIn spend_vin{prev_tx->GetHash(), /*nOut=*/0};
+    const CTxOut spend_vout{50, CScript() << OP_TRUE};
+    CMutableTransaction spend_mtx;
+    spend_mtx.vin = {spend_vin};
+    spend_mtx.vout = {spend_vout};
+
+    PartiallySignedTransaction psbt(spend_mtx, /*version=*/2);
+    psbt.inputs[0].non_witness_utxo = prev_tx;
+    psbt.inputs[0].witness_utxo = witness_utxo;
+
+    bool complete{false};
+    BOOST_REQUIRE(!m_wallet.FillPSBT(psbt, /*options=*/{.sign = true}, /*complete=*/complete));
+    BOOST_CHECK(complete);
 }
 
 BOOST_AUTO_TEST_CASE(parse_hd_keypath)
