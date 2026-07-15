@@ -560,19 +560,7 @@ bool PSBTInputSignedAndVerified(const PartiallySignedTransaction& psbt, unsigned
     assert(input_index < psbt.inputs.size());
     const PSBTInput& input = psbt.inputs[input_index];
 
-    if (input.non_witness_utxo) {
-        // If we're taking our information from a non-witness UTXO, verify that it matches the prevout.
-        COutPoint prevout = input.GetOutPoint();
-        if (prevout.n >= input.non_witness_utxo->vout.size()) {
-            return false;
-        }
-        if (input.non_witness_utxo->GetHash() != prevout.hash) {
-            return false;
-        }
-        utxo = input.non_witness_utxo->vout[prevout.n];
-    } else if (!input.witness_utxo.IsNull()) {
-        utxo = input.witness_utxo;
-    } else {
+    if (!input.GetUTXO(utxo)) {
         return false;
     }
 
@@ -662,29 +650,15 @@ PSBTError SignPSBTInput(const SigningProvider& provider, PartiallySignedTransact
     input.FillSignatureData(sigdata);
 
     // Get UTXO
-    bool require_witness_sig = false;
     CTxOut utxo;
-
-    if (input.non_witness_utxo) {
-        // If we're taking our information from a non-witness UTXO, verify that it matches the prevout.
-        COutPoint prevout = input.GetOutPoint();
-        if (prevout.n >= input.non_witness_utxo->vout.size()) {
-            return PSBTError::MISSING_INPUTS;
-        }
-        if (input.non_witness_utxo->GetHash() != prevout.hash) {
-            return PSBTError::MISSING_INPUTS;
-        }
-        utxo = input.non_witness_utxo->vout[prevout.n];
-    } else if (!input.witness_utxo.IsNull()) {
-        utxo = input.witness_utxo;
-        // When we're taking our information from a witness UTXO, we can't verify it is actually data from
-        // the output being spent. This is safe in case a witness signature is produced (which includes this
-        // information directly in the hash), but not for non-witness signatures. Remember that we require
-        // a witness signature in this situation.
-        require_witness_sig = true;
-    } else {
+    if (!input.GetUTXO(utxo)) {
         return PSBTError::MISSING_INPUTS;
     }
+    // When we're taking our information from a witness UTXO, we can't verify it is actually data from
+    // the output being spent. This is safe in case a witness signature is produced (which includes this
+    // information directly in the hash), but not for non-witness signatures. Remember that we require
+    // a witness signature in this situation.
+    const bool require_witness_sig = !input.non_witness_utxo && !input.witness_utxo.IsNull();
 
     // Get the sighash type
     // If both the field and the parameter are provided, they must match

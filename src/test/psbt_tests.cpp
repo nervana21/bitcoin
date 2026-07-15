@@ -4,8 +4,15 @@
 
 #include <psbt.h>
 
+#include <addresstype.h>
+#include <key.h>
+#include <script/sign.h>
+#include <script/signingprovider.h>
+
 #include <boost/test/unit_test.hpp>
 #include <test/util/setup_common.h>
+
+using common::PSBTError;
 
 BOOST_FIXTURE_TEST_SUITE(psbt_tests, BasicTestingSetup)
 
@@ -259,5 +266,144 @@ BOOST_AUTO_TEST_CASE(psbt2_getutxo)
     // Do not fall through to witness_utxo when non_witness_utxo is invalid
     psbt_in.prev_txid = Txid::FromUint256(uint256::ONE);
     BOOST_CHECK(!psbt_in.GetUTXO(utxo));
+}
+
+BOOST_AUTO_TEST_CASE(psbt2_input_signed_and_verified)
+{
+    FillableSigningProvider keystore;
+    CKey key;
+    key.MakeNewKey(/*fCompressed=*/true);
+    BOOST_REQUIRE(keystore.AddKey(key));
+    const CScript spk{GetScriptForDestination(WitnessV0KeyHash(key.GetPubKey()))};
+
+    CMutableTransaction prev_mtx;
+    prev_mtx.vout = {CTxOut{100, spk}};
+    const auto prev_tx{MakeTransactionRef(prev_mtx)};
+
+    CMutableTransaction mtx;
+    mtx.vin = {CTxIn{prev_tx->GetHash(), /*nOut=*/0}};
+    mtx.vout = {CTxOut{50, CScript() << OP_TRUE}};
+
+    PartiallySignedTransaction psbt(mtx, /*version=*/2);
+    psbt.inputs[0].witness_utxo = CTxOut{100, spk};
+
+    const auto txdata{PrecomputePSBTData(psbt)};
+    BOOST_REQUIRE(txdata);
+    BOOST_REQUIRE(SignPSBTInput(keystore, psbt, /*index=*/0, &*txdata, /*options=*/{}) == PSBTError::OK);
+
+    // Accept valid witness_utxo
+    BOOST_CHECK(PSBTInputSignedAndVerified(psbt, /*input_index=*/0, &*txdata));
+
+    // Accept valid non_witness_utxo
+    psbt.inputs[0].witness_utxo.SetNull();
+    psbt.inputs[0].non_witness_utxo = prev_tx;
+    BOOST_CHECK(PSBTInputSignedAndVerified(psbt, /*input_index=*/0, &*txdata));
+
+    // Reject when both utxo types are absent
+    psbt.inputs[0].non_witness_utxo.reset();
+    BOOST_CHECK(!PSBTInputSignedAndVerified(psbt, /*input_index=*/0, &*txdata));
+
+    // Prefer verified non_witness_utxo when both are present
+    psbt.inputs[0].non_witness_utxo = prev_tx;
+    psbt.inputs[0].witness_utxo = CTxOut{50, CScript()};
+    BOOST_CHECK(PSBTInputSignedAndVerified(psbt, /*input_index=*/0, &*txdata));
+
+    // Do not fall through to witness_utxo when non_witness_utxo is invalid
+    CMutableTransaction bad_prev_mtx;
+    bad_prev_mtx.vout = {CTxOut{50, spk}};
+    psbt.inputs[0].non_witness_utxo = MakeTransactionRef(bad_prev_mtx);
+    psbt.inputs[0].witness_utxo = CTxOut{100, spk};
+    BOOST_CHECK(!PSBTInputSignedAndVerified(psbt, /*input_index=*/0, &*txdata));
+}
+
+BOOST_AUTO_TEST_CASE(psbt2_sign_psbt_input)
+{
+    FillableSigningProvider keystore;
+    CKey key;
+    key.MakeNewKey(/*fCompressed=*/true);
+    BOOST_REQUIRE(keystore.AddKey(key));
+    const CScript spk{GetScriptForDestination(WitnessV0KeyHash(key.GetPubKey()))};
+
+    CMutableTransaction prev_mtx;
+    prev_mtx.vout = {CTxOut{100, spk}};
+    const auto prev_tx{MakeTransactionRef(prev_mtx)};
+
+    auto make_psbt = [&]() {
+        CMutableTransaction mtx;
+        mtx.vin = {CTxIn{prev_tx->GetHash(), /*nOut=*/0}};
+        mtx.vout = {CTxOut{50, CScript() << OP_TRUE}};
+        return PartiallySignedTransaction{mtx, /*version=*/2};
+    };
+
+    // Accept valid witness_utxo
+    {
+        PartiallySignedTransaction psbt{make_psbt()};
+        psbt.inputs[0].witness_utxo = CTxOut{100, spk};
+        const auto txdata{PrecomputePSBTData(psbt)};
+        BOOST_REQUIRE(txdata);
+        BOOST_CHECK(SignPSBTInput(keystore, psbt, /*index=*/0, &*txdata, /*options=*/{}) == PSBTError::OK);
+    }
+
+    // Accept valid non_witness_utxo
+    {
+        PartiallySignedTransaction psbt{make_psbt()};
+        psbt.inputs[0].non_witness_utxo = prev_tx;
+        const auto txdata{PrecomputePSBTData(psbt)};
+        BOOST_REQUIRE(txdata);
+        BOOST_CHECK(SignPSBTInput(keystore, psbt, /*index=*/0, &*txdata, /*options=*/{}) == PSBTError::OK);
+    }
+
+    // Reject when both utxo types are absent
+    {
+        PartiallySignedTransaction psbt{make_psbt()};
+        const auto txdata{PrecomputePSBTData(psbt)};
+        BOOST_REQUIRE(txdata);
+        BOOST_CHECK(SignPSBTInput(keystore, psbt, /*index=*/0, &*txdata, /*options=*/{}) == PSBTError::MISSING_INPUTS);
+    }
+
+    // Prefer verified non_witness_utxo when both are present
+    {
+        PartiallySignedTransaction psbt{make_psbt()};
+        psbt.inputs[0].non_witness_utxo = prev_tx;
+        psbt.inputs[0].witness_utxo = CTxOut{50, CScript()};
+        const auto txdata{PrecomputePSBTData(psbt)};
+        BOOST_REQUIRE(txdata);
+        BOOST_CHECK(SignPSBTInput(keystore, psbt, /*index=*/0, &*txdata, /*options=*/{}) == PSBTError::OK);
+        BOOST_CHECK(PSBTInputSignedAndVerified(psbt, /*input_index=*/0, &*txdata));
+    }
+
+    // Do not fall through to witness_utxo when non_witness_utxo is invalid
+    {
+        CMutableTransaction bad_prev_mtx;
+        bad_prev_mtx.vout = {CTxOut{50, spk}};
+        PartiallySignedTransaction psbt{make_psbt()};
+        psbt.inputs[0].non_witness_utxo = MakeTransactionRef(bad_prev_mtx);
+        psbt.inputs[0].witness_utxo = CTxOut{100, spk};
+        const auto txdata{PrecomputePSBTData(psbt)};
+        BOOST_REQUIRE(txdata);
+        BOOST_CHECK(SignPSBTInput(keystore, psbt, /*index=*/0, &*txdata, /*options=*/{}) == PSBTError::MISSING_INPUTS);
+    }
+
+    // Require witness signature when only witness_utxo is available
+    {
+        const CScript legacy_spk{GetScriptForDestination(PKHash(key.GetPubKey()))};
+        CMutableTransaction legacy_prev_mtx;
+        legacy_prev_mtx.vout = {CTxOut{100, legacy_spk}};
+        const auto legacy_prev_tx{MakeTransactionRef(legacy_prev_mtx)};
+
+        CMutableTransaction mtx;
+        mtx.vin = {CTxIn{legacy_prev_tx->GetHash(), /*nOut=*/0}};
+        mtx.vout = {CTxOut{50, CScript() << OP_TRUE}};
+        PartiallySignedTransaction psbt(mtx, /*version=*/2);
+        psbt.inputs[0].witness_utxo = CTxOut{100, legacy_spk};
+
+        const auto txdata{PrecomputePSBTData(psbt)};
+        BOOST_REQUIRE(txdata);
+        BOOST_CHECK(SignPSBTInput(keystore, psbt, /*index=*/0, &*txdata, /*options=*/{}) == PSBTError::INCOMPLETE);
+
+        // Legacy signing succeeds once non_witness_utxo is present
+        psbt.inputs[0].non_witness_utxo = legacy_prev_tx;
+        BOOST_CHECK(SignPSBTInput(keystore, psbt, /*index=*/0, &*txdata, /*options=*/{}) == PSBTError::OK);
+    }
 }
 BOOST_AUTO_TEST_SUITE_END()
