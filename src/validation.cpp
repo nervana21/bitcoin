@@ -2616,7 +2616,8 @@ bool ContextualCheckBlockHeader(
         BlockManager& blockman,
         const Consensus::Params& consensusParams,
         VersionBitsCache& versionbitscache,
-        const CBlockIndex* pindexPrev) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
+        const CBlockIndex* pindexPrev,
+        NodeClock::time_point now) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
 {
     AssertLockHeld(::cs_main);
     assert(pindexPrev != nullptr);
@@ -2643,7 +2644,7 @@ bool ContextualCheckBlockHeader(
     }
 
     // Check timestamp
-    if (block.Time() > chainman.Now() + std::chrono::seconds{MAX_FUTURE_BLOCK_TIME}) {
+    if (block.Time() > now + std::chrono::seconds{MAX_FUTURE_BLOCK_TIME}) {
         return state.Invalid(BlockValidationResult::BLOCK_TIME_FUTURE, "time-too-new", "block timestamp too far in the future");
     }
 
@@ -2753,7 +2754,7 @@ bool ChainstateManager::AcceptBlockHeader(const CBlockHeader& block, BlockValida
             LogDebug(m_log, "header %s has prev block invalid: %s\n", hash.ToString(), block.hashPrevBlock.ToString());
             return state.Invalid(BlockValidationResult::BLOCK_INVALID_PREV, "bad-prevblk");
         }
-        if (!ContextualCheckBlockHeader(block, state, m_blockman, GetConsensus(), m_versionbitscache, pindexPrev)) {
+        if (!ContextualCheckBlockHeader(block, state, m_blockman, GetConsensus(), m_versionbitscache, pindexPrev, Now())) {
             LogDebug(m_log, "%s: Consensus::ContextualCheckBlockHeader: %s, %s\n", __func__, hash.ToString(), state.ToString());
             return false;
         }
@@ -3115,7 +3116,7 @@ FlushResult<void, BlockValidationState> TestBlockValidity(
      * - do run ContextualCheckBlock()
      */
 
-    if (!ContextualCheckBlockHeader(block, state, chainstate.m_blockman, chainstate.m_chainparams.GetConsensus(), chainstate.m_versionbitscache, tip)) {
+    if (!ContextualCheckBlockHeader(block, state, chainstate.m_blockman, chainstate.m_chainparams.GetConsensus(), chainstate.m_versionbitscache, tip, chainstate.m_chainman.Now())) {
         if (state.IsValid()) NONFATAL_UNREACHABLE();
         result.update({util::Error{}, std::move(state)});
         return result;
