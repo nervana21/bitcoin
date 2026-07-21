@@ -414,7 +414,8 @@ bool ContextualCheckBlockHeader(
     BlockManager& blockman,
     const Consensus::Params& consensusParams,
     VersionBitsCache& versionbitscache,
-    const CBlockIndex* pindexPrev) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    const CBlockIndex* pindexPrev,
+    NodeClock::time_point now) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
 
 /** NOTE: This function is not currently invoked by ConnectBlock(), so we
