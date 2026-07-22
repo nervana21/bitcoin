@@ -13,6 +13,7 @@
 #include <netaddress.h>
 #include <netbase.h>
 #include <netmessagemaker.h>
+#include <node/connection_types.h>
 #include <node/protocol_version.h>
 #include <serialize.h>
 #include <span.h>
@@ -22,6 +23,7 @@
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
 #include <test/util/validation.h>
+#include <util/sock.h>
 #include <util/strencodings.h>
 #include <util/string.h>
 #include <validation.h>
@@ -29,11 +31,13 @@
 #include <boost/test/unit_test.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <cstdint>
 #include <ios>
 #include <memory>
 #include <optional>
 #include <string>
+#include <thread>
 
 using namespace std::literals;
 using namespace util::hex_literals;
@@ -1666,6 +1670,54 @@ BOOST_AUTO_TEST_CASE(addlocal_onlynet_externalip)
         g_reachable_nets.Add(net);
     }
     fDiscover = discover_orig;
+}
+
+BOOST_AUTO_TEST_CASE(connectnode_name_uses_proxy_override)
+{
+    // Unresolved name ConnectNode must honor proxy_override even when GetNameProxy()
+    // is unset (previously ignored override and skipped the connect).
+    BOOST_REQUIRE(!HaveNameProxy());
+
+    auto listener{CreateSock(AF_INET, SOCK_STREAM, IPPROTO_TCP)};
+    BOOST_REQUIRE(listener);
+
+    sockaddr_in bind_addr{};
+    bind_addr.sin_family = AF_INET;
+    bind_addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    bind_addr.sin_port = 0;
+    BOOST_REQUIRE_EQUAL(listener->Bind(reinterpret_cast<sockaddr*>(&bind_addr), sizeof(bind_addr)), 0);
+    BOOST_REQUIRE_EQUAL(listener->Listen(/*backlog=*/1), 0);
+
+    sockaddr_in bound{};
+    socklen_t bound_len{sizeof(bound)};
+    BOOST_REQUIRE_EQUAL(listener->GetSockName(reinterpret_cast<sockaddr*>(&bound), &bound_len), 0);
+    const Proxy override_proxy{CService{bound.sin_addr, ntohs(bound.sin_port)}};
+
+    std::atomic<bool> override_hit{false};
+    std::thread override_acceptor{[&] {
+        if (!listener->Wait(5s, Sock::RecvEvent)) return;
+        if (listener->Accept(/*addr=*/nullptr, /*addr_len=*/nullptr)) {
+            override_hit = true;
+            // Drop immediately so SOCKS negotiation fails fast.
+        }
+    }};
+
+    const bool prev_name_lookup{fNameLookup};
+    fNameLookup = false; // force Lookup() empty so ConnectNode takes the name proxy branch
+
+    auto connman{std::make_unique<ConnmanTestMsg>(0x1337, 0x1337, *m_node.addrman, *m_node.netgroupman, Params())};
+    CNode* node{connman->ConnectNodePublic(/*addrConnect=*/CAddress{},
+                                           /*pszDest=*/"nonexistent.invalid:8333",
+                                           /*fCountFailure=*/false,
+                                           ConnectionType::MANUAL,
+                                           /*use_v2transport=*/false,
+                                           override_proxy)};
+    BOOST_CHECK(node == nullptr);
+
+    override_acceptor.join();
+    BOOST_CHECK(override_hit);
+
+    fNameLookup = prev_name_lookup;
 }
 
 BOOST_AUTO_TEST_SUITE_END()
