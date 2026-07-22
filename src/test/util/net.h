@@ -116,6 +116,17 @@ struct ConnmanTestMsg : public CConnman {
 
     CNode* ConnectNodePublic(PeerManager& peerman, const char* pszDest, ConnectionType conn_type)
         EXCLUSIVE_LOCKS_REQUIRED(!m_unused_i2p_sessions_mutex);
+
+    CNode* ConnectNodePublic(CAddress addrConnect,
+                             const char* pszDest,
+                             bool fCountFailure,
+                             ConnectionType conn_type,
+                             bool use_v2transport,
+                             const std::optional<Proxy>& proxy_override)
+        EXCLUSIVE_LOCKS_REQUIRED(!m_nodes_mutex, !m_unused_i2p_sessions_mutex)
+    {
+        return ConnectNode(addrConnect, pszDest, fCountFailure, conn_type, use_v2transport, proxy_override);
+    }
 };
 
 constexpr ServiceFlags ALL_SERVICE_FLAGS[]{
