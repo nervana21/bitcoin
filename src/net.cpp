@@ -501,11 +501,15 @@ CNode* CConnman::ConnectNode(CAddress addrConnect,
                 addrman.get().Attempt(target_addr, fCountFailure);
             }
         } else if (pszDest) {
-            if (const auto name_proxy = GetNameProxy()) {
+            const std::optional<Proxy> name_proxy{
+                proxy_override.has_value() ? proxy_override : GetNameProxy(),
+            };
+            if (name_proxy) {
                 std::string host;
                 uint16_t port{default_port};
                 SplitHostPort(pszDest, port, host);
                 bool proxyConnectionFailed;
+                LogDebug(BCLog::PROXY, "Using proxy: %s to connect to %s\n", name_proxy->ToString(), pszDest);
                 sock = ConnectThroughProxy(*name_proxy, host, port, proxyConnectionFailed);
             }
         }
