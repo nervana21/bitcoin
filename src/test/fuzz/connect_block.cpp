@@ -42,7 +42,7 @@ TestingSetup* g_setup;
 static std::vector<std::shared_ptr<CBlock>> g_blocks;
 /** Set of block hashes in g_blocks */
 static std::set<uint256> g_existing_block_hashes;
-/** CTxIns for spending outputs (excluding OP_RETURN), which can be unspent, already spent, or an immature coinbase. */
+/** CTxIns for spending outputs (excluding unspendable), which can be unspent, already spent, or an immature coinbase. */
 static std::vector<CTxIn> g_spend_candidate_txins;
 /** Static P2SH_OP_TRUE script */
 static const CScript P2SH_OP_TRUE = CScript() << OP_HASH160 << ToByteVector(ScriptHash(CScript() << OP_TRUE)) << OP_EQUAL;
@@ -71,18 +71,17 @@ static void InitTaprootScript()
 }
 
 /**
- * Given a transaction and an output index, create a CTxIn that can be used to
- * spend it (if possible).
+ * Given a transaction and a spendable output index, create a CTxIn that can be
+ * used to spend it.
  */
 static CTxIn GetSpendingScript(const CTransaction& tx, uint32_t vout_index)
 {
     Assert(vout_index < tx.vout.size());
     const CTxOut& output = tx.vout[vout_index];
 
-    CTxIn res{COutPoint(tx.GetHash(), vout_index)};
-    if (output.scriptPubKey.size() >= 1 && output.scriptPubKey[0] == OP_RETURN)
-        return res;
+    Assert(!output.scriptPubKey.IsUnspendable());
 
+    CTxIn res{COutPoint(tx.GetHash(), vout_index)};
     if (output.scriptPubKey == P2WSH_OP_TRUE) {
         res.scriptSig = CScript();
         res.scriptWitness.stack.push_back(WITNESS_STACK_ELEM_OP_TRUE);
@@ -98,6 +97,13 @@ static CTxIn GetSpendingScript(const CTransaction& tx, uint32_t vout_index)
     return res;
 }
 
+/** Add a spend-candidate CTxIn unless the output is unspendable. */
+static void MaybeAddSpendCandidate(std::vector<CTxIn>& pool, const CTransaction& tx, uint32_t vout_index)
+{
+    Assert(vout_index < tx.vout.size());
+    if (tx.vout[vout_index].scriptPubKey.IsUnspendable()) return;
+    pool.push_back(GetSpendingScript(tx, vout_index));
+}
 
 /**
  * Read the block from the BlockManager and add it to g_blocks and g_existing_block_hashes.
@@ -119,11 +125,7 @@ static void LoadCurrentBlock(Chainstate& chainstate, CBlockIndex* current_block)
     // Iterate all transaction outputs.
     for (const auto& tx : g_blocks[current_block->nHeight]->vtx) {
         for (uint32_t vout_index{0}; vout_index < tx->vout.size(); ++vout_index) {
-            auto& vout = tx->vout[vout_index];
-            // Do not keep OP_RETURN outputs as they are not spendable.
-            if (vout.scriptPubKey.size() >= 1 && vout.scriptPubKey[0] == OP_RETURN) continue;
-            // Create the CTxIn that can be used to spend this output.
-            g_spend_candidate_txins.push_back(GetSpendingScript(*tx, vout_index));
+            MaybeAddSpendCandidate(g_spend_candidate_txins, *tx, vout_index);
         }
     }
 }
@@ -373,10 +375,10 @@ CTransactionRef ConsumeTransaction(FuzzedDataProvider& fuzzed_data_provider,
     auto res = MakeTransactionRef(tx);
 
     if (!coinbase) {
-        // Create spending scripts for all CTxOuts so they can be spent in later
+        // Create spending scripts for spendable CTxOuts so they can be spent in later
         // transactions. Do it here as the transaction hash is definitive.
         for (int i = 0; i < num_outputs; i++) {
-            additional_txins.emplace_back(GetSpendingScript(*res, i));
+            MaybeAddSpendCandidate(additional_txins, *res, i);
         }
     }
 
