@@ -37,6 +37,7 @@ enum class LogCategory : btck_LogCategory {
     KERNEL = btck_LogCategory_KERNEL,
     TXPACKAGES = btck_LogCategory_TXPACKAGES,
     LOCK = btck_LogCategory_LOCK,
+    UNKNOWN = btck_LogCategory_UNKNOWN,
 };
 
 enum class LogLevel : btck_LogLevel {
@@ -75,6 +76,7 @@ constexpr std::string_view Name(LogCategory category) noexcept
     case LogCategory::VALIDATION: return "validation";
     case LogCategory::KERNEL: return "kernel";
     case LogCategory::LOCK: return "lock";
+    case LogCategory::UNKNOWN: return "unknown";
     } // no default case, so the compiler can warn about missing cases
     return "unknown";
 }
@@ -1040,35 +1042,6 @@ inline void logging_set_min_level(LogLevel level)
 {
     btck_logging_set_min_level(static_cast<btck_LogLevel>(level));
 }
-
-//! Non-owning view over a btck_LogEntry. The referenced entry is only valid for the duration of the
-//! logging callback, so a LogEntry (and any string_view obtained from it) must not be stored or
-//! used after the callback returns.
-class LogEntry
-{
-private:
-    const btck_LogEntry* m_entry;
-
-public:
-    explicit LogEntry(const btck_LogEntry& entry) : m_entry{&entry} {}
-
-    std::string_view Message() const { return {m_entry->message, m_entry->message_len}; }
-    std::string_view ThreadName() const { return {m_entry->thread_name, m_entry->thread_name_len}; }
-    std::chrono::sys_time<std::chrono::nanoseconds> Timestamp() const
-    {
-        return std::chrono::sys_time<std::chrono::nanoseconds>{std::chrono::nanoseconds{m_entry->timestamp_ns}};
-    }
-    std::optional<std::chrono::sys_seconds> MockTime() const
-    {
-        if (m_entry->mocktime_s == 0) return std::nullopt;
-        return std::chrono::sys_seconds{std::chrono::seconds{m_entry->mocktime_s}};
-    }
-    std::string_view FileName() const { return {m_entry->file_name, m_entry->file_name_len}; }
-    std::string_view FunctionName() const { return {m_entry->function_name, m_entry->function_name_len}; }
-    uint32_t Line() const { return m_entry->line; }
-    LogLevel Level() const { return static_cast<LogLevel>(m_entry->level); }
-    LogCategory Category() const { return static_cast<LogCategory>(m_entry->category); }
-};
 
 //! Non-owning view over a btck_LogEntry. The referenced entry is only valid for the duration of the
 //! logging callback, so a LogEntry (and any string_view obtained from it) must not be stored or
