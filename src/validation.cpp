@@ -23,6 +23,8 @@
 #include <kernel/chainparams.h>
 #include <kernel/coinsstore.h>
 #include <kernel/coinstats.h>
+#include <kernel/disconnected_transactions.h>
+#include <kernel/error.h>
 #include <kernel/legacy_leveldb.h>
 #include <kernel/mempool_entry.h>
 #include <kernel/messagestartchars.h>
@@ -74,6 +76,7 @@
 #include <string>
 #include <tuple>
 #include <utility>
+#include <variant>
 
 #define LOG_REQUIRE_CONTEXT true
 using kernel::AbortFailure;
@@ -590,10 +593,43 @@ bool CheckInputScripts(const CTransaction& tx, TxValidationState& state,
     return true;
 }
 
-bool FatalError(Notifications& notifications, BlockValidationState& state, const bilingual_str& message)
+std::string FatalErrorString(const kernel::FatalError& error)
 {
-    notifications.fatalError(message);
-    return state.Error(message.original);
+    if (const auto* e{std::get_if<kernel::ActivateBestChainsFailed>(&error)}) return e->error;
+    if (const auto* e{std::get_if<kernel::AssumeutxoDataNotFound>(&error)}) {
+        return strprintf("Assumeutxo data not found for the given blockhash '%s'.", e->blockhash.ToString());
+    }
+    if (std::get_if<kernel::BlockDisconnectFailed>(&error)) return "Failed to disconnect block.";
+    if (std::get_if<kernel::BlockFileCloseFailed>(&error)) return "Failed to close file when writing block.";
+    if (std::get_if<kernel::BlockReadFailed>(&error)) return "Failed to read block.";
+    if (std::get_if<kernel::BlockWriteFailed>(&error)) return "Failed to write block.";
+    if (std::get_if<kernel::CorruptBlockFound>(&error)) return "Corrupt block found indicating potential hardware failure.";
+    if (std::get_if<kernel::DiskSpaceTooLow>(&error)) return "Disk space is too low!";
+    if (std::get_if<kernel::FailedToStartIndexes>(&error)) return "Failed to start indexes, shutting down…";
+    if (const auto* e{std::get_if<kernel::SnapshotChainstateDirRemovalFailed>(&error)}) {
+        return strprintf("Failed to remove snapshot chainstate dir (%s). Manually remove it before restarting.", fs::PathToString(e->dir));
+    }
+    if (const auto* e{std::get_if<kernel::SnapshotChainstateRenameFailed>(&error)}) {
+        return strprintf("Rename of '%s' -> '%s' failed. Cannot clean up the background chainstate directory.",
+                         fs::PathToString(e->old_path), fs::PathToString(e->new_path));
+    }
+    if (std::get_if<kernel::SnapshotValidationFailed>(&error)) {
+        return "Failed to validate the -assumeutxo snapshot state.";
+    }
+    if (const auto* e{std::get_if<kernel::SystemErrorWhileFlushing>(&error)}) return strprintf("System error while flushing: %s", e->what);
+    if (const auto* e{std::get_if<kernel::SystemErrorWhileLoadingExternalBlockFile>(&error)}) {
+        return strprintf("System error while loading external block file: %s", e->what);
+    }
+    if (const auto* e{std::get_if<kernel::SystemErrorWhileSavingBlock>(&error)}) return strprintf("System error while saving block to disk: %s", e->what);
+    if (std::get_if<kernel::UndoDataWriteFailed>(&error)) return "Failed to write undo data.";
+    if (std::get_if<kernel::UndoFileCloseFailed>(&error)) return "Failed to close block undo file.";
+    return {};
+}
+
+bool FatalError(Notifications& notifications, BlockValidationState& state, const kernel::FatalError& error)
+{
+    notifications.fatalError(error);
+    return state.Error(FatalErrorString(error));
 }
 
 /**
@@ -779,9 +815,8 @@ FlushResult<void, AbortFailure> Chainstate::ConnectBlock(const CBlock& block, Bl
             // We don't write down blocks to disk if they may have been
             // corrupted, so this should be impossible unless we're having hardware
             // problems.
-            auto error{_("Corrupt block found indicating potential hardware failure; shutting down")};
-            FatalError(m_notifications, state, error);
-            result.update({util::Error{std::move(error)}, AbortFailure{.fatal = true}});
+            FatalError(m_notifications, state, kernel::CorruptBlockFound{});
+            result.update({util::Error{Untranslated(FatalErrorString(kernel::CorruptBlockFound{}))}, AbortFailure{.fatal = true}});
             return result;
         }
         auto error{Untranslated(strprintf("Consensus::CheckBlock: %s", state.ToString()))};
@@ -1242,9 +1277,8 @@ FlushResult<void, AbortFailure> Chainstate::FlushStateToDisk(
 
             // Ensure we can write block index
             if (!CheckDiskSpace(m_blockman.m_opts.blocks_dir)) {
-                auto error{_("Disk space is too low!")};
-                FatalError(m_notifications, state, error);
-                result.update({util::Error{std::move(error)}, AbortFailure{.fatal = true}});
+                FatalError(m_notifications, state, kernel::DiskSpaceTooLow{});
+                result.update({util::Error{Untranslated(FatalErrorString(kernel::DiskSpaceTooLow{}))}, AbortFailure{.fatal = true}});
                 return result;
             }
             {
@@ -1280,9 +1314,8 @@ FlushResult<void, AbortFailure> Chainstate::FlushStateToDisk(
                 // an overestimation, as most will delete an existing entry or
                 // overwrite one. Still, use a conservative safety factor of 2.
                 if (!CheckDiskSpace(m_datadir, 48 * 2 * 2 * CoinsTip().GetDirtyCount())) {
-                    auto error{_("Disk space is too low!")};
-                    FatalError(m_notifications, state, error);
-                    result.update({util::Error{std::move(error)}, AbortFailure{.fatal = true}});
+                    FatalError(m_notifications, state, kernel::DiskSpaceTooLow{});
+                    result.update({util::Error{Untranslated(FatalErrorString(kernel::DiskSpaceTooLow{}))}, AbortFailure{.fatal = true}});
                     return result;
                 }
                 // Flush the chainstate (which may refer to block index entries).
@@ -1317,9 +1350,8 @@ FlushResult<void, AbortFailure> Chainstate::FlushStateToDisk(
         }
     }
     } catch (const std::runtime_error& e) {
-        auto error{strprintf(_("System error while flushing: %s"), e.what())};
-        FatalError(m_notifications, state, error);
-        result.update({util::Error{std::move(error)}, AbortFailure{.fatal = true}});
+        FatalError(m_notifications, state, kernel::SystemErrorWhileFlushing{e.what()});
+        result.update({util::Error{Untranslated(FatalErrorString(kernel::SystemErrorWhileFlushing{e.what()}))}, AbortFailure{.fatal = true}});
         return result;
     }
     return result;
@@ -1515,9 +1547,8 @@ FlushResult<void, AbortFailure> Chainstate::ConnectTip(
     if (!block_to_connect) {
         std::shared_ptr<CBlock> pblockNew = std::make_shared<CBlock>();
         if (!m_blockman.ReadBlock(*pblockNew, *pindexNew)) {
-            auto error{_("Failed to read block")};
-            FatalError(m_notifications, state, error);
-            result.update({util::Error{std::move(error)}, AbortFailure{.fatal = true}});
+            FatalError(m_notifications, state, kernel::BlockReadFailed{});
+            result.update({util::Error{Untranslated(FatalErrorString(kernel::BlockReadFailed{}))}, AbortFailure{.fatal = true}});
             return result;
         }
         block_to_connect = std::move(pblockNew);
@@ -1717,9 +1748,8 @@ FlushResult<void, AbortFailure> Chainstate::ActivateBestChainStep(BlockValidatio
             // If we're unable to disconnect a block during normal operation,
             // then that is a failure of our local system -- we should abort
             // rather than stay on a less work chain.
-            auto error{_("Failed to disconnect block.")};
-            FatalError(m_notifications, state, error);
-            result.update({util::Error{std::move(error)}, AbortFailure{.fatal = true}});
+            FatalError(m_notifications, state, kernel::BlockDisconnectFailed{});
+            result.update({util::Error{Untranslated(FatalErrorString(kernel::BlockDisconnectFailed{}))}, AbortFailure{.fatal = true}});
             return result;
         }
         fBlocksDisconnected = true;
@@ -2968,9 +2998,8 @@ bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock,
         assert(post_pos.IsNull());
         ReceivedBlockTransactions(block, pindex, blockPos);
     } catch (const std::runtime_error& e) {
-        auto error{strprintf(_("System error while saving block to disk: %s"), e.what())};
-        FatalError(GetNotifications(), state, error);
-        result.update({util::Error{std::move(error)}, AbortFailure{.fatal = true}});
+        FatalError(GetNotifications(), state, kernel::SystemErrorWhileSavingBlock{e.what()});
+        result.update({util::Error{Untranslated(FatalErrorString(kernel::SystemErrorWhileSavingBlock{e.what()}))}, AbortFailure{.fatal = true}});
         return false;
     }
 
@@ -3850,9 +3879,8 @@ FlushResult<InterruptResult, AbortFailure> ChainstateManager::LoadExternalBlockF
             }
         }
     } catch (const std::runtime_error& e) {
-        auto error{strprintf(_("System error while loading external block file: %s"), e.what())};
-        GetNotifications().fatalError(error);
-        result.update({util::Error{std::move(error)}, AbortFailure{.fatal = true}});
+        GetNotifications().fatalError(kernel::SystemErrorWhileLoadingExternalBlockFile{e.what()});
+        result.update({util::Error{Untranslated(FatalErrorString(kernel::SystemErrorWhileLoadingExternalBlockFile{e.what()}))}, AbortFailure{.fatal = true}});
     }
     LogInfo(m_log, "Loaded %i blocks from external file in %dms", nLoaded, Ticks<std::chrono::milliseconds>(SteadyClock::now() - start));
     return result;
@@ -4444,10 +4472,8 @@ FlushResult<CBlockIndex*, AbortFailure> ChainstateManager::ActivateSnapshot(
             snapshot_chainstate.reset();
             bool removed = DeleteCoinsDBFromDisk(m_log, *snapshot_datadir, /*is_snapshot=*/true);
             if (!removed) {
-                auto error{strprintf(_("Failed to remove snapshot chainstate dir (%s). "
-                    "Manually remove it before restarting.\n"), fs::PathToString(*snapshot_datadir))};
-                GetNotifications().fatalError(error);
-                result.update({util::Error{std::move(error)}, AbortFailure{.fatal = true}});
+                GetNotifications().fatalError(kernel::SnapshotChainstateDirRemovalFailed{*snapshot_datadir});
+                result.update({util::Error{Untranslated(FatalErrorString(kernel::SnapshotChainstateDirRemovalFailed{*snapshot_datadir}))}, AbortFailure{.fatal = true}});
             }
         }
     };
@@ -4750,23 +4776,11 @@ SnapshotCompletionResult ChainstateManager::MaybeValidateSnapshot(Chainstate& va
     assert(validated_cs.TargetBlock() == validated_cs.m_chain.Tip());
 
     auto handle_invalid_snapshot = [&]() EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
-        bilingual_str user_error = strprintf(_(
-            "%s failed to validate the -assumeutxo snapshot state. "
-            "This indicates a hardware problem, or a bug in the software, or a "
-            "bad software modification that allowed an invalid snapshot to be "
-            "loaded. As a result of this, the node will shut down and stop using any "
-            "state that was built on the snapshot, resetting the chain height "
-            "from %d to %d. On the next "
-            "restart, the node will resume syncing from %d "
-            "without using any snapshot data. "
-            "Please report this incident to %s, including how you obtained the snapshot. "
-            "The invalid snapshot chainstate will be left on disk in case it is "
-            "helpful in diagnosing the issue that caused this error."),
-            CLIENT_NAME, unvalidated_cs.m_chain.Height(),
-            validated_cs.m_chain.Height(),
-            validated_cs.m_chain.Height(), CLIENT_BUGREPORT);
+        kernel::SnapshotValidationFailed error{
+            .height_from = unvalidated_cs.m_chain.Height(),
+            .height_to = validated_cs.m_chain.Height(),
+        };
 
-        LogError(m_log, "[snapshot] !!! %s\n", user_error.original);
         LogError(m_log, "[snapshot] deleting snapshot, reverting to validated chain, and stopping node\n");
 
         // Reset chainstate target to network tip instead of snapshot block.
@@ -4777,11 +4791,11 @@ SnapshotCompletionResult ChainstateManager::MaybeValidateSnapshot(Chainstate& va
 
         auto rename_result = unvalidated_cs.InvalidateCoinsDBOnDisk();
         if (!rename_result) {
-            user_error += Untranslated("\n") + util::ErrorString(rename_result);
+            error.rename_error = util::ErrorString(rename_result).original;
         }
 
-        GetNotifications().fatalError(user_error);
-        result.update({util::Error{std::move(user_error)}, AbortFailure{.fatal = true}});
+        GetNotifications().fatalError(error);
+        result.update({util::Error{Untranslated(FatalErrorString(error))}, AbortFailure{.fatal = true}});
     };
 
     CCoinsViewDB& validated_coins_db = validated_cs.CoinsDB();
@@ -5108,12 +5122,8 @@ util::Result<void, AbortFailure> ChainstateManager::ValidatedSnapshotCleanup(Cha
                                    const fs::filesystem_error& err) {
         LogError(m_log, "[snapshot] Error renaming path (%s) -> (%s): %s\n",
                   fs::PathToString(p_old), fs::PathToString(p_new), err.what());
-        auto error{strprintf(_(
-            "Rename of '%s' -> '%s' failed. "
-            "Cannot clean up the background chainstate leveldb directory."),
-            fs::PathToString(p_old), fs::PathToString(p_new))};
-        GetNotifications().fatalError(error);
-        result.update({util::Error{std::move(error)}, AbortFailure{.fatal = true}});
+        GetNotifications().fatalError(kernel::SnapshotChainstateRenameFailed{p_old, p_new});
+        result.update({util::Error{Untranslated(FatalErrorString(kernel::SnapshotChainstateRenameFailed{p_old, p_new}))}, AbortFailure{.fatal = true}});
     };
 
     try {

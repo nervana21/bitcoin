@@ -369,9 +369,9 @@ util::Result<InterruptResult, AbortFailure> BlockManager::LoadBlockIndexData(con
     if (snapshot_blockhash) {
         const std::optional<AssumeutxoData> maybe_au_data = GetParams().AssumeutxoForBlockhash(*snapshot_blockhash);
         if (!maybe_au_data) {
-            auto error{strprintf(_("Assumeutxo data not found for the given blockhash '%s'."), snapshot_blockhash->ToString())};
-            m_opts.notifications.fatalError(error);
-            return {util::Error{std::move(error)}, AbortFailure{.fatal = true}};
+            const kernel::FatalError fatal{kernel::AssumeutxoDataNotFound{*snapshot_blockhash}};
+            m_opts.notifications.fatalError(fatal);
+            return {util::Error{Untranslated(FatalErrorString(fatal))}, AbortFailure{.fatal = true}};
         }
         const AssumeutxoData& au_data = *Assert(maybe_au_data);
         m_snapshot_height = au_data.height;
@@ -870,9 +870,8 @@ FlushResult<FlatFilePos, AbortFailure> BlockManager::FindNextBlockPos(unsigned i
     bool out_of_space;
     size_t bytes_allocated = m_block_file_seq.Allocate(pos, nAddSize, out_of_space);
     if (out_of_space) {
-        auto error{_("Disk space is too low!")};
-        m_opts.notifications.fatalError(error);
-        result.update({util::Error{std::move(error)}, AbortFailure{.fatal = true}});
+        m_opts.notifications.fatalError(kernel::DiskSpaceTooLow{});
+        result.update({util::Error{Untranslated(FatalErrorString(kernel::DiskSpaceTooLow{}))}, AbortFailure{.fatal = true}});
         return result;
     }
     if (bytes_allocated != 0 && IsPruneMode()) {
@@ -919,9 +918,8 @@ util::Result<void, AbortFailure> BlockManager::FindUndoPos(BlockValidationState&
     bool out_of_space;
     size_t bytes_allocated = m_undo_store->Allocate(pos, nAddSize, out_of_space);
     if (out_of_space) {
-        auto error{_("Disk space is too low!")};
-        FatalError(m_opts.notifications, state, error);
-        return {util::Error{std::move(error)}, AbortFailure{.fatal = true}};
+        FatalError(m_opts.notifications, state, kernel::DiskSpaceTooLow{});
+        return {util::Error{Untranslated(FatalErrorString(kernel::DiskSpaceTooLow{}))}, AbortFailure{.fatal = true}};
     }
     if (bytes_allocated != 0 && IsPruneMode()) {
         m_check_for_pruning = true;
@@ -953,9 +951,8 @@ FlushResult<void, AbortFailure> BlockManager::WriteBlockUndo(const CBlockUndo& b
         auto writer{PolymorphicWriterWrapper{m_undo_store->MakeBlockStorageWriter(pos)}};
         if (!writer.IsValid()) {
             LogError(m_log, "OpenUndoFile failed for %s while writing block undo", pos.ToString());
-            auto error{_("Failed to write undo data.")};
-            FatalError(m_opts.notifications, state, error);
-            result.update({util::Error{std::move(error)}, AbortFailure{.fatal = true}});
+            FatalError(m_opts.notifications, state, kernel::UndoDataWriteFailed{});
+            result.update({util::Error{Untranslated(FatalErrorString(kernel::UndoDataWriteFailed{}))}, AbortFailure{.fatal = true}});
             return result;
         }
         {
@@ -977,9 +974,8 @@ FlushResult<void, AbortFailure> BlockManager::WriteBlockUndo(const CBlockUndo& b
         // Make sure that the file is closed before we call `FlushUndoFile`.
         if (writer.close() != 0) {
             LogError(m_log, "Failed to close block undo file %s: %s", pos.ToString(), SysErrorString(errno));
-            auto error{_("Failed to close block undo file.")};
-            FatalError(m_opts.notifications, state, error);
-            result.update({util::Error{std::move(error)}, AbortFailure{.fatal = true}});
+            FatalError(m_opts.notifications, state, kernel::UndoFileCloseFailed{});
+            result.update({util::Error{Untranslated(FatalErrorString(kernel::UndoFileCloseFailed{}))}, AbortFailure{.fatal = true}});
             return result;
         }
 
@@ -1123,9 +1119,8 @@ FlushResult<FlatFilePos, AbortFailure> BlockManager::WriteBlock(const CBlock& bl
     auto writer{PolymorphicWriterWrapper{m_block_store->MakeBlockStorageWriter(*result)}};
     if (!writer.IsValid()) {
         LogError(m_log, "OpenBlockFile failed for %s while writing block", result->ToString());
-        auto error{_("Failed to write block.")};
-        m_opts.notifications.fatalError(error);
-        result.update({util::Error{std::move(error)}, AbortFailure{.fatal = true}});
+        m_opts.notifications.fatalError(kernel::BlockWriteFailed{});
+        result.update({util::Error{Untranslated("Failed to write block.")}, AbortFailure{.fatal = true}});
         return result;
     }
     {
@@ -1140,7 +1135,7 @@ FlushResult<FlatFilePos, AbortFailure> BlockManager::WriteBlock(const CBlock& bl
 
     if (writer.close() != 0) {
         LogError(m_log, "Failed to close block file %s: %s", result->ToString(), SysErrorString(errno));
-        m_opts.notifications.fatalError(_("Failed to close file when writing block."));
+        m_opts.notifications.fatalError(kernel::BlockFileCloseFailed{});
         return FlatFilePos();
     }
 
@@ -1338,7 +1333,7 @@ FlushResult<InterruptResult, AbortFailure> ImportBlocks(ChainstateManager& chain
 
     // scan for better chains in the block chain database, that are not yet connected in the active best chain
     if (auto activate_result = chainman.ActivateBestChains(); !activate_result) {
-        chainman.GetNotifications().fatalError(util::ErrorString(activate_result));
+        chainman.GetNotifications().fatalError(kernel::ActivateBestChainsFailed{util::ErrorString(activate_result).original});
         result.update(activate_result);
     }
     // End scope of ImportingNow
