@@ -13,6 +13,7 @@
 #include <kernel/blockmanager_opts.h>
 #include <kernel/blocktreestorage.h>
 #include <kernel/chainparams.h>
+#include <kernel/error.h>
 #include <kernel/legacy_leveldb.h>
 #include <kernel/messagestartchars.h>
 #include <kernel/notifications_interface.h>
@@ -689,7 +690,7 @@ FlushResult<> BlockManager::FlushUndoFile(int block_file, bool finalize)
     FlatFilePos undo_pos_old(block_file, m_blockfile_info[block_file].nUndoSize);
     if (!m_undo_store->Flush(undo_pos_old, finalize)) {
         auto error{_("Flushing undo file to disk failed. This is likely the result of an I/O error.")};
-        m_opts.notifications.flushError(error);
+        m_opts.notifications.flushError(kernel::FlushError::UNDO_FILE_FLUSH_FAILED);
         result.update(util::Error{std::move(error)});
         result.update(util::Info{FlushStatus::FAILURE});
     } else {
@@ -715,7 +716,7 @@ FlushResult<> BlockManager::FlushBlockFile(int blockfile_num, bool fFinalize, bo
     FlatFilePos block_pos_old(blockfile_num, m_blockfile_info[blockfile_num].nSize);
     if (!m_block_store->Flush(block_pos_old, fFinalize)) {
         auto error{_("Flushing block file to disk failed. This is likely the result of an I/O error.")};
-        m_opts.notifications.flushError(error);
+        m_opts.notifications.flushError(kernel::FlushError::BLOCK_FILE_FLUSH_FAILED);
         result.update(util::Error{std::move(error)});
         result.update(util::Info{FlushStatus::FAILURE});
     } else {

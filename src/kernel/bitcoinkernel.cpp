@@ -16,6 +16,7 @@
 #include <kernel/chainparams.h>
 #include <kernel/checks.h>
 #include <kernel/context.h>
+#include <kernel/error.h>
 #include <kernel/mempool_interface.h>
 #include <kernel/notifications_interface.h>
 #include <kernel/result.h>
@@ -239,6 +240,17 @@ btck_SigVersion cast_btck_sig_version(SigVersion version)
     assert(false);
 }
 
+btck_FlushError cast_btck_flush_error(kernel::FlushError error)
+{
+    switch (error) {
+    case kernel::FlushError::BLOCK_FILE_FLUSH_FAILED:
+        return btck_FlushError_BLOCK_FILE_FLUSH_FAILED;
+    case kernel::FlushError::UNDO_FILE_FLUSH_FAILED:
+        return btck_FlushError_UNDO_FILE_FLUSH_FAILED;
+    } // no default case, so the compiler can warn about missing cases
+    assert(false);
+}
+
 constexpr btck_LogLevel to_btck(util::log::Level level)
 {
     switch (level) {
@@ -356,9 +368,9 @@ public:
     {
         if (m_cbs.warning_unset) m_cbs.warning_unset(m_cbs.user_data, cast_btck_warning(id));
     }
-    void flushError(const bilingual_str& message) override
+    void flushError(kernel::FlushError error) override
     {
-        if (m_cbs.flush_error) m_cbs.flush_error(m_cbs.user_data, message.original.c_str(), message.original.length());
+        if (m_cbs.flush_error) m_cbs.flush_error(m_cbs.user_data, cast_btck_flush_error(error));
     }
     void fatalError(const bilingual_str& message) override
     {
