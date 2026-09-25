@@ -3,6 +3,8 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <base58.h>
+#include <index/blockfilterindex.h>
+#include <interfaces/chain.h>
 #include <key.h>
 #include <key_io.h>
 #include <primitives/block.h>
@@ -20,6 +22,8 @@
 #include <tinyformat.h>
 #include <uint256.h>
 #include <univalue.h>
+#include <util/byte_units.h>
+#include <util/check.h>
 #include <util/strencodings.h>
 #include <util/string.h>
 #include <util/time.h>
@@ -42,6 +46,14 @@ namespace {
 struct RPCFuzzTestingSetup : public TestingSetup {
     RPCFuzzTestingSetup(const ChainType chain_type, TestOpts opts) : TestingSetup{chain_type, opts}
     {
+        // getblockfilter and scanblocks need a live BASIC index. Without it they
+        // only throw "Index is not enabled".
+        Assert(InitBlockFilterIndex([&] { return interfaces::MakeChain(m_node); }, BlockFilterType::BASIC, 1_MiB, /*f_memory=*/true, /*f_wipe=*/true));
+        auto& index = *Assert(GetBlockFilterIndex(BlockFilterType::BASIC));
+        Assert(index.Init());
+        index.Sync();
+        // Unregister so a later submitblock does not notify this index.
+        index.Stop();
     }
 
     void CallRPC(const std::string& rpc_method, UniValue&& params)
