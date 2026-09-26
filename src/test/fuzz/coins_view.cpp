@@ -331,12 +331,23 @@ void TestCoinsView(FuzzedDataProvider& fuzzed_data_provider, CCoinsViewCache& co
                     return;
                 }
                 if (transaction.IsCoinBase()) {
-                    // It is not allowed to call CheckTxInputs on a coinbase transaction.
+                    // Calling CheckTxInputs on a coinbase transaction is not allowed.
                     return;
                 }
                 const bool enforce_bip54{fuzzed_data_provider.ConsumeBool()};
-                if (Consensus::CheckTxInputs(transaction, state, coins_view_cache, fuzzed_data_provider.ConsumeIntegralInRange<int>(0, std::numeric_limits<int>::max()), tx_fee_out, enforce_bip54)) {
+                const int spend_height{fuzzed_data_provider.ConsumeIntegralInRange<int>(0, std::numeric_limits<int>::max())};
+                const bool sigops_ok{Consensus::CheckSigopsBIP54(transaction, coins_view_cache)};
+                const bool inputs_ok{Consensus::CheckTxInputs(transaction, state, coins_view_cache, spend_height, tx_fee_out, enforce_bip54)};
+                if (inputs_ok) {
                     assert(MoneyRange(tx_fee_out));
+                }
+                const bool fail_sigops{!inputs_ok && state.GetResult() == TxValidationResult::TX_CONSENSUS && state.GetRejectReason() == "bad-txns-legacy-sigops"};
+                if (enforce_bip54) {
+                    // CheckSigopsBIP54 is false iff enforcing CheckTxInputs fails with this reason.
+                    assert(sigops_ok == !fail_sigops);
+                } else {
+                    // Flag off. Sigops over the limit must not reject for this reason.
+                    assert(!fail_sigops);
                 }
             },
             [&] {
