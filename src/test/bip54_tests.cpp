@@ -36,6 +36,7 @@
 
 #include <ranges>
 #include <string>
+#include <string_view>
 
 using namespace util::hex_literals;
 
@@ -160,6 +161,34 @@ static void CheckExceedsBIP54Limits(CTransaction&& tx, const CCoinsViewCache& co
 
     auto spent_outputs{RecordSpent(coins, tx)};
     test_vectors.emplace_back(std::move(tx), std::move(spent_outputs), /*valid=*/false, std::move(comment));
+}
+
+/** Enforcing CheckTxInputs failed for the BIP54 sigops reason. */
+static bool InputsFailedLegacySigops(const TxValidationState& state, bool inputs_ok)
+{
+    return !inputs_ok && state.GetResult() == TxValidationResult::TX_CONSENSUS && state.GetRejectReason() == "bad-txns-legacy-sigops";
+}
+
+/**
+ * Dual channel at the coins seam. CheckSigopsBIP54 is false if and only if
+ * enforcing CheckTxInputs fails with bad-txns-legacy-sigops.
+ */
+static void CheckSigopsFollowCoin(const CTransaction& tx, const CCoinsViewCache& view, int spend_height, bool expect_within_limit)
+{
+    const bool sigops_ok{Consensus::CheckSigopsBIP54(tx, view)};
+    BOOST_CHECK_EQUAL(sigops_ok, expect_within_limit);
+
+    TxValidationState state;
+    CAmount txfee{0};
+    const bool inputs_ok{Consensus::CheckTxInputs(tx, state, view, spend_height, txfee, /*enforce_bip54=*/true)};
+    BOOST_CHECK_EQUAL(sigops_ok, !InputsFailedLegacySigops(state, inputs_ok));
+    BOOST_CHECK_EQUAL(inputs_ok, expect_within_limit);
+    if (!expect_within_limit) {
+        BOOST_CHECK(state.GetResult() == TxValidationResult::TX_CONSENSUS);
+        BOOST_CHECK_EQUAL(state.GetRejectReason(), "bad-txns-legacy-sigops");
+    } else {
+        BOOST_CHECK(state.IsValid());
+    }
 }
 
 /**
@@ -1321,6 +1350,50 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
 #endif
 }
 
+/**
+ * BIP54 sigops follow the coin at the spent outpoint. Same spend transaction.
+ * Coin A exceeds MAX_TX_BIP54_SIGOPS. Coin B does not. Passing enforce_bip54 as false skips the check.
+ */
+BOOST_AUTO_TEST_CASE(bip54_sigops_follow_the_coin)
+{
+    const COutPoint prevout{Txid::FromUint256(uint256::ONE), 0};
+    const CAmount value{1 * COIN};
+    constexpr int spend_height{100};
+
+    CScript bomb;
+    for (unsigned i{0}; i < MAX_TX_BIP54_SIGOPS + 1; ++i) {
+        bomb << OP_CHECKSIG;
+    }
+    const CScript under_limit{};
+
+    CMutableTransaction spend;
+    spend.vin.emplace_back(prevout);
+    spend.vout.emplace_back(value - 1000, CScript() << OP_TRUE);
+    const CTransaction tx{spend};
+    BOOST_REQUIRE(!tx.IsCoinBase());
+    BOOST_REQUIRE(!tx.vin.empty());
+
+    CCoinsViewCache view_a{&CoinsViewEmpty::Get()};
+    view_a.AddCoin(prevout, Coin{{value, bomb}, /*nHeightIn=*/1, /*fCoinBase=*/false}, /*possible_overwrite=*/false);
+    CheckSigopsFollowCoin(tx, view_a, spend_height, /*expect_within_limit=*/false);
+
+    TxValidationState state_off;
+    CAmount txfee_off{0};
+    BOOST_CHECK(Consensus::CheckTxInputs(tx, state_off, view_a, spend_height, txfee_off, /*enforce_bip54=*/false));
+    BOOST_CHECK(state_off.IsValid());
+    BOOST_CHECK(!Consensus::CheckSigopsBIP54(tx, view_a));
+
+    CCoinsViewCache view_b{&CoinsViewEmpty::Get()};
+    view_b.AddCoin(prevout, Coin{{value, under_limit}, /*nHeightIn=*/1, /*fCoinBase=*/false}, /*possible_overwrite=*/false);
+    CheckSigopsFollowCoin(tx, view_b, spend_height, /*expect_within_limit=*/true);
+
+    CCoinsViewCache view_swap{&CoinsViewEmpty::Get()};
+    view_swap.AddCoin(prevout, Coin{{value, bomb}, /*nHeightIn=*/1, /*fCoinBase=*/false}, /*possible_overwrite=*/false);
+    CheckSigopsFollowCoin(tx, view_swap, spend_height, /*expect_within_limit=*/false);
+    view_swap.AddCoin(prevout, Coin{{value, under_limit}, /*nHeightIn=*/1, /*fCoinBase=*/false}, /*possible_overwrite=*/true);
+    CheckSigopsFollowCoin(tx, view_swap, spend_height, /*expect_within_limit=*/true);
+}
+
 /** A test case for the BIP 54 timestamp rules. */
 struct TimestampTestCase {
     std::vector<CBlockHeader> header_chain;
@@ -1603,6 +1676,207 @@ BOOST_AUTO_TEST_CASE(bip54_txsize)
 #ifdef UPDATE_JSON_TESTS
     WriteJSONTestVectors(test_vectors, "bip54_txsize.json.gen");
 #endif
+}
+
+static CBlockHeader MineRegtestHeader(const uint256& prev_hash, uint32_t n_time, uint32_t n_bits, const Consensus::Params& params)
+{
+    CBlockHeader header;
+    header.nVersion = 4;
+    header.hashPrevBlock = prev_hash;
+    header.hashMerkleRoot = uint256{};
+    header.nTime = n_time;
+    header.nBits = n_bits;
+    header.nNonce = 0;
+    while (!CheckProofOfWork(header.GetHash(), header.nBits, params)) {
+        Assert(++header.nNonce);
+    }
+    return header;
+}
+
+template <typename TimeAt>
+static std::vector<CBlockHeader> MineHeaderPrefix(int last_height, const CBlockHeader& genesis, const Consensus::Params& params, const TimeAt& time_at)
+{
+    std::vector<CBlockHeader> headers;
+    headers.reserve(last_height);
+    uint256 prev_hash{genesis.GetHash()};
+    for (int height{1}; height <= last_height; ++height) {
+        headers.push_back(MineRegtestHeader(prev_hash, static_cast<uint32_t>(time_at(height)), genesis.nBits, params));
+        prev_hash = headers.back().GetHash();
+    }
+    return headers;
+}
+
+static void RequireHeaders(ChainstateManager& chainman, const std::vector<CBlockHeader>& headers)
+{
+    BlockValidationState state;
+    BOOST_REQUIRE(chainman.ProcessNewBlockHeaders(headers, /*min_pow_checked=*/true, state));
+    BOOST_REQUIRE(state.IsValid());
+}
+
+static void CheckSuccessorHeader(ChainstateManager& chainman, const CBlockHeader& header, bool expect_ok, std::string_view expect_reason)
+{
+    BlockValidationState state;
+    const CBlockHeader headers[]{header};
+    const bool ok{chainman.ProcessNewBlockHeaders(headers, /*min_pow_checked=*/true, state)};
+    BOOST_CHECK_EQUAL(ok, expect_ok);
+    if (expect_ok) {
+        BOOST_CHECK(state.IsValid());
+    } else {
+        BOOST_CHECK(state.GetRejectReason() == expect_reason);
+    }
+}
+
+static CMutableTransaction TxAtNonWitnessSize(unsigned extra_spk_ops)
+{
+    CMutableTransaction tx;
+    tx.vin.emplace_back(COutPoint{*Txid::FromHex("83c8e0289fecf93b5a284705396f5a652d9886cbd26236b0d647655ad8a37d82"), 21});
+    tx.vout.emplace_back(0, CScript{});
+    const opcodetype ops[]{OP_0, OP_1, OP_2, OP_4, OP_8};
+    Assert(extra_spk_ops <= 5);
+    for (unsigned i{0}; i < extra_spk_ops; ++i) {
+        tx.vout.back().scriptPubKey << ops[i];
+    }
+    return tx;
+}
+
+static CBlock BlockWithExtraTx(ChainstateManager& chainman, const CTransaction& extra)
+{
+    auto block{node::BlockAssembler{chainman.ActiveChainstate(), /*mempool=*/nullptr, {}}.CreateNewBlock()->block};
+    block.vtx.push_back(MakeTransactionRef(extra));
+    node::RegenerateCommitments(block, chainman);
+    MineRegtestBlock(block, chainman.GetConsensus());
+    return block;
+}
+
+static BlockValidationState AcceptMined(ChainstateManager& chainman, const CBlock& block)
+{
+    BlockValidationState state;
+    const auto pblock{std::make_shared<CBlock>(block)};
+    LOCK(chainman.GetMutex());
+    chainman.AcceptBlock(pblock, state, /*ppindex=*/nullptr, /*fRequested=*/true, /*dbp=*/nullptr, /*fNewBlock=*/nullptr, /*min_pow_checked=*/true);
+    return state;
+}
+
+/**
+ * BIP54 header fenceposts at the ContextualCheckBlockHeader door.
+ * Timewarp equality at prev minus MAX_TIMEWARP_BIP54 passes. One second earlier fails.
+ * Negative interval needs period 2. Period 1 last is masked by time-too-old against genesis MTP.
+ * Both fails fire only when CONSENSUSCLEANUP is active.
+ */
+BOOST_AUTO_TEST_CASE(bip54_header_boundary)
+{
+    const auto regtest{CChainParams::RegTest()};
+    const auto& genesis{regtest->GenesisBlock()};
+    const auto& consensus{regtest->GetConsensus()};
+    const int dai{static_cast<int>(consensus.DifficultyAdjustmentInterval())};
+    BOOST_REQUIRE_EQUAL(dai, 144);
+    BOOST_REQUIRE(consensus.fPowNoRetargeting);
+
+    const int64_t genesis_time{genesis.nTime};
+    constexpr int64_t jump{100'000};
+    const int last_of_period1{dai - 1};
+    const int first_of_period2{dai};
+    const int last_of_period2{2 * dai - 1};
+
+    const auto timewarp_prefix{MineHeaderPrefix(last_of_period1, genesis, consensus, [&](int height) {
+        int64_t t{genesis_time + static_cast<int64_t>(height) * consensus.nPowTargetSpacing};
+        if (height == last_of_period1) t += jump;
+        return t;
+    })};
+    const int64_t prev_time{timewarp_prefix.back().nTime};
+    const auto timewarp_eq{MineRegtestHeader(timewarp_prefix.back().GetHash(), static_cast<uint32_t>(prev_time - MAX_TIMEWARP_BIP54), genesis.nBits, consensus)};
+    const auto timewarp_fail{MineRegtestHeader(timewarp_prefix.back().GetHash(), static_cast<uint32_t>(prev_time - MAX_TIMEWARP_BIP54 - 1), genesis.nBits, consensus)};
+
+    {
+        RegTestingSetup active{};
+        RequireHeaders(*active.m_node.chainman, timewarp_prefix);
+        CheckSuccessorHeader(*active.m_node.chainman, timewarp_eq, /*expect_ok=*/true, "");
+        CheckSuccessorHeader(*active.m_node.chainman, timewarp_fail, /*expect_ok=*/false, "time-timewarp-attack");
+    }
+    {
+        TestingSetup inactive{ChainType::REGTEST, {.extra_args = {"-vbparams=consensuscleanup:-2:-2"}}};
+        RequireHeaders(*inactive.m_node.chainman, timewarp_prefix);
+        CheckSuccessorHeader(*inactive.m_node.chainman, timewarp_fail, /*expect_ok=*/true, "");
+    }
+
+    const auto neg_prefix{MineHeaderPrefix(last_of_period2 - 1, genesis, consensus, [&](int height) {
+        int64_t t{genesis_time + static_cast<int64_t>(height) * consensus.nPowTargetSpacing};
+        if (height == first_of_period2) t += 1'000'000;
+        return t;
+    })};
+    const int64_t first_of_period2_time{genesis_time + static_cast<int64_t>(first_of_period2) * consensus.nPowTargetSpacing + 1'000'000};
+    const int64_t last_of_period2_time{genesis_time + static_cast<int64_t>(last_of_period2) * consensus.nPowTargetSpacing};
+    BOOST_REQUIRE_LT(last_of_period2_time, first_of_period2_time);
+    const auto neg_eq{MineRegtestHeader(neg_prefix.back().GetHash(), static_cast<uint32_t>(first_of_period2_time), genesis.nBits, consensus)};
+    const auto neg_fail{MineRegtestHeader(neg_prefix.back().GetHash(), static_cast<uint32_t>(last_of_period2_time), genesis.nBits, consensus)};
+
+    {
+        RegTestingSetup active{};
+        RequireHeaders(*active.m_node.chainman, neg_prefix);
+        CheckSuccessorHeader(*active.m_node.chainman, neg_eq, /*expect_ok=*/true, "");
+        CheckSuccessorHeader(*active.m_node.chainman, neg_fail, /*expect_ok=*/false, "time-negative-interval");
+    }
+    {
+        TestingSetup inactive{ChainType::REGTEST, {.extra_args = {"-vbparams=consensuscleanup:-2:-2"}}};
+        RequireHeaders(*inactive.m_node.chainman, neg_prefix);
+        CheckSuccessorHeader(*inactive.m_node.chainman, neg_fail, /*expect_ok=*/true, "");
+    }
+}
+
+/**
+ * BIP54 64 byte rule is ContextualCheckBlock. CheckBlock (context free) accepts a 64 byte tx.
+ * AcceptBlock rejects only size 64 with bad-txns-size. 63 and 65 do not use that reason.
+ * Fat witness does not change the stripped size. Inactive cleanup does not reject size 64.
+ */
+BOOST_AUTO_TEST_CASE(bip54_txsize_checkblock_door)
+{
+    auto tx63{TxAtNonWitnessSize(/*extra_spk_ops=*/3)};
+    auto tx64{TxAtNonWitnessSize(/*extra_spk_ops=*/4)};
+    auto tx65{TxAtNonWitnessSize(/*extra_spk_ops=*/5)};
+    BOOST_REQUIRE_EQUAL(GetSerializeSize(TX_NO_WITNESS(tx63)), INVALID_TX_NONWITNESS_SIZE - 1);
+    BOOST_REQUIRE_EQUAL(GetSerializeSize(TX_NO_WITNESS(tx64)), INVALID_TX_NONWITNESS_SIZE);
+    BOOST_REQUIRE_EQUAL(GetSerializeSize(TX_NO_WITNESS(tx65)), INVALID_TX_NONWITNESS_SIZE + 1);
+
+    CMutableTransaction tx64_wit{tx64};
+    tx64_wit.vin.back().scriptWitness.stack.push_back({0x21, 0x32, 0x45, 0x57, 0x62, 0x81, 0x94, 0x12});
+    BOOST_REQUIRE_EQUAL(GetSerializeSize(TX_NO_WITNESS(tx64_wit)), INVALID_TX_NONWITNESS_SIZE);
+    BOOST_REQUIRE_GT(GetSerializeSize(TX_WITH_WITNESS(tx64_wit)), INVALID_TX_NONWITNESS_SIZE);
+
+    {
+        RegTestingSetup active{};
+        auto& chainman{*active.m_node.chainman};
+        const auto& params{chainman.GetConsensus()};
+
+        const auto block64{BlockWithExtraTx(chainman, CTransaction{tx64})};
+        BlockValidationState check_state;
+        BOOST_CHECK(CheckBlock(block64, check_state, params));
+        BOOST_CHECK(check_state.IsValid());
+        const auto accept64{AcceptMined(chainman, block64)};
+        BOOST_CHECK(!accept64.IsValid());
+        BOOST_CHECK(accept64.GetRejectReason() == "bad-txns-size");
+
+        const auto block64_wit{BlockWithExtraTx(chainman, CTransaction{tx64_wit})};
+        BlockValidationState check_wit;
+        BOOST_CHECK(CheckBlock(block64_wit, check_wit, params));
+        const auto accept64_wit{AcceptMined(chainman, block64_wit)};
+        BOOST_CHECK(!accept64_wit.IsValid());
+        BOOST_CHECK(accept64_wit.GetRejectReason() == "bad-txns-size");
+
+        const auto accept63{AcceptMined(chainman, BlockWithExtraTx(chainman, CTransaction{tx63}))};
+        BOOST_CHECK(accept63.IsValid());
+        BOOST_CHECK(accept63.GetRejectReason() != "bad-txns-size");
+
+        const auto accept65{AcceptMined(chainman, BlockWithExtraTx(chainman, CTransaction{tx65}))};
+        BOOST_CHECK(accept65.IsValid());
+        BOOST_CHECK(accept65.GetRejectReason() != "bad-txns-size");
+    }
+    {
+        TestingSetup inactive{ChainType::REGTEST, {.extra_args = {"-vbparams=consensuscleanup:-2:-2"}}};
+        auto& chainman{*inactive.m_node.chainman};
+        const auto accept64{AcceptMined(chainman, BlockWithExtraTx(chainman, CTransaction{tx64}))};
+        BOOST_CHECK(accept64.IsValid());
+        BOOST_CHECK(accept64.GetRejectReason() != "bad-txns-size");
+    }
 }
 
 BOOST_AUTO_TEST_SUITE_END()
