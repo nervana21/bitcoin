@@ -442,3 +442,52 @@ BOOST_AUTO_TEST_CASE(btck_process_block_bip54_coinbase_lock)
     BOOST_CHECK(*capture->m_mode == btck::ValidationMode::INVALID);
     BOOST_CHECK(*capture->m_result == btck::BlockValidationResult::CONSENSUS);
 }
+
+/**
+ * BIP54 negative interval on kernel ProcessBlockHeader.
+ * Same construction as bip54_header_boundary period 2. C API has no reason
+ * string. VALID / INVALID_HEADER here. C++ twin has time-negative-interval.
+ */
+BOOST_AUTO_TEST_CASE(btck_process_block_header_bip54_negative_interval)
+{
+    const auto params{CChainParams::RegTest()};
+    const auto& consensus{params->GetConsensus()};
+    const CBlock& genesis{params->GenesisBlock()};
+    const int dai{static_cast<int>(consensus.DifficultyAdjustmentInterval())};
+    BOOST_REQUIRE_EQUAL(dai, 144);
+    BOOST_REQUIRE(consensus.fPowNoRetargeting);
+
+    const int first_of_period2{dai};
+    const int last_of_period2{2 * dai - 1};
+
+    std::vector<CBlockHeader> prefix;
+    prefix.reserve(last_of_period2 - 1);
+    uint256 prev_hash{genesis.GetHash()};
+    for (int height{1}; height <= last_of_period2 - 1; ++height) {
+        int64_t t{genesis.nTime + static_cast<int64_t>(height) * consensus.nPowTargetSpacing};
+        if (height == first_of_period2) t += 1'000'000;
+        prefix.push_back(MineRegtestHeader(prev_hash, static_cast<uint32_t>(t), genesis.nBits, consensus));
+        prev_hash = prefix.back().GetHash();
+    }
+    const int64_t first_of_period2_time{genesis.nTime + static_cast<int64_t>(first_of_period2) * consensus.nPowTargetSpacing + 1'000'000};
+    const int64_t last_of_period2_time{genesis.nTime + static_cast<int64_t>(last_of_period2) * consensus.nPowTargetSpacing};
+    BOOST_REQUIRE_LT(last_of_period2_time, first_of_period2_time);
+    const auto neg_eq{MineRegtestHeader(prefix.back().GetHash(), static_cast<uint32_t>(first_of_period2_time), genesis.nBits, consensus)};
+    const auto neg_fail{MineRegtestHeader(prefix.back().GetHash(), static_cast<uint32_t>(last_of_period2_time), genesis.nBits, consensus)};
+
+    auto test_directory{TestDirectory{"bip54_process_block_header_neg_interval"}};
+    auto notifications{std::make_shared<TestKernelNotifications>()};
+    auto context{CreateRegtestContext(notifications)};
+    auto chainman{CreateChainMan(test_directory, context)};
+    for (const auto& header : prefix) {
+        RequireKernelHeader(*chainman, header);
+    }
+
+    const btck::BlockValidationState eq_state{chainman->ProcessBlockHeader(ToKernelHeader(neg_eq))};
+    BOOST_CHECK(eq_state.GetValidationMode() == btck::ValidationMode::VALID);
+    BOOST_CHECK(eq_state.GetBlockValidationResult() == btck::BlockValidationResult::UNSET);
+
+    const btck::BlockValidationState fail_state{chainman->ProcessBlockHeader(ToKernelHeader(neg_fail))};
+    BOOST_CHECK(fail_state.GetValidationMode() == btck::ValidationMode::INVALID);
+    BOOST_CHECK(fail_state.GetBlockValidationResult() == btck::BlockValidationResult::INVALID_HEADER);
+}
