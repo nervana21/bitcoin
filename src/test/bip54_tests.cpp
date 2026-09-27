@@ -1757,6 +1757,31 @@ static BlockValidationState AcceptMined(ChainstateManager& chainman, const CBloc
     return state;
 }
 
+static CBlock MinedAssemblerBlock(ChainstateManager& chainman)
+{
+    auto block{node::BlockAssembler{chainman.ActiveChainstate(), /*mempool=*/nullptr, {}}.CreateNewBlock()->block};
+    node::RegenerateCommitments(block, chainman);
+    MineRegtestBlock(block, chainman.GetConsensus());
+    return block;
+}
+
+static CBlock MinedAssemblerCoinbaseMutated(ChainstateManager& chainman, auto&& mutate_coinbase)
+{
+    auto block{node::BlockAssembler{chainman.ActiveChainstate(), /*mempool=*/nullptr, {}}.CreateNewBlock()->block};
+    CMutableTransaction coinbase{*block.vtx[0]};
+    mutate_coinbase(coinbase);
+    block.vtx[0] = MakeTransactionRef(std::move(coinbase));
+    node::RegenerateCommitments(block, chainman);
+    MineRegtestBlock(block, chainman.GetConsensus());
+    return block;
+}
+
+static void RequireProcessNew(ChainstateManager& chainman, const CBlock& block)
+{
+    bool new_block{false};
+    BOOST_REQUIRE(chainman.ProcessNewBlock(std::make_shared<const CBlock>(block), /*force_processing=*/true, /*min_pow_checked=*/true, &new_block));
+}
+
 /**
  * BIP54 header fenceposts at the ContextualCheckBlockHeader door.
  * Timewarp equality at prev minus MAX_TIMEWARP_BIP54 passes. One second earlier fails.
@@ -1876,6 +1901,56 @@ BOOST_AUTO_TEST_CASE(bip54_txsize_checkblock_door)
         const auto accept64{AcceptMined(chainman, BlockWithExtraTx(chainman, CTransaction{tx64}))};
         BOOST_CHECK(accept64.IsValid());
         BOOST_CHECK(accept64.GetRejectReason() != "bad-txns-size");
+    }
+}
+
+/**
+ * BIP54 coinbase locktime and sequence at ContextualCheckBlock.
+ * Height 1 legal coinbase accepts. Wrong locktime at height 1 is bad-txns-nonfinal
+ * first, so the reason pins use height 2. Inactive cleanup must not use
+ * bad-cb-locktime or bad-cb-sequence. Kernel ProcessBlock twin is
+ * btck_process_block_bip54_coinbase_lock.
+ */
+BOOST_AUTO_TEST_CASE(bip54_coinbase_lock_door)
+{
+    {
+        RegTestingSetup active{};
+        auto& chainman{*active.m_node.chainman};
+        RequireProcessNew(chainman, MinedAssemblerBlock(chainman));
+
+        const auto legal{AcceptMined(chainman, MinedAssemblerBlock(chainman))};
+        BOOST_CHECK(legal.IsValid());
+
+        const auto lock_wrong{AcceptMined(chainman, MinedAssemblerCoinbaseMutated(chainman, [](CMutableTransaction& coinbase) {
+            coinbase.nLockTime = 0;
+        }))};
+        BOOST_CHECK(!lock_wrong.IsValid());
+        BOOST_CHECK(lock_wrong.GetRejectReason() == "bad-cb-locktime");
+
+        const auto seq_final{AcceptMined(chainman, MinedAssemblerCoinbaseMutated(chainman, [](CMutableTransaction& coinbase) {
+            coinbase.vin[0].nSequence = CTxIn::SEQUENCE_FINAL;
+        }))};
+        BOOST_CHECK(!seq_final.IsValid());
+        BOOST_CHECK(seq_final.GetRejectReason() == "bad-cb-sequence");
+    }
+    {
+        TestingSetup inactive{ChainType::REGTEST, {.extra_args = {"-vbparams=consensuscleanup:-2:-2"}}};
+        auto& chainman{*inactive.m_node.chainman};
+        RequireProcessNew(chainman, MinedAssemblerBlock(chainman));
+
+        const auto lock_wrong{AcceptMined(chainman, MinedAssemblerCoinbaseMutated(chainman, [](CMutableTransaction& coinbase) {
+            coinbase.nLockTime = 0;
+        }))};
+        BOOST_CHECK(lock_wrong.IsValid());
+        BOOST_CHECK(lock_wrong.GetRejectReason() != "bad-cb-locktime");
+        BOOST_CHECK(lock_wrong.GetRejectReason() != "bad-cb-sequence");
+
+        const auto seq_final{AcceptMined(chainman, MinedAssemblerCoinbaseMutated(chainman, [](CMutableTransaction& coinbase) {
+            coinbase.vin[0].nSequence = CTxIn::SEQUENCE_FINAL;
+        }))};
+        BOOST_CHECK(seq_final.IsValid());
+        BOOST_CHECK(seq_final.GetRejectReason() != "bad-cb-locktime");
+        BOOST_CHECK(seq_final.GetRejectReason() != "bad-cb-sequence");
     }
 }
 

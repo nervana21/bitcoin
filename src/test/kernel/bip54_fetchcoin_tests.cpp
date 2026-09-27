@@ -184,6 +184,42 @@ void CheckKernelAgrees(bool view_within_limit, bool kernel_ok, btck::BlockValida
     }
 }
 
+CBlock MinedCoinbaseBlock(const uint256& prev_hash, uint32_t n_time, uint32_t n_bits, int height,
+                          uint32_t n_lock_time, uint32_t n_sequence, const CScript& script_pub_key,
+                          const Consensus::Params& consensus)
+{
+    CBlock block;
+    block.nVersion = 4;
+    block.hashPrevBlock = prev_hash;
+    block.nTime = n_time;
+    block.nBits = n_bits;
+    block.nNonce = 0;
+
+    CMutableTransaction coinbase;
+    coinbase.vin.resize(1);
+    coinbase.vin[0].prevout.SetNull();
+    // BIP34 height prefix. Pad so coinbase stays off BIP54's exact 64-byte ban
+    // (height<<OP_0 is 63 bytes for heights 1-16, then 64 from height 17).
+    coinbase.vin[0].scriptSig = CScript() << height << OP_0 << OP_0 << OP_0;
+    coinbase.vin[0].nSequence = n_sequence;
+    coinbase.vout.emplace_back(50 * COIN, script_pub_key);
+    coinbase.nLockTime = n_lock_time;
+
+    block.vtx.push_back(MakeTransactionRef(coinbase));
+    block.hashMerkleRoot = BlockMerkleRoot(block);
+    while (!CheckProofOfWork(block.GetHash(), block.nBits, consensus)) {
+        ++block.nNonce;
+    }
+    return block;
+}
+
+btck::Block ToKernelBlock(const CBlock& block)
+{
+    DataStream ss{};
+    ss << TX_WITH_WITNESS(block);
+    return btck::Block{std::span<const std::byte>{ss.data(), ss.size()}};
+}
+
 } // namespace
 
 BOOST_AUTO_TEST_CASE(btck_validate_block_bip54_sigops_follow_coin)
@@ -358,4 +394,51 @@ BOOST_AUTO_TEST_CASE(btck_process_block_bip54_doors)
     const btck::BlockValidationState fail_state{chainman->ProcessBlockHeader(ToKernelHeader(timewarp_fail))};
     BOOST_CHECK(fail_state.GetValidationMode() == btck::ValidationMode::INVALID);
     BOOST_CHECK(fail_state.GetBlockValidationResult() == btck::BlockValidationResult::INVALID_HEADER);
+}
+
+/**
+ * BIP54 coinbase locktime and sequence on kernel ProcessBlock.
+ * ProcessBlock runs ContextualCheckBlock. C API has no reject reason string.
+ * CONSENSUS here. C++ AcceptBlock twin bip54_coinbase_lock_door has the reason.
+ * Kernel chainman cannot flip versionbits. Inactive path is C++ only.
+ * Height 1 legal accepts. Wrong locktime at height 1 is bad-txns-nonfinal first,
+ * so reject pins use height 2.
+ */
+BOOST_AUTO_TEST_CASE(btck_process_block_bip54_coinbase_lock)
+{
+    const auto params{CChainParams::RegTest()};
+    const auto& consensus{params->GetConsensus()};
+    const CBlock& genesis{params->GenesisBlock()};
+    const CScript spk{CScript() << OP_TRUE};
+
+    auto test_directory{TestDirectory{"bip54_process_block_coinbase_lock"}};
+    auto notifications{std::make_shared<TestKernelNotifications>()};
+    auto capture{std::make_shared<CaptureValidationInterface>()};
+    auto context{CreateRegtestContext(notifications, capture)};
+    auto chainman{CreateChainMan(test_directory, context)};
+
+    const auto height1{MinedCoinbaseBlock(genesis.GetHash(), genesis.nTime + 600, genesis.nBits, /*height=*/1,
+                                          /*n_lock_time=*/0, /*n_sequence=*/0, spk, consensus)};
+    bool new_block{false};
+    BOOST_CHECK(chainman->ProcessBlock(ToKernelBlock(height1), &new_block));
+    BOOST_REQUIRE(capture->m_mode.has_value());
+    BOOST_CHECK(*capture->m_mode == btck::ValidationMode::VALID);
+
+    const auto height2_lock_wrong{MinedCoinbaseBlock(height1.GetHash(), height1.nTime + 600, genesis.nBits, /*height=*/2,
+                                                     /*n_lock_time=*/0, /*n_sequence=*/0, spk, consensus)};
+    capture->m_mode.reset();
+    capture->m_result.reset();
+    BOOST_CHECK(!chainman->ProcessBlock(ToKernelBlock(height2_lock_wrong), &new_block));
+    BOOST_REQUIRE(capture->m_mode.has_value());
+    BOOST_CHECK(*capture->m_mode == btck::ValidationMode::INVALID);
+    BOOST_CHECK(*capture->m_result == btck::BlockValidationResult::CONSENSUS);
+
+    const auto height2_seq_final{MinedCoinbaseBlock(height1.GetHash(), height1.nTime + 600, genesis.nBits, /*height=*/2,
+                                                    /*n_lock_time=*/1, CTxIn::SEQUENCE_FINAL, spk, consensus)};
+    capture->m_mode.reset();
+    capture->m_result.reset();
+    BOOST_CHECK(!chainman->ProcessBlock(ToKernelBlock(height2_seq_final), &new_block));
+    BOOST_REQUIRE(capture->m_mode.has_value());
+    BOOST_CHECK(*capture->m_mode == btck::ValidationMode::INVALID);
+    BOOST_CHECK(*capture->m_result == btck::BlockValidationResult::CONSENSUS);
 }
