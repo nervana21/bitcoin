@@ -1954,4 +1954,52 @@ BOOST_AUTO_TEST_CASE(bip54_coinbase_lock_door)
     }
 }
 
+static CScript ChecksigBomb(unsigned n_checksig)
+{
+    CScript script;
+    for (unsigned i{0}; i < n_checksig; ++i) {
+        script << OP_CHECKSIG;
+    }
+    return script;
+}
+
+/**
+ * BIP54 2500 legacy sigops cap applies to non-coinbase txs. ConnectBlock skips vtx[0].
+ * A coinbase with MAX_TX_BIP54_SIGOPS + 1 CHECKSIG must not fail bad-txns-legacy-sigops.
+ * ProcessNewBlock hits ConnectBlock. AcceptBlock does not. Same bomb on a spend still fails.
+ */
+BOOST_AUTO_TEST_CASE(bip54_coinbase_sigops_exempt)
+{
+    const CScript bomb{ChecksigBomb(MAX_TX_BIP54_SIGOPS + 1)};
+
+    {
+        const COutPoint prevout{Txid::FromUint256(uint256::ONE), 0};
+        CMutableTransaction spend;
+        spend.vin.emplace_back(prevout);
+        spend.vout.emplace_back(1 * COIN - 1000, CScript() << OP_TRUE);
+        CCoinsViewCache view{&CoinsViewEmpty::Get()};
+        view.AddCoin(prevout, Coin{{1 * COIN, bomb}, /*nHeightIn=*/1, /*fCoinBase=*/false}, /*possible_overwrite=*/false);
+        CheckSigopsFollowCoin(CTransaction{spend}, view, /*spend_height=*/100, /*expect_within_limit=*/false);
+    }
+
+    RegTestingSetup active{};
+    auto& chainman{*active.m_node.chainman};
+    const auto block{MinedAssemblerCoinbaseMutated(chainman, [&](CMutableTransaction& coinbase) {
+        coinbase.vout[0].scriptPubKey = bomb;
+    })};
+    bool new_block{false};
+    const bool ok{chainman.ProcessNewBlock(std::make_shared<const CBlock>(block), /*force_processing=*/true, /*min_pow_checked=*/true, &new_block)};
+    if (!ok) {
+        LOCK(cs_main);
+        const auto state{TestBlockValidity(chainman.ActiveChainstate(), block, /*check_pow=*/true, /*check_merkle_root=*/true)};
+        BOOST_REQUIRE_MESSAGE(state.GetRejectReason() != "bad-txns-legacy-sigops",
+                              "finding: coinbase hit BIP54 sigops");
+        BOOST_REQUIRE_MESSAGE(false, state.ToString());
+    }
+    {
+        LOCK(cs_main);
+        BOOST_CHECK(chainman.ActiveChain().Tip()->GetBlockHash() == block.GetHash());
+    }
+}
+
 BOOST_AUTO_TEST_SUITE_END()

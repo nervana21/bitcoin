@@ -491,3 +491,39 @@ BOOST_AUTO_TEST_CASE(btck_process_block_header_bip54_negative_interval)
     BOOST_CHECK(fail_state.GetValidationMode() == btck::ValidationMode::INVALID);
     BOOST_CHECK(fail_state.GetBlockValidationResult() == btck::BlockValidationResult::INVALID_HEADER);
 }
+
+/**
+ * Coinbase is exempt from MAX_TX_BIP54_SIGOPS. ProcessBlock runs ConnectBlock.
+ * A coinbase with MAX_TX_BIP54_SIGOPS + 1 CHECKSIG must accept. CONSENSUS here
+ * is a finding if the coinbase hit the sigops cap.
+ */
+BOOST_AUTO_TEST_CASE(btck_process_block_bip54_coinbase_sigops_exempt)
+{
+    const auto params{CChainParams::RegTest()};
+    const auto& consensus{params->GetConsensus()};
+    const CBlock& genesis{params->GenesisBlock()};
+
+    CScript bomb;
+    for (unsigned i{0}; i < MAX_TX_BIP54_SIGOPS + 1; ++i) {
+        bomb << OP_CHECKSIG;
+    }
+
+    auto test_directory{TestDirectory{"bip54_process_block_coinbase_sigops"}};
+    auto notifications{std::make_shared<TestKernelNotifications>()};
+    auto capture{std::make_shared<CaptureValidationInterface>()};
+    auto context{CreateRegtestContext(notifications, capture)};
+    auto chainman{CreateChainMan(test_directory, context)};
+
+    const auto block{MinedCoinbaseBlock(genesis.GetHash(), genesis.nTime + 600, genesis.nBits, /*height=*/1,
+                                        /*n_lock_time=*/0, /*n_sequence=*/0, bomb, consensus)};
+    bool new_block{false};
+    const bool ok{chainman->ProcessBlock(ToKernelBlock(block), &new_block)};
+    if (!ok) {
+        BOOST_REQUIRE(capture->m_result.has_value());
+        BOOST_REQUIRE_MESSAGE(*capture->m_result != btck::BlockValidationResult::CONSENSUS,
+                              "finding: coinbase hit BIP54 sigops on ProcessBlock");
+        BOOST_REQUIRE_MESSAGE(false, "ProcessBlock rejected coinbase sigops bomb");
+    }
+    BOOST_REQUIRE(capture->m_mode.has_value());
+    BOOST_CHECK(*capture->m_mode == btck::ValidationMode::VALID);
+}
