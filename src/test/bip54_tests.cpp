@@ -2002,4 +2002,35 @@ BOOST_AUTO_TEST_CASE(bip54_coinbase_sigops_exempt)
     }
 }
 
+/**
+ * BIP54 sigops is a sum across inputs, not a per-input cap. 2000 + 501 = 2501 fails.
+ * 2000 + 500 = 2500 succeeds. Equality is allowed. Kernel twin is
+ * btck_validate_block_bip54_sigops_multi_input_sum.
+ */
+BOOST_AUTO_TEST_CASE(bip54_sigops_multi_input_sum)
+{
+    const COutPoint prev_a{Txid::FromUint256(uint256::ONE), 0};
+    const COutPoint prev_b{Txid::FromUint256(uint256::ONE), 1};
+    const CAmount value{1 * COIN};
+    constexpr int spend_height{100};
+
+    CMutableTransaction spend;
+    spend.vin.emplace_back(prev_a);
+    spend.vin.emplace_back(prev_b);
+    spend.vout.emplace_back(2 * value - 1000, CScript() << OP_TRUE);
+    const CTransaction tx{spend};
+    BOOST_REQUIRE(!tx.IsCoinBase());
+    BOOST_REQUIRE_EQUAL(tx.vin.size(), 2);
+
+    CCoinsViewCache view_over{&CoinsViewEmpty::Get()};
+    view_over.AddCoin(prev_a, Coin{{value, ChecksigBomb(2000)}, /*nHeightIn=*/1, /*fCoinBase=*/false}, /*possible_overwrite=*/false);
+    view_over.AddCoin(prev_b, Coin{{value, ChecksigBomb(501)}, /*nHeightIn=*/1, /*fCoinBase=*/false}, /*possible_overwrite=*/false);
+    CheckSigopsFollowCoin(tx, view_over, spend_height, /*expect_within_limit=*/false);
+
+    CCoinsViewCache view_eq{&CoinsViewEmpty::Get()};
+    view_eq.AddCoin(prev_a, Coin{{value, ChecksigBomb(2000)}, /*nHeightIn=*/1, /*fCoinBase=*/false}, /*possible_overwrite=*/false);
+    view_eq.AddCoin(prev_b, Coin{{value, ChecksigBomb(500)}, /*nHeightIn=*/1, /*fCoinBase=*/false}, /*possible_overwrite=*/false);
+    CheckSigopsFollowCoin(tx, view_eq, spend_height, /*expect_within_limit=*/true);
+}
+
 BOOST_AUTO_TEST_SUITE_END()

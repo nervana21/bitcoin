@@ -24,11 +24,13 @@
 
 #include <algorithm>
 #include <cstring>
+#include <map>
 #include <memory>
 #include <optional>
 #include <random>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -152,6 +154,47 @@ public:
     }
 };
 
+CScript ChecksigBomb(unsigned n_checksig)
+{
+    CScript script;
+    for (unsigned i{0}; i < n_checksig; ++i) {
+        script << OP_CHECKSIG;
+    }
+    return script;
+}
+
+COutPoint OutPointFromView(btck::OutPointView op)
+{
+    uint256 hash;
+    const auto bytes{op.Txid().ToBytes()};
+    std::memcpy(hash.begin(), bytes.data(), bytes.size());
+    return COutPoint{Txid::FromUint256(hash), op.index()};
+}
+
+class MappedCoinFetcher : public btck::CoinFetcher
+{
+    struct Entry {
+        btck::ScriptPubkey script;
+        int64_t amount;
+        uint32_t height;
+    };
+    std::map<COutPoint, Entry> m_coins;
+
+public:
+    void Add(const COutPoint& prevout, const CScript& script, int64_t amount, uint32_t height)
+    {
+        m_coins.emplace(prevout, Entry{btck::ScriptPubkey{ScriptBytes(script)}, amount, height});
+    }
+
+    std::optional<btck::Coin> FetchCoin(btck::OutPointView op) override
+    {
+        const auto it{m_coins.find(OutPointFromView(op))};
+        if (it == m_coins.end()) return std::nullopt;
+        btck::TransactionOutput output{it->second.script, it->second.amount};
+        return btck::Coin{output, it->second.height, /*is_coinbase=*/false};
+    }
+};
+
 bool InputsFailedLegacySigops(const TxValidationState& state, bool inputs_ok)
 {
     return !inputs_ok && state.GetResult() == TxValidationResult::TX_CONSENSUS && state.GetRejectReason() == "bad-txns-legacy-sigops";
@@ -163,6 +206,18 @@ void CheckViewSigops(const CTransaction& tx, const CScript& script_pubkey, const
     CCoinsViewCache view{&CoinsViewEmpty::Get()};
     view.AddCoin(prevout, ::Coin{{value, script_pubkey}, /*nHeightIn=*/1, /*fCoinBaseIn=*/false}, /*possible_overwrite=*/false);
 
+    const bool sigops_ok{Consensus::CheckSigopsBIP54(tx, view)};
+    BOOST_CHECK_EQUAL(sigops_ok, expect_within_limit);
+
+    TxValidationState state;
+    CAmount txfee{0};
+    const bool inputs_ok{Consensus::CheckTxInputs(tx, state, view, spend_height, txfee, /*enforce_bip54=*/true)};
+    BOOST_REQUIRE_EQUAL(sigops_ok, !InputsFailedLegacySigops(state, inputs_ok));
+    BOOST_CHECK_EQUAL(inputs_ok, expect_within_limit);
+}
+
+void CheckViewSigopsOn(const CTransaction& tx, const CCoinsViewCache& view, int spend_height, bool expect_within_limit)
+{
     const bool sigops_ok{Consensus::CheckSigopsBIP54(tx, view)};
     BOOST_CHECK_EQUAL(sigops_ok, expect_within_limit);
 
@@ -526,4 +581,84 @@ BOOST_AUTO_TEST_CASE(btck_process_block_bip54_coinbase_sigops_exempt)
     }
     BOOST_REQUIRE(capture->m_mode.has_value());
     BOOST_CHECK(*capture->m_mode == btck::ValidationMode::VALID);
+}
+
+/**
+ * BIP54 sigops is a sum across inputs. Two fetchers, two prevouts.
+ * 2000 + 501 fails on the view and on validate_block (sigops runs before
+ * scripts). 2000 + 500 succeeds on the view. validate_block is not called
+ * for equality. 2500 CHECKSIGs exceed MAX_OPS_PER_SCRIPT even in a dead IF.
+ */
+BOOST_AUTO_TEST_CASE(btck_validate_block_bip54_sigops_multi_input_sum)
+{
+    const COutPoint prev_a{Txid::FromUint256(uint256::ONE), 0};
+    const COutPoint prev_b{Txid::FromUint256(uint256::ONE), 1};
+    const CAmount value{1 * COIN};
+    constexpr int spend_height{1};
+
+    const CScript script_a{ChecksigBomb(2000)};
+    const CScript script_over_b{ChecksigBomb(501)};
+    const CScript script_eq_b{ChecksigBomb(500)};
+
+    CMutableTransaction spend;
+    spend.vin.emplace_back(prev_a);
+    spend.vin.emplace_back(prev_b);
+    spend.vout.emplace_back(2 * value - 1000, CScript() << OP_TRUE);
+    const CTransaction spend_tx{spend};
+    BOOST_REQUIRE(!spend_tx.IsCoinBase());
+
+    auto test_directory{TestDirectory{"bip54_fetchcoin_multi_input"}};
+    auto notifications{std::make_shared<TestKernelNotifications>()};
+    auto context{CreateRegtestContext(notifications)};
+    auto chainman{CreateChainMan(test_directory, context)};
+
+    const auto genesis{chainman->GetChain().GetByHeight(0)};
+    const auto prev_bytes{genesis.GetHash().ToBytes()};
+    uint256 prev_hash;
+    std::memcpy(prev_hash.begin(), prev_bytes.data(), prev_bytes.size());
+
+    CBlock block;
+    block.nVersion = 4;
+    block.hashPrevBlock = prev_hash;
+    block.nTime = genesis.GetHeader().Timestamp() + 600;
+    block.nBits = genesis.GetHeader().Bits();
+    block.nNonce = 0;
+
+    CMutableTransaction coinbase;
+    coinbase.vin.resize(1);
+    coinbase.vin[0].prevout.SetNull();
+    coinbase.vin[0].scriptSig = CScript() << spend_height << OP_0;
+    coinbase.vin[0].nSequence = 0;
+    coinbase.vout.emplace_back(50 * COIN, CScript() << OP_TRUE);
+    coinbase.nLockTime = static_cast<uint32_t>(spend_height - 1);
+
+    block.vtx.push_back(MakeTransactionRef(coinbase));
+    block.vtx.push_back(MakeTransactionRef(spend_tx));
+    block.hashMerkleRoot = BlockMerkleRoot(block);
+
+    const auto params{CChainParams::RegTest()};
+    while (!CheckProofOfWork(block.GetHash(), block.nBits, params->GetConsensus())) {
+        ++block.nNonce;
+    }
+
+    const btck::Block kblock{ToKernelBlock(block)};
+    const btck::BlockValidationState header_state{chainman->ProcessBlockHeader(kblock.GetHeader())};
+    BOOST_REQUIRE(header_state.GetValidationMode() == btck::ValidationMode::VALID);
+    const btck::BlockTreeEntry entry{*chainman->GetBlockTreeEntry(kblock.GetHash())};
+
+    CCoinsViewCache view_over{&CoinsViewEmpty::Get()};
+    view_over.AddCoin(prev_a, ::Coin{{value, script_a}, /*nHeightIn=*/1, /*fCoinBaseIn=*/false}, /*possible_overwrite=*/false);
+    view_over.AddCoin(prev_b, ::Coin{{value, script_over_b}, /*nHeightIn=*/1, /*fCoinBaseIn=*/false}, /*possible_overwrite=*/false);
+    CheckViewSigopsOn(spend_tx, view_over, spend_height, /*expect_within_limit=*/false);
+    MappedCoinFetcher fetcher_over;
+    fetcher_over.Add(prev_a, script_a, value, /*height=*/1);
+    fetcher_over.Add(prev_b, script_over_b, value, /*height=*/1);
+    btck::BlockValidationState state_over;
+    const bool ok_over{chainman->ValidateBlock(kblock, entry, fetcher_over, state_over)};
+    CheckKernelAgrees(/*view_within_limit=*/false, ok_over, state_over.GetBlockValidationResult());
+
+    CCoinsViewCache view_eq{&CoinsViewEmpty::Get()};
+    view_eq.AddCoin(prev_a, ::Coin{{value, script_a}, /*nHeightIn=*/1, /*fCoinBaseIn=*/false}, /*possible_overwrite=*/false);
+    view_eq.AddCoin(prev_b, ::Coin{{value, script_eq_b}, /*nHeightIn=*/1, /*fCoinBaseIn=*/false}, /*possible_overwrite=*/false);
+    CheckViewSigopsOn(spend_tx, view_eq, spend_height, /*expect_within_limit=*/true);
 }
