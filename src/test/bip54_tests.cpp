@@ -2033,4 +2033,59 @@ BOOST_AUTO_TEST_CASE(bip54_sigops_multi_input_sum)
     CheckSigopsFollowCoin(tx, view_eq, spend_height, /*expect_within_limit=*/true);
 }
 
+static CMutableTransaction ConfirmedBombSpend(TestChain100Setup& t, const CScript& bomb)
+{
+    const auto prep{t.CreateValidMempoolTransaction(t.m_coinbase_txns[0], 0, /*input_height=*/1, t.coinbaseKey, bomb, /*output_amount=*/1 * COIN, /*submit=*/false)};
+    t.CreateAndProcessBlock({prep}, CScript() << OP_TRUE);
+    CMutableTransaction spend;
+    spend.vin.emplace_back(COutPoint{prep.GetHash(), 0});
+    // Pad past MIN_STANDARD_TX_NONWITNESS_SIZE. Bare OP_RETURN is tx-size-small.
+    spend.vout.emplace_back(0, CScript() << OP_RETURN << std::vector<uint8_t>(32, 0x42));
+    BOOST_REQUIRE_GE(GetSerializeSize(TX_NO_WITNESS(spend)), MIN_STANDARD_TX_NONWITNESS_SIZE);
+    BOOST_REQUIRE_NE(GetSerializeSize(TX_NO_WITNESS(spend)), INVALID_TX_NONWITNESS_SIZE);
+    return spend;
+}
+
+/**
+ * Mempool PreChecks always run BIP54 sigops. Block CheckTxInputs is gated on
+ * DEPLOYMENT_CONSENSUSCLEANUP. feature_bip54.py already covers inactive and
+ * active block bombs. This pin adds the missing mempool cell and pairs both doors.
+ */
+BOOST_AUTO_TEST_CASE(bip54_mempool_always_block_gated)
+{
+    const CScript bomb{ChecksigBomb(MAX_TX_BIP54_SIGOPS + 1)};
+
+    {
+        TestChain100Setup inactive{ChainType::REGTEST, {.extra_args = {"-vbparams=consensuscleanup:-2:-2"}}};
+        const auto spend{ConfirmedBombSpend(inactive, bomb)};
+        {
+            LOCK(cs_main);
+            const auto res{inactive.m_node.chainman->ProcessTransaction(MakeTransactionRef(spend))};
+            BOOST_CHECK(res.m_result_type == MempoolAcceptResult::ResultType::INVALID);
+            BOOST_CHECK_EQUAL(res.m_state.GetRejectReason(), "bad-txns-legacy-sigops");
+        }
+        const auto block{inactive.CreateBlock({spend}, CScript() << OP_TRUE)};
+        LOCK(cs_main);
+        const auto state{TestBlockValidity(inactive.m_node.chainman->ActiveChainstate(), block, /*check_pow=*/true, /*check_merkle_root=*/true)};
+        BOOST_CHECK_MESSAGE(state.GetRejectReason() != "bad-txns-legacy-sigops",
+                            "finding: inactive block rejected for BIP54 sigops");
+    }
+    {
+        TestChain100Setup active{};
+        const auto spend{ConfirmedBombSpend(active, bomb)};
+        {
+            LOCK(cs_main);
+            const auto res{active.m_node.chainman->ProcessTransaction(MakeTransactionRef(spend))};
+            BOOST_CHECK(res.m_result_type == MempoolAcceptResult::ResultType::INVALID);
+            BOOST_CHECK_EQUAL(res.m_state.GetRejectReason(), "bad-txns-legacy-sigops");
+        }
+        const auto block{active.CreateAndProcessBlock({spend}, CScript() << OP_TRUE)};
+        LOCK(cs_main);
+        BOOST_CHECK(active.m_node.chainman->ActiveChain().Tip()->GetBlockHash() != block.GetHash());
+        const auto state{TestBlockValidity(active.m_node.chainman->ActiveChainstate(), block, /*check_pow=*/true, /*check_merkle_root=*/true)};
+        BOOST_CHECK(!state.IsValid());
+        BOOST_CHECK_EQUAL(state.GetRejectReason(), "bad-txns-legacy-sigops");
+    }
+}
+
 BOOST_AUTO_TEST_SUITE_END()
