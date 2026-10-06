@@ -43,6 +43,7 @@ add_executable(fuzz
   crypto_poly1305.cpp
   cuckoocache.cpp
   dbwrapper.cpp
+  ../../dbwrapper.cpp
   decode_tx.cpp
   descriptor_parse.cpp
   deserialize.cpp
