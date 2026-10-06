@@ -131,7 +131,7 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
     auto& chainman = static_cast<TestChainstateManager&>(*setup->m_node.chainman);
     chainman.ResetIbd();
     chainman.DisableNextWrite();
-    const size_t initial_index_size{WITH_LOCK(chainman.GetMutex(), return chainman.BlockIndex().size())};
+    const size_t initial_index_size{WITH_LOCK(chainman.m_blockman.m_index_mutex, return chainman.BlockIndex().size())};
 
     AddrMan addrman{*setup->m_node.netgroupman, /*deterministic=*/true, /*consistency_check_ratio=*/0};
     auto peerman = PeerManager::make(connman, addrman,
@@ -463,7 +463,7 @@ FUZZ_TARGET(cmpctblock, .init = initialize_cmpctblock)
     setup->m_node.validation_signals->UnregisterAllValidationInterfaces();
     connman.StopNodes();
 
-    const size_t end_index_size{WITH_LOCK(chainman.GetMutex(), return chainman.BlockIndex().size())};
+    const size_t end_index_size{WITH_LOCK(chainman.m_blockman.m_index_mutex, return chainman.BlockIndex().size())};
     const uint64_t end_sequence{WITH_LOCK(mempool.cs, return mempool.GetSequence())};
 
     if (initial_index_size != end_index_size || initial_sequence != end_sequence) {
