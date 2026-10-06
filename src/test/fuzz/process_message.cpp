@@ -77,7 +77,7 @@ FUZZ_TARGET(process_message, .init = initialize_process_message)
     auto& connman{static_cast<ConnmanTestMsg&>(*node.connman)};
     connman.Reset();
     auto& chainman{static_cast<TestChainstateManager&>(*node.chainman)};
-    const auto initial_block_index_size{WITH_LOCK(chainman.GetMutex(), return chainman.BlockIndex().size())};
+    const auto initial_block_index_size{WITH_LOCK(chainman.m_blockman.m_index_mutex, return chainman.BlockIndex().size())};
     const auto initial_sequence{WITH_LOCK(node.mempool->cs, return node.mempool->GetSequence())};
     FakeNodeClock node_clock{1610000000s}; // 2021-01-07, arbitrary
     FakeSteadyClock steady_clock;
@@ -139,7 +139,7 @@ FUZZ_TARGET(process_message, .init = initialize_process_message)
     node.validation_signals->UnregisterValidationInterface(node.peerman.get());
     node.connman->StopNodes();
     const auto end_sequence{WITH_LOCK(node.mempool->cs, return node.mempool->GetSequence())};
-    const auto end_block_index_size{WITH_LOCK(chainman.GetMutex(), return chainman.BlockIndex().size())};
+    const auto end_block_index_size{WITH_LOCK(chainman.m_blockman.m_index_mutex, return chainman.BlockIndex().size())};
     ObserveReachabilityGoal(initial_sequence != end_sequence, PROCESS_MESSAGE_CHANGES_MEMPOOL);
     ObserveReachabilityGoal(initial_block_index_size != end_block_index_size, PROCESS_MESSAGE_CHANGES_BLOCK_INDEX);
     if (initial_block_index_size != end_block_index_size || initial_sequence != end_sequence) {
