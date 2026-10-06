@@ -1363,6 +1363,11 @@ public:
         return btck_chainstate_manager_options_set_wipe_dbs(get(), wipe_block_tree, wipe_chainstate) == 0;
     }
 
+    bool SetReadOnly(bool read_only)
+    {
+        return btck_chainstate_manager_options_set_read_only(get(), read_only ? 1 : 0) == 0;
+    }
+
     void UpdateChainstateDbInMemory(bool chainstate_db_in_memory)
     {
         btck_chainstate_manager_options_update_chainstate_db_in_memory(get(), chainstate_db_in_memory);
