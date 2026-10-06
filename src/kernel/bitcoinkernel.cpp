@@ -1293,7 +1293,7 @@ void btck_chainstate_manager_options_update_chainstate_db_in_memory(
 
 void btck_chainstate_manager_options_set_assumevalid_block(
     btck_ChainstateManagerOptions* chainman_opts,
-    const btck_BlockHash* assumed_valid_block_hash) BITCOINKERNEL_ARG_NONNULL(1, 2)
+    const btck_BlockHash* assumed_valid_block_hash) BITCOINKERNEL_ARG_NONNULL(1)
 {
     auto& opts{btck_ChainstateManagerOptions::get(chainman_opts)};
     LOCK(opts.m_mutex);
