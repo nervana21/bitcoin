@@ -291,13 +291,14 @@ BOOST_AUTO_TEST_CASE(contextual_block_valid)
 {
     const auto chainparams{CChainParams::Main()};
     const Consensus::Params& consensusParams{chainparams->GetConsensus()};
+    VersionBitsCache versionbits;
     const CBlock block{chainparams->GenesisBlock()};
 
     BlockValidationState state;
 
     // Without a previous block the height is zero, so none of the deployments
     // this depends on are active yet.
-    BOOST_CHECK(ContextualCheckBlock(block, state, consensusParams, /*pindexPrev=*/nullptr));
+    BOOST_CHECK(ContextualCheckBlock(block, state, consensusParams, versionbits, /*pindexPrev=*/nullptr));
     BOOST_CHECK(state.IsValid());
 }
 
@@ -305,6 +306,7 @@ BOOST_AUTO_TEST_CASE(contextual_block_bad_txns_nonfinal)
 {
     const auto chainparams{CChainParams::Main()};
     const Consensus::Params& consensusParams{chainparams->GetConsensus()};
+    VersionBitsCache versionbits;
     CBlock block{chainparams->GenesisBlock()};
 
     // A locktime that has not passed yet is ignored as long as every input is
@@ -316,7 +318,7 @@ BOOST_AUTO_TEST_CASE(contextual_block_bad_txns_nonfinal)
 
     BlockValidationState state;
 
-    BOOST_CHECK(!ContextualCheckBlock(block, state, consensusParams, /*pindexPrev=*/nullptr));
+    BOOST_CHECK(!ContextualCheckBlock(block, state, consensusParams, versionbits, /*pindexPrev=*/nullptr));
     BOOST_CHECK(state.IsInvalid());
     BOOST_CHECK(state.GetRejectReason() == "bad-txns-nonfinal");
 }
@@ -325,6 +327,7 @@ BOOST_AUTO_TEST_CASE(contextual_block_cb_height)
 {
     const auto chainparams{CChainParams::Main()};
     const Consensus::Params& consensusParams{chainparams->GetConsensus()};
+    VersionBitsCache versionbits;
     CBlock block{chainparams->GenesisBlock()};
 
     CBlockIndex prev;
@@ -334,7 +337,7 @@ BOOST_AUTO_TEST_CASE(contextual_block_cb_height)
     BlockValidationState state;
 
     // The genesis coinbase does not start with the serialized block height.
-    BOOST_CHECK(!ContextualCheckBlock(block, state, consensusParams, &prev));
+    BOOST_CHECK(!ContextualCheckBlock(block, state, consensusParams, versionbits, &prev));
     BOOST_CHECK(state.IsInvalid());
     BOOST_CHECK(state.GetRejectReason() == "bad-cb-height");
 
@@ -345,7 +348,7 @@ BOOST_AUTO_TEST_CASE(contextual_block_cb_height)
     block.vtx[0] = MakeTransactionRef(std::move(truncated));
 
     BlockValidationState state_truncated;
-    BOOST_CHECK(!ContextualCheckBlock(block, state_truncated, consensusParams, &prev));
+    BOOST_CHECK(!ContextualCheckBlock(block, state_truncated, consensusParams, versionbits, &prev));
     BOOST_CHECK(state_truncated.IsInvalid());
     BOOST_CHECK(state_truncated.GetRejectReason() == "bad-cb-height");
 
@@ -355,7 +358,7 @@ BOOST_AUTO_TEST_CASE(contextual_block_cb_height)
     block.vtx[0] = MakeTransactionRef(std::move(mtx));
 
     BlockValidationState state_with_height;
-    BOOST_CHECK(ContextualCheckBlock(block, state_with_height, consensusParams, &prev));
+    BOOST_CHECK(ContextualCheckBlock(block, state_with_height, consensusParams, versionbits, &prev));
     BOOST_CHECK(state_with_height.IsValid());
 }
 
@@ -363,6 +366,7 @@ BOOST_AUTO_TEST_CASE(contextual_block_unexpected_witness)
 {
     const auto chainparams{CChainParams::Main()};
     const Consensus::Params& consensusParams{chainparams->GetConsensus()};
+    VersionBitsCache versionbits;
     CBlock block{chainparams->GenesisBlock()};
 
     // Segwit is not active at height zero, so the block is not allowed to
@@ -374,7 +378,7 @@ BOOST_AUTO_TEST_CASE(contextual_block_unexpected_witness)
 
     BlockValidationState state;
 
-    BOOST_CHECK(!ContextualCheckBlock(block, state, consensusParams, /*pindexPrev=*/nullptr));
+    BOOST_CHECK(!ContextualCheckBlock(block, state, consensusParams, versionbits, /*pindexPrev=*/nullptr));
     BOOST_CHECK(state.IsInvalid());
     BOOST_CHECK(state.GetRejectReason() == "unexpected-witness");
 }
@@ -383,6 +387,7 @@ BOOST_AUTO_TEST_CASE(contextual_block_bad_witness_nonce_size)
 {
     const auto chainparams{CChainParams::Main()};
     const Consensus::Params& consensusParams{chainparams->GetConsensus()};
+    VersionBitsCache versionbits;
     CBlock block{chainparams->GenesisBlock()};
 
     CBlockIndex prev;
@@ -404,7 +409,7 @@ BOOST_AUTO_TEST_CASE(contextual_block_bad_witness_nonce_size)
     BlockValidationState state;
 
     // The coinbase commits to witness data but carries no reserved value.
-    BOOST_CHECK(!ContextualCheckBlock(block, state, consensusParams, &prev));
+    BOOST_CHECK(!ContextualCheckBlock(block, state, consensusParams, versionbits, &prev));
     BOOST_CHECK(state.IsInvalid());
     BOOST_CHECK(state.GetRejectReason() == "bad-witness-nonce-size");
 }
@@ -413,6 +418,7 @@ BOOST_AUTO_TEST_CASE(contextual_block_bad_witness_merkle_match)
 {
     const auto chainparams{CChainParams::Main()};
     const Consensus::Params& consensusParams{chainparams->GetConsensus()};
+    VersionBitsCache versionbits;
     CBlock block{chainparams->GenesisBlock()};
 
     CBlockIndex prev;
@@ -433,7 +439,7 @@ BOOST_AUTO_TEST_CASE(contextual_block_bad_witness_merkle_match)
     BlockValidationState state;
 
     // The commitment is all zeroes, which is not the witness merkle root.
-    BOOST_CHECK(!ContextualCheckBlock(block, state, consensusParams, &prev));
+    BOOST_CHECK(!ContextualCheckBlock(block, state, consensusParams, versionbits, &prev));
     BOOST_CHECK(state.IsInvalid());
     BOOST_CHECK(state.GetRejectReason() == "bad-witness-merkle-match");
 }
@@ -442,6 +448,7 @@ BOOST_AUTO_TEST_CASE(contextual_block_bad_blk_weight)
 {
     const auto chainparams{CChainParams::Main()};
     const Consensus::Params& consensusParams{chainparams->GetConsensus()};
+    VersionBitsCache versionbits;
     CBlock block{chainparams->GenesisBlock()};
 
     // Pad the coinbase with the maximum base size worth of data. There is no
@@ -454,7 +461,7 @@ BOOST_AUTO_TEST_CASE(contextual_block_bad_blk_weight)
 
     BlockValidationState state;
 
-    BOOST_CHECK(!ContextualCheckBlock(block, state, consensusParams, /*pindexPrev=*/nullptr));
+    BOOST_CHECK(!ContextualCheckBlock(block, state, consensusParams, versionbits, /*pindexPrev=*/nullptr));
     BOOST_CHECK(state.IsInvalid());
     BOOST_CHECK(state.GetRejectReason() == "bad-blk-weight");
 }
