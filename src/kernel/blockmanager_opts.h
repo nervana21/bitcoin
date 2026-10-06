@@ -29,6 +29,8 @@ struct BlockManagerOpts {
     const fs::path blocks_dir;
     const fs::path block_tree_dir;
     bool wipe_block_tree_data{false};
+    //! Open the block tree without the writer lock. Writes are refused.
+    bool read_only{false};
     Notifications& notifications;
 };
 
