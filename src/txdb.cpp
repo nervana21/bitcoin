@@ -42,6 +42,7 @@ CCoinsViewDB::CCoinsViewDB(util::log::Logger& logger, DBParams db_params, CoinsV
 {
     const auto mode{m_db_params.memory_only ? kernel::CoinsStore::Mode::MEMORY
                     : m_db_params.wipe_data  ? kernel::CoinsStore::Mode::WIPE
+                    : m_db_params.read_only  ? kernel::CoinsStore::Mode::READ
                                              : kernel::CoinsStore::Mode::WRITE};
     try {
         m_db = std::make_unique<kernel::CoinsStore>(m_db_params.path, mode);

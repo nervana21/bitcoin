@@ -1229,6 +1229,8 @@ static auto InitBlocksdirXorKey(const util::log::Context& log, const BlockManage
         // A pre-existing xor key file has priority.
         AutoFile xor_key_file{fsbridge::fopen(xor_key_path, "rb")};
         xor_key_file >> obfuscation;
+    } else if (opts.read_only) {
+        throw std::runtime_error{strprintf("Read-only block store is missing %s", fs::PathToString(xor_key_path))};
     } else {
         // Create initial or missing xor key file
         AutoFile xor_key_file{fsbridge::fopen(xor_key_path, "wbx")};
@@ -1256,6 +1258,12 @@ std::unique_ptr<kernel::BlockTreeStore> BlockManager::CreateAndMigrateBlockTree(
     LOCK(::cs_main);
 
     using OpenMode = kernel::BlockTreeStore::OpenMode;
+    if (m_opts.read_only) {
+        if (m_opts.wipe_block_tree_data || fs::exists(m_opts.block_tree_dir / "CURRENT")) {
+            throw kernel::BlockTreeStoreError("Refusing to migrate or wipe a block tree opened read-only");
+        }
+        return std::make_unique<kernel::BlockTreeStore>(m_opts.block_tree_dir, OpenMode::READ);
+    }
     OpenMode open_mode = m_opts.wipe_block_tree_data ? OpenMode::WIPE : OpenMode::WRITE;
 
     // Check if there is a pre-existing leveldb blocktree db, if not short circuit the migration

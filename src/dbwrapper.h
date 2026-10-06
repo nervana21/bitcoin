@@ -49,6 +49,8 @@ struct DBParams {
     bool memory_only = false;
     //! If true, remove all existing data.
     bool wipe_data = false;
+    //! If true, open the coins store without the writer lock. Writes are refused.
+    bool read_only = false;
     //! If true, store data obfuscated via simple XOR. If false, XOR with a
     //! zero'd byte array.
     bool obfuscate = false;
