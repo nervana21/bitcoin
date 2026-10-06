@@ -4815,7 +4815,7 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
         }
 
         {
-            LOCK(cs_main);
+            LOCK(cs_processing);
             const CNodeState *nodestate = State(pfrom.GetId());
             if (!nodestate->m_provides_cmpctblocks) {
                 LogDebug(BCLog::CMPCTBLOCK, "%s sent us a compact block despite never having sent us a SENDCMPCT!", pfrom.LogPeer());
