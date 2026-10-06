@@ -1321,6 +1321,20 @@ BITCOINKERNEL_API int BITCOINKERNEL_WARN_UNUSED_RESULT btck_chainstate_manager_o
     int wipe_chainstate_db) BITCOINKERNEL_ARG_NONNULL(1);
 
 /**
+ * @brief Open the block tree and coins store without taking their writer locks.
+ *
+ * Writes, wipes, migration, and genesis creation are refused. The option cannot
+ * be combined with a wipe or an in-memory coins database.
+ *
+ * @param[in] chainstate_manager_options Non-null.
+ * @param[in] read_only                  1 to open read-only, 0 to open for write.
+ * @return                               0 if the set was successful, non-zero if it conflicts.
+ */
+BITCOINKERNEL_API int BITCOINKERNEL_WARN_UNUSED_RESULT btck_chainstate_manager_options_set_read_only(
+    btck_ChainstateManagerOptions* chainstate_manager_options,
+    int read_only) BITCOINKERNEL_ARG_NONNULL(1);
+
+/**
  * @brief Sets chainstate db in memory in the options.
  *
  * @param[in] chainstate_manager_options Non-null, created by @ref btck_chainstate_manager_options_create.

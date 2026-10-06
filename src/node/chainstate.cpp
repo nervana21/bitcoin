@@ -128,8 +128,13 @@ static FlushResult<InterruptResult, ChainstateLoadError> CompleteChainstateIniti
             return result;
         }
 
-        // ReplayBlocks is a no-op if we cleared the coinsviewdb with -reindex or -reindex-chainstate
-        if (!chainstate->ReplayBlocks()) {
+        // A reader must not rewrite an interrupted coins flush.
+        if (chainstate->m_blockman.IsReadOnly()) {
+            if (!chainstate->CoinsDB().GetHeadBlocks().empty()) {
+                result.update({util::Error{_("Read-only chainstate cannot replay an incomplete coins flush.")}, ChainstateLoadError::FAILURE});
+                return result;
+            }
+        } else if (!chainstate->ReplayBlocks()) {
             result.update({util::Error{_("Unable to replay blocks. You will need to rebuild the database using -reindex-chainstate.")}, ChainstateLoadError::FAILURE});
             return result;
         }
