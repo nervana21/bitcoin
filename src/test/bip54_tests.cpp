@@ -15,6 +15,7 @@
 #include <core_io.h>
 #include <key.h>
 #include <node/miner.h>
+#include <node/transaction.h>
 #include <policy/policy.h>
 #include <pow.h>
 #include <primitives/block.h>
@@ -1752,8 +1753,11 @@ static BlockValidationState AcceptMined(ChainstateManager& chainman, const CBloc
 {
     BlockValidationState state;
     const auto pblock{std::make_shared<CBlock>(block)};
-    LOCK(chainman.GetMutex());
-    chainman.AcceptBlock(pblock, state, /*ppindex=*/nullptr, /*fRequested=*/true, /*dbp=*/nullptr, /*fNewBlock=*/nullptr, /*min_pow_checked=*/true);
+    kernel::FlushResult<void, kernel::AbortFailure> accept_result;
+    chainman.AcceptBlock(pblock, state, accept_result, /*ppindex=*/nullptr, /*fRequested=*/true, /*dbp=*/nullptr, /*fNewBlock=*/nullptr, /*min_pow_checked=*/true);
+    if (state.IsValid() && !accept_result) {
+        state.Error("accept-flush-failed");
+    }
     return state;
 }
 
@@ -1779,7 +1783,9 @@ static CBlock MinedAssemblerCoinbaseMutated(ChainstateManager& chainman, auto&& 
 static void RequireProcessNew(ChainstateManager& chainman, const CBlock& block)
 {
     bool new_block{false};
-    BOOST_REQUIRE(chainman.ProcessNewBlock(std::make_shared<const CBlock>(block), /*force_processing=*/true, /*min_pow_checked=*/true, &new_block));
+    kernel::FlushResult<void, kernel::AbortFailure> process_result;
+    BOOST_REQUIRE(chainman.ProcessNewBlock(std::make_shared<const CBlock>(block), /*force_processing=*/true, /*min_pow_checked=*/true, &new_block, process_result));
+    BOOST_REQUIRE(process_result);
 }
 
 /**
@@ -1988,13 +1994,15 @@ BOOST_AUTO_TEST_CASE(bip54_coinbase_sigops_exempt)
         coinbase.vout[0].scriptPubKey = bomb;
     })};
     bool new_block{false};
-    const bool ok{chainman.ProcessNewBlock(std::make_shared<const CBlock>(block), /*force_processing=*/true, /*min_pow_checked=*/true, &new_block)};
+    kernel::FlushResult<void, kernel::AbortFailure> process_result;
+    const bool ok{chainman.ProcessNewBlock(std::make_shared<const CBlock>(block), /*force_processing=*/true, /*min_pow_checked=*/true, &new_block, process_result)};
     if (!ok) {
         LOCK(cs_main);
-        const auto state{TestBlockValidity(chainman.ActiveChainstate(), block, /*check_pow=*/true, /*check_merkle_root=*/true)};
-        BOOST_REQUIRE_MESSAGE(state.GetRejectReason() != "bad-txns-legacy-sigops",
+        const auto result{TestBlockValidity(chainman.ActiveChainstate(), block, /*check_pow=*/true, /*check_merkle_root=*/true)};
+        BOOST_REQUIRE(!result);
+        BOOST_REQUIRE_MESSAGE(result.error().GetRejectReason() != "bad-txns-legacy-sigops",
                               "finding: coinbase hit BIP54 sigops");
-        BOOST_REQUIRE_MESSAGE(false, state.ToString());
+        BOOST_REQUIRE_MESSAGE(false, result.error().ToString());
     }
     {
         LOCK(cs_main);
@@ -2058,34 +2066,60 @@ BOOST_AUTO_TEST_CASE(bip54_mempool_always_block_gated)
     {
         TestChain100Setup inactive{ChainType::REGTEST, {.extra_args = {"-vbparams=consensuscleanup:-2:-2"}}};
         const auto spend{ConfirmedBombSpend(inactive, bomb)};
-        {
-            LOCK(cs_main);
-            const auto res{inactive.m_node.chainman->ProcessTransaction(MakeTransactionRef(spend))};
-            BOOST_CHECK(res.m_result_type == MempoolAcceptResult::ResultType::INVALID);
-            BOOST_CHECK_EQUAL(res.m_state.GetRejectReason(), "bad-txns-legacy-sigops");
-        }
+        const auto [res, flush_result]{node::ProcessTransaction(MakeTransactionRef(spend), inactive.m_node)};
+        BOOST_CHECK(flush_result);
+        BOOST_CHECK(res.m_result_type == MempoolAcceptResult::ResultType::INVALID);
+        BOOST_CHECK_EQUAL(res.m_state.GetRejectReason(), "bad-txns-legacy-sigops");
         const auto block{inactive.CreateBlock({spend}, CScript() << OP_TRUE)};
         LOCK(cs_main);
-        const auto state{TestBlockValidity(inactive.m_node.chainman->ActiveChainstate(), block, /*check_pow=*/true, /*check_merkle_root=*/true)};
-        BOOST_CHECK_MESSAGE(state.GetRejectReason() != "bad-txns-legacy-sigops",
-                            "finding: inactive block rejected for BIP54 sigops");
+        if (const auto result{TestBlockValidity(inactive.m_node.chainman->ActiveChainstate(), block, /*check_pow=*/true, /*check_merkle_root=*/true)}; !result) {
+            BOOST_CHECK_MESSAGE(result.error().GetRejectReason() != "bad-txns-legacy-sigops",
+                                "finding: inactive block rejected for BIP54 sigops");
+        }
     }
     {
         TestChain100Setup active{};
         const auto spend{ConfirmedBombSpend(active, bomb)};
-        {
-            LOCK(cs_main);
-            const auto res{active.m_node.chainman->ProcessTransaction(MakeTransactionRef(spend))};
-            BOOST_CHECK(res.m_result_type == MempoolAcceptResult::ResultType::INVALID);
-            BOOST_CHECK_EQUAL(res.m_state.GetRejectReason(), "bad-txns-legacy-sigops");
-        }
+        const auto [res, flush_result]{node::ProcessTransaction(MakeTransactionRef(spend), active.m_node)};
+        BOOST_CHECK(flush_result);
+        BOOST_CHECK(res.m_result_type == MempoolAcceptResult::ResultType::INVALID);
+        BOOST_CHECK_EQUAL(res.m_state.GetRejectReason(), "bad-txns-legacy-sigops");
         const auto block{active.CreateAndProcessBlock({spend}, CScript() << OP_TRUE)};
         LOCK(cs_main);
         BOOST_CHECK(active.m_node.chainman->ActiveChain().Tip()->GetBlockHash() != block.GetHash());
-        const auto state{TestBlockValidity(active.m_node.chainman->ActiveChainstate(), block, /*check_pow=*/true, /*check_merkle_root=*/true)};
-        BOOST_CHECK(!state.IsValid());
-        BOOST_CHECK_EQUAL(state.GetRejectReason(), "bad-txns-legacy-sigops");
+        const auto result{TestBlockValidity(active.m_node.chainman->ActiveChainstate(), block, /*check_pow=*/true, /*check_merkle_root=*/true)};
+        BOOST_REQUIRE(!result);
+        BOOST_CHECK_EQUAL(result.error().GetRejectReason(), "bad-txns-legacy-sigops");
     }
+}
+
+/**
+ * Same spend. Bomb coin vs OP_TRUE coin. CheckTxAgainstTip rejects only the bomb
+ * with bad-txns-legacy-sigops. Kernel CheckTx twin is btck_check_tx_bip54_sigops_follow_coin.
+ */
+BOOST_FIXTURE_TEST_CASE(bip54_check_tx_against_tip_sigops, TestChain100Setup)
+{
+    const CScript bomb{ChecksigBomb(MAX_TX_BIP54_SIGOPS + 1)};
+    const auto bomb_prep{CreateValidMempoolTransaction(m_coinbase_txns[0], /*input_vout=*/0, /*input_height=*/1, coinbaseKey, bomb, /*output_amount=*/1 * COIN, /*submit=*/false)};
+    const auto ok_prep{CreateValidMempoolTransaction(m_coinbase_txns[1], /*input_vout=*/0, /*input_height=*/1, coinbaseKey, CScript{} << OP_TRUE, /*output_amount=*/1 * COIN, /*submit=*/false)};
+    CreateAndProcessBlock({bomb_prep, ok_prep}, CScript{} << OP_TRUE);
+
+    CMutableTransaction spend_bomb;
+    spend_bomb.vin.emplace_back(COutPoint{bomb_prep.GetHash(), 0});
+    spend_bomb.vout.emplace_back(0, CScript{} << OP_RETURN << std::vector<uint8_t>(32, 0x42));
+
+    CMutableTransaction spend_ok;
+    spend_ok.vin.emplace_back(COutPoint{ok_prep.GetHash(), 0});
+    spend_ok.vout.emplace_back(5000, CScript{} << OP_TRUE);
+
+    LOCK(::cs_main);
+    TxValidationState bomb_state;
+    BOOST_CHECK(!m_node.chainman->CheckTxAgainstTip(CTransaction{spend_bomb}, bomb_state));
+    BOOST_CHECK_EQUAL(bomb_state.GetRejectReason(), "bad-txns-legacy-sigops");
+    BOOST_CHECK(bomb_state.GetResult() == TxValidationResult::TX_CONSENSUS);
+
+    TxValidationState ok_state;
+    BOOST_CHECK(m_node.chainman->CheckTxAgainstTip(CTransaction{spend_ok}, ok_state));
 }
 
 BOOST_AUTO_TEST_SUITE_END()

@@ -662,3 +662,133 @@ BOOST_AUTO_TEST_CASE(btck_validate_block_bip54_sigops_multi_input_sum)
     view_eq.AddCoin(prev_b, ::Coin{{value, script_eq_b}, /*nHeightIn=*/1, /*fCoinBaseIn=*/false}, /*possible_overwrite=*/false);
     CheckViewSigopsOn(spend_tx, view_eq, spend_height, /*expect_within_limit=*/true);
 }
+
+/**
+ * Same spend. Bomb coin vs OP_TRUE coin. check_tx rejects only the bomb.
+ * C API has no reject reason string. CheckTxInputs on the same coin requires
+ * bad-txns-legacy-sigops. validate_block on the same spend agrees.
+ */
+BOOST_AUTO_TEST_CASE(btck_check_tx_bip54_sigops_follow_coin)
+{
+    const auto params{CChainParams::RegTest()};
+    const auto& consensus{params->GetConsensus()};
+    const CBlock& genesis{params->GenesisBlock()};
+    const CScript spk{CScript() << OP_TRUE};
+
+    CScript bomb;
+    for (unsigned i{0}; i < MAX_TX_BIP54_SIGOPS + 1; ++i) {
+        bomb << OP_CHECKSIG;
+    }
+
+    auto test_directory{TestDirectory{"bip54_check_tx_sigops"}};
+    auto notifications{std::make_shared<TestKernelNotifications>()};
+    auto context{CreateRegtestContext(notifications)};
+    auto chainman{CreateChainMan(test_directory, context)};
+
+    uint256 prev_hash{genesis.GetHash()};
+    uint32_t prev_time{genesis.nTime};
+    CBlock matured;
+    for (int height{1}; height <= COINBASE_MATURITY; ++height) {
+        const uint32_t n_time{prev_time + 600};
+        const uint32_t n_lock{height > 1 ? static_cast<uint32_t>(height - 1) : 0};
+        auto block{MinedCoinbaseBlock(prev_hash, n_time, genesis.nBits, height, n_lock, /*n_sequence=*/0, spk, consensus)};
+        bool new_block{false};
+        BOOST_REQUIRE_MESSAGE(chainman->ProcessBlock(ToKernelBlock(block), &new_block), "height " + std::to_string(height));
+        if (height == 1) matured = block;
+        prev_hash = block.GetHash();
+        prev_time = n_time;
+    }
+
+    const CAmount coinbase_value{matured.vtx[0]->vout[0].nValue};
+    const CAmount bomb_value{30 * COIN};
+    const CAmount ok_value{19 * COIN};
+    BOOST_REQUIRE_LT(bomb_value + ok_value, coinbase_value);
+
+    CMutableTransaction fund;
+    fund.vin.emplace_back(COutPoint{matured.vtx[0]->GetHash(), 0});
+    fund.vout.emplace_back(bomb_value, bomb);
+    fund.vout.emplace_back(ok_value, spk);
+
+    const int fund_height{COINBASE_MATURITY + 1};
+    CBlock fund_block;
+    fund_block.nVersion = 4;
+    fund_block.hashPrevBlock = prev_hash;
+    fund_block.nTime = prev_time + 600;
+    fund_block.nBits = genesis.nBits;
+    CMutableTransaction coinbase;
+    coinbase.vin.resize(1);
+    coinbase.vin[0].prevout.SetNull();
+    coinbase.vin[0].scriptSig = CScript() << fund_height << OP_0 << OP_0 << OP_0;
+    coinbase.vin[0].nSequence = 0;
+    coinbase.vout.emplace_back(50 * COIN, spk);
+    coinbase.nLockTime = static_cast<uint32_t>(fund_height - 1);
+    fund_block.vtx.push_back(MakeTransactionRef(coinbase));
+    fund_block.vtx.push_back(MakeTransactionRef(fund));
+    fund_block.hashMerkleRoot = BlockMerkleRoot(fund_block);
+    while (!CheckProofOfWork(fund_block.GetHash(), fund_block.nBits, consensus)) {
+        ++fund_block.nNonce;
+    }
+    bool funded{false};
+    BOOST_REQUIRE(chainman->ProcessBlock(ToKernelBlock(fund_block), &funded));
+
+    const CTransaction fund_tx{fund};
+    CMutableTransaction spend_bomb_mut;
+    spend_bomb_mut.vin.emplace_back(COutPoint{fund_tx.GetHash(), 0});
+    spend_bomb_mut.vout.emplace_back(bomb_value - 1000, spk);
+    const CTransaction spend_bomb{spend_bomb_mut};
+
+    CMutableTransaction spend_ok_mut;
+    spend_ok_mut.vin.emplace_back(COutPoint{fund_tx.GetHash(), 1});
+    spend_ok_mut.vout.emplace_back(ok_value - 1000, spk);
+    const CTransaction spend_ok{spend_ok_mut};
+
+    const int spend_height{fund_height + 1};
+    CheckViewSigops(spend_bomb, bomb, spend_bomb.vin[0].prevout, bomb_value, spend_height, /*expect_within_limit=*/false);
+    CheckViewSigops(spend_ok, spk, spend_ok.vin[0].prevout, ok_value, spend_height, /*expect_within_limit=*/true);
+
+    auto to_kernel_tx{[](const CTransaction& tx) {
+        DataStream ss{};
+        ss << TX_WITH_WITNESS(tx);
+        return btck::Transaction{std::span<const std::byte>{ss.data(), ss.size()}};
+    }};
+
+    btck::TxValidationState bomb_tx_state;
+    BOOST_CHECK(!chainman->CheckTx(to_kernel_tx(spend_bomb), bomb_tx_state));
+    BOOST_CHECK(bomb_tx_state.GetValidationMode() == btck::ValidationMode::INVALID);
+    BOOST_CHECK(bomb_tx_state.GetTxValidationResult() == btck::TxValidationResult::CONSENSUS);
+
+    btck::TxValidationState ok_tx_state;
+    BOOST_CHECK(chainman->CheckTx(to_kernel_tx(spend_ok), ok_tx_state));
+    BOOST_CHECK(ok_tx_state.GetValidationMode() == btck::ValidationMode::VALID);
+
+    auto agree{[&](const CTransaction& spend, const CScript& script, CAmount value, bool within) {
+        CBlock block;
+        block.nVersion = 4;
+        block.hashPrevBlock = fund_block.GetHash();
+        block.nTime = fund_block.nTime + 600;
+        block.nBits = genesis.nBits;
+        CMutableTransaction cb;
+        cb.vin.resize(1);
+        cb.vin[0].prevout.SetNull();
+        cb.vin[0].scriptSig = CScript() << spend_height << OP_0 << OP_0 << OP_0;
+        cb.vin[0].nSequence = 0;
+        cb.vout.emplace_back(50 * COIN, spk);
+        cb.nLockTime = static_cast<uint32_t>(spend_height - 1);
+        block.vtx.push_back(MakeTransactionRef(cb));
+        block.vtx.push_back(MakeTransactionRef(spend));
+        block.hashMerkleRoot = BlockMerkleRoot(block);
+        while (!CheckProofOfWork(block.GetHash(), block.nBits, consensus)) {
+            ++block.nNonce;
+        }
+        const btck::Block kblock{ToKernelBlock(block)};
+        const btck::BlockValidationState header_state{chainman->ProcessBlockHeader(kblock.GetHeader())};
+        BOOST_REQUIRE(header_state.GetValidationMode() == btck::ValidationMode::VALID);
+        const btck::BlockTreeEntry entry{*chainman->GetBlockTreeEntry(kblock.GetHash())};
+        FixedCoinFetcher fetcher{btck::ScriptPubkey{ScriptBytes(script)}, value, static_cast<uint32_t>(fund_height)};
+        btck::BlockValidationState state;
+        const bool kernel_ok{chainman->ValidateBlock(kblock, entry, fetcher, state)};
+        CheckKernelAgrees(within, kernel_ok, state.GetBlockValidationResult());
+    }};
+    agree(spend_bomb, bomb, bomb_value, /*within=*/false);
+    agree(spend_ok, spk, ok_value, /*within=*/true);
+}
