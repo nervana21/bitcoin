@@ -54,7 +54,6 @@
 class Chainstate;
 class ChainstateManager;
 struct ChainTxData;
-class DisconnectedBlockTransactions;
 struct PrecomputedTransactionData;
 struct LockPoints;
 struct AssumeutxoData;
@@ -682,7 +681,7 @@ public:
                       CCoinsViewCache& view, bool fJustCheck = false) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     // Apply the effects of a block disconnection on the UTXO set.
-    [[nodiscard]] kernel::FlushResult<> DisconnectTip(BlockValidationState& state, DisconnectedBlockTransactions* disconnectpool) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    [[nodiscard]] kernel::FlushResult<> DisconnectTip(BlockValidationState& state) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     /** Mark a block as invalid. */
     [[nodiscard]] kernel::FlushResult<> InvalidateBlock(BlockValidationState& state, CBlockIndex* pindex)
@@ -747,8 +746,7 @@ protected:
         BlockValidationState& state,
         CBlockIndex* pindexNew,
         std::shared_ptr<const CBlock> block_to_connect,
-        std::vector<ConnectedBlock>& connected_blocks,
-        DisconnectedBlockTransactions& disconnectpool) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+        std::vector<ConnectedBlock>& connected_blocks) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     void InvalidBlockFound(CBlockIndex* pindex, const BlockValidationState& state) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
     CBlockIndex* FindMostWorkChain() EXCLUSIVE_LOCKS_REQUIRED(cs_main);
