@@ -410,7 +410,6 @@ bool CheckBlock(const CBlock& block, BlockValidationState& state, const Consensu
 bool ContextualCheckBlockHeader(
     const CBlockHeader& block,
     BlockValidationState& state,
-    BlockManager& blockman,
     const Consensus::Params& consensusParams,
     VersionBitsCache& versionbitscache,
     const CBlockIndex* pindexPrev,
