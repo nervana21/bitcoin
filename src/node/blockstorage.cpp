@@ -13,6 +13,7 @@
 #include <kernel/blockmanager_opts.h>
 #include <kernel/blocktreestorage.h>
 #include <kernel/chainparams.h>
+#include <kernel/legacy_leveldb.h>
 #include <kernel/messagestartchars.h>
 #include <kernel/notifications_interface.h>
 #include <kernel/types.h>
@@ -1219,12 +1220,15 @@ std::unique_ptr<kernel::BlockTreeStore> BlockManager::CreateAndMigrateBlockTree(
                 fs::PathToString(m_opts.block_tree_dir)));
         }
         LogInfo(m_log, "Detected legacy leveldb block tree db - removing it");
-        std::error_code ec;
-        fs::remove_all(m_opts.block_tree_dir, ec);
-        if (ec) {
+        if (!kernel::RemoveLegacyLevelDBFiles(m_opts.block_tree_dir)) {
             throw kernel::BlockTreeStoreError(strprintf(
                 "Failed to remove legacy leveldb block tree db at %s",
                 fs::PathToString(m_opts.block_tree_dir)));
+        }
+        if (fs::exists(m_opts.block_tree_dir / "CURRENT")) {
+            throw kernel::BlockTreeStoreError(strprintf(
+                "Legacy leveldb block tree db marker still exists at %s",
+                fs::PathToString(m_opts.block_tree_dir / "CURRENT")));
         }
     }
 
