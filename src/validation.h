@@ -1080,9 +1080,9 @@ public:
      */
     void UpdateIBDStatus() EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
-    node::BlockMap& BlockIndex() EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
+    node::BlockMap& BlockIndex() EXCLUSIVE_LOCKS_REQUIRED(m_blockman.m_index_mutex)
     {
-        AssertLockHeld(::cs_main);
+        AssertLockHeld(m_blockman.m_index_mutex);
         return m_blockman.m_block_index;
     }
 
@@ -1221,7 +1221,7 @@ public:
 
 
     //! Load the block tree and coins database from disk, initializing state if we're running with -reindex
-    [[nodiscard]] util::Result<kernel::InterruptResult, kernel::AbortFailure> LoadBlockIndex() EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    [[nodiscard]] util::Result<kernel::InterruptResult, kernel::AbortFailure> LoadBlockIndex() EXCLUSIVE_LOCKS_REQUIRED(cs_main, !m_blockman.m_index_mutex);
 
     //! Check to see if caches are out of balance and if so, call
     //! ResizeCoinsCaches() as needed.
@@ -1288,6 +1288,7 @@ public:
     //! notifications be processed. m_chainstate_mutex doesn't work because it
     //! is not locked at other times when the chainstate is in use.)
     std::vector<std::unique_ptr<Chainstate>> m_chainstates GUARDED_BY(::cs_main);
+
 };
 
 /** Deployment* info via ChainstateManager */

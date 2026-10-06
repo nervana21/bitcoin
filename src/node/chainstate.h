@@ -53,7 +53,8 @@ enum class ChainstateLoadError {
 };
 
 kernel::FlushResult<kernel::InterruptResult, ChainstateLoadError> LoadChainstate(ChainstateManager& chainman, const kernel::CacheSizes& cache_sizes,
-                                                                                 const ChainstateLoadOptions& options);
+                                                                                 const ChainstateLoadOptions& options)
+    EXCLUSIVE_LOCKS_REQUIRED(!chainman.m_blockman.m_index_mutex);
 kernel::FlushResult<kernel::InterruptResult, ChainstateLoadError> VerifyLoadedChainstate(ChainstateManager& chainman, const ChainstateLoadOptions& options);
 } // namespace node
 
