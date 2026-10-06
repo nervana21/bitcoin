@@ -1549,6 +1549,11 @@ public:
         return res == 0;
     }
 
+    bool Flush()
+    {
+        return btck_chainstate_manager_flush(get()) == 0;
+    }
+
     BlockValidationState ProcessBlockHeader(const BlockHeader& header)
     {
         auto state = btck_chainstate_manager_process_block_header(get(), header.get());

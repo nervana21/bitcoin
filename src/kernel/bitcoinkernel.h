@@ -1543,6 +1543,18 @@ BITCOINKERNEL_API const btck_BlockTreeEntry* btck_chainstate_manager_get_block_t
     const btck_BlockHash* block_hash) BITCOINKERNEL_ARG_NONNULL(1, 2);
 
 /**
+ * @brief Flush the chainstate and block index to disk.
+ *
+ * The writer lock stays held. A read-only chainstate manager returns non-zero
+ * and does not write.
+ *
+ * @param[in] chainstate_manager Non-null.
+ * @return                       0 on success, non-zero on failure.
+ */
+BITCOINKERNEL_API int BITCOINKERNEL_WARN_UNUSED_RESULT btck_chainstate_manager_flush(
+    btck_ChainstateManager* chainstate_manager) BITCOINKERNEL_ARG_NONNULL(1);
+
+/**
  * Destroy the chainstate manager.
  */
 BITCOINKERNEL_API void btck_chainstate_manager_destroy(btck_ChainstateManager* chainstate_manager);
