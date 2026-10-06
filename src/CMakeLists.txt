@@ -96,6 +96,7 @@ add_library(bitcoin_kernel STATIC EXCLUDE_FROM_ALL
   deploymentstatus.cpp
   flatfile.cpp
   kernel/blocktreestorage.cpp
+  kernel/coinsstore.cpp
   kernel/chain.cpp
   kernel/chainparams.cpp
   kernel/checks.cpp
