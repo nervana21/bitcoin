@@ -11,6 +11,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 
 class CBlock;
 class Chainstate;
@@ -24,8 +25,9 @@ namespace node {
 class KernelMempool: public kernel::Mempool
 {
 public:
-    KernelMempool(CTxMemPool& mempool)
+    explicit KernelMempool(CTxMemPool& mempool)
         : m_mempool{mempool} {}
+    ~KernelMempool() override;
 
     void removeRecursive(const CTransaction& tx) override;
     std::vector<RemovedMempoolTransactionInfo> removeForBlock(const CBlock& block) override;
@@ -34,12 +36,17 @@ public:
     void check(const CCoinsViewCache& active_coins_tip, int64_t spendheight) override;
     bool empty() override;
     size_t maxSizeBytes() override;
-    kernel::FlushResult<> MaybeUpdateMempoolForReorg(Chainstate& active_chainstate, DisconnectedBlockTransactions& disconnectpool, bool fAddToMempool) override;
+    void ResetDisconnectedTransactions() override;
+    std::vector<CTransactionRef> AddDisconnectedTransactions(const std::vector<CTransactionRef>& vtx) override;
+    void RemoveDisconnectedForBlock(const std::vector<CTransactionRef>& vtx) override;
+    kernel::FlushResult<> MaybeUpdateMempoolForReorg(Chainstate& active_chainstate, bool fAddToMempool) override;
     void BeginChainstateUpdate() override;
     void EndChainstateUpdate() override;
 
 private:
     CTxMemPool& m_mempool;
+    //! Transactions from blocks disconnected during the current reorg. Node-only.
+    std::unique_ptr<DisconnectedBlockTransactions> m_disconnected;
 };
 
 } // namespace node

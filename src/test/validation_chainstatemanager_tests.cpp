@@ -4,7 +4,6 @@
 //
 #include <chainparams.h>
 #include <consensus/validation.h>
-#include <kernel/disconnected_transactions.h>
 #include <node/block_template_manager.h>
 #include <node/chainstatemanager_args.h>
 #include <node/kernel_mempool.h>
@@ -760,12 +759,10 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_snapshot_init, SnapshotTestSetup)
     // it will initialize instead of attempting to complete validation.
     //
     // Note that this is not a realistic use of DisconnectTip().
-    DisconnectedBlockTransactions unused_pool{MAX_DISCONNECTED_TX_POOL_BYTES};
     BlockValidationState unused_state;
     {
         LOCK(::cs_main);
-        BOOST_CHECK(bg_chainstate.DisconnectTip(unused_state, &unused_pool));
-        unused_pool.clear();  // to avoid queuedTx assertion errors on teardown
+        BOOST_CHECK(bg_chainstate.DisconnectTip(unused_state));
     }
     BOOST_CHECK_EQUAL(bg_chainstate.m_chain.Height(), 109);
 

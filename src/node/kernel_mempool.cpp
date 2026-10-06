@@ -15,6 +15,11 @@ class CCoinsViewCache;
 
 namespace node {
 
+KernelMempool::~KernelMempool()
+{
+    if (m_disconnected) m_disconnected->clear();
+}
+
 void KernelMempool::removeRecursive(const CTransaction& tx)
 {
     LOCK(m_mempool.cs);
@@ -53,11 +58,31 @@ size_t KernelMempool::maxSizeBytes()
     return static_cast<size_t>(m_mempool.m_opts.max_size_bytes);
 }
 
-kernel::FlushResult<> KernelMempool::MaybeUpdateMempoolForReorg(Chainstate& active_chainstate, DisconnectedBlockTransactions& disconnectpool, bool fAddToMempool)
+void KernelMempool::ResetDisconnectedTransactions()
 {
+    if (m_disconnected) m_disconnected->clear();
+    m_disconnected = std::make_unique<DisconnectedBlockTransactions>(MAX_DISCONNECTED_TX_POOL_BYTES);
+}
+
+std::vector<CTransactionRef> KernelMempool::AddDisconnectedTransactions(const std::vector<CTransactionRef>& vtx)
+{
+    if (!m_disconnected) ResetDisconnectedTransactions();
+    return m_disconnected->AddTransactionsFromBlock(vtx);
+}
+
+void KernelMempool::RemoveDisconnectedForBlock(const std::vector<CTransactionRef>& vtx)
+{
+    if (!m_disconnected) return;
+    m_disconnected->removeForBlock(vtx);
+}
+
+kernel::FlushResult<> KernelMempool::MaybeUpdateMempoolForReorg(Chainstate& active_chainstate, bool fAddToMempool)
+{
+    if (!m_disconnected) return {};
     LOCK(::cs_main);
     LOCK(m_mempool.cs);
-    return m_mempool.MaybeUpdateMempoolForReorg(active_chainstate, disconnectpool, fAddToMempool);
+    // take() inside CTxMemPool::MaybeUpdateMempoolForReorg empties the queue.
+    return m_mempool.MaybeUpdateMempoolForReorg(active_chainstate, *m_disconnected, fAddToMempool);
 }
 
 void KernelMempool::BeginChainstateUpdate()
