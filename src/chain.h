@@ -17,6 +17,7 @@
 #include <util/time.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cassert>
 #include <cstdint>
 #include <memory>
@@ -86,6 +87,99 @@ enum BlockStatus : uint32_t {
                                       //!< ancestors before they were validated, and unset when they were validated.
 };
 
+/**
+ * Word published to readers that do not hold cs_main.
+ * Loads acquire. Stores and bit updates release via compare-exchange.
+ */
+class BlockStatusWord
+{
+    std::atomic<uint32_t> m_bits{0};
+
+public:
+    BlockStatusWord() noexcept = default;
+    BlockStatusWord(uint32_t bits) noexcept : m_bits{bits} {}
+    BlockStatusWord(const BlockStatusWord& other) noexcept
+        : m_bits{other.m_bits.load(std::memory_order_acquire)} {}
+    BlockStatusWord& operator=(const BlockStatusWord& other) noexcept
+    {
+        return *this = static_cast<uint32_t>(other);
+    }
+    BlockStatusWord(BlockStatusWord&&) = delete;
+    BlockStatusWord& operator=(BlockStatusWord&&) = delete;
+
+    operator uint32_t() const noexcept { return m_bits.load(std::memory_order_acquire); }
+
+    BlockStatusWord& operator=(uint32_t bits) noexcept
+    {
+        m_bits.store(bits, std::memory_order_release);
+        return *this;
+    }
+
+    BlockStatusWord& operator|=(uint32_t bits) noexcept
+    {
+        uint32_t current{m_bits.load(std::memory_order_relaxed)};
+        while (!m_bits.compare_exchange_weak(current, current | bits, std::memory_order_release, std::memory_order_relaxed)) {
+        }
+        return *this;
+    }
+
+    BlockStatusWord& operator&=(uint32_t bits) noexcept
+    {
+        uint32_t current{m_bits.load(std::memory_order_relaxed)};
+        while (!m_bits.compare_exchange_weak(current, current & bits, std::memory_order_release, std::memory_order_relaxed)) {
+        }
+        return *this;
+    }
+
+    template <typename Fn>
+    void Transform(Fn&& fn) noexcept
+    {
+        uint32_t current{m_bits.load(std::memory_order_relaxed)};
+        while (!m_bits.compare_exchange_weak(current, fn(current), std::memory_order_release, std::memory_order_relaxed)) {
+        }
+    }
+
+    friend bool operator==(const BlockStatusWord& a, const BlockStatusWord& b) noexcept
+    {
+        return static_cast<uint32_t>(a) == static_cast<uint32_t>(b);
+    }
+    friend bool operator==(const BlockStatusWord& a, uint32_t b) noexcept { return static_cast<uint32_t>(a) == b; }
+    friend bool operator==(uint32_t a, const BlockStatusWord& b) noexcept { return a == static_cast<uint32_t>(b); }
+};
+
+/** Relaxed word. Published by a later release store on BlockStatusWord. */
+template <typename T>
+class PublishedWord
+{
+    std::atomic<T> m_value{};
+
+public:
+    PublishedWord() noexcept = default;
+    PublishedWord(T value) noexcept : m_value{value} {}
+    PublishedWord(const PublishedWord& other) noexcept
+        : m_value{other.m_value.load(std::memory_order_relaxed)} {}
+    PublishedWord& operator=(const PublishedWord& other) noexcept
+    {
+        return *this = static_cast<T>(other);
+    }
+    PublishedWord(PublishedWord&&) = delete;
+    PublishedWord& operator=(PublishedWord&&) = delete;
+
+    operator T() const noexcept { return m_value.load(std::memory_order_relaxed); }
+    PublishedWord& operator=(T value) noexcept
+    {
+        m_value.store(value, std::memory_order_relaxed);
+        return *this;
+    }
+
+    friend bool operator==(const PublishedWord& a, const PublishedWord& b) noexcept
+    {
+        return static_cast<T>(a) == static_cast<T>(b);
+    }
+    friend bool operator==(const PublishedWord& a, T b) noexcept { return static_cast<T>(a) == b; }
+    friend bool operator==(T a, const PublishedWord& b) noexcept { return a == static_cast<T>(b); }
+};
+
 /** The block chain is a tree shaped structure starting with the
  * genesis block at the root, with each block potentially having multiple
  * candidates to be the next block. A blockindex may have multiple pprev pointing
@@ -106,14 +200,16 @@ public:
     //! height of the entry in the chain. The genesis block has height 0
     int nHeight{0};
 
-    //! Which # file this block is stored in (blk?????.dat)
-    int nFile GUARDED_BY(::cs_main){0};
+    //! Which # file this block is stored in (blk?????.dat).
+    //! Write this, nDataPos, and nUndoPos before releasing the matching nStatus bits.
+    //! Clear the nStatus bits before reusing these positions.
+    PublishedWord<int> nFile{0};
 
     //! Byte offset within blk?????.dat where this block's data is stored
-    unsigned int nDataPos GUARDED_BY(::cs_main){0};
+    PublishedWord<unsigned int> nDataPos{0};
 
     //! Byte offset within rev?????.dat where this block's undo data is stored
-    unsigned int nUndoPos GUARDED_BY(::cs_main){0};
+    PublishedWord<unsigned int> nUndoPos{0};
 
     //! Sentinel for an unset header pos
     static constexpr int64_t UNSET_HEADER_POS{-1};
@@ -135,13 +231,15 @@ public:
     //! VALID_TRANSACTIONS level.
     uint64_t m_chain_tx_count{0};
 
-    //! Verification status of this block. See enum BlockStatus
+    //! Verification status of this block. See enum BlockStatus.
+    //! Readers acquire-load. Writers release-store. File positions are published
+    //! by the BLOCK_HAVE_DATA and BLOCK_HAVE_UNDO bits.
     //!
     //! Note: this value is modified to show BLOCK_OPT_WITNESS during UTXO snapshot
     //! load to avoid a spurious startup failure requiring -reindex.
     //! @sa NeedsRedownload
     //! @sa ActivateSnapshot
-    uint32_t nStatus GUARDED_BY(::cs_main){0};
+    BlockStatusWord nStatus{0};
 
     //! block header
     int32_t nVersion{0};
@@ -167,10 +265,10 @@ public:
     {
     }
 
-    FlatFilePos GetBlockPos() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
+    FlatFilePos GetBlockPos() const
     {
-        AssertLockHeld(::cs_main);
         FlatFilePos ret;
+        // Acquire nStatus first so the position read sees the published values.
         if (nStatus & BLOCK_HAVE_DATA) {
             ret.nFile = nFile;
             ret.nPos = nDataPos;
@@ -178,9 +276,8 @@ public:
         return ret;
     }
 
-    FlatFilePos GetUndoPos() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
+    FlatFilePos GetUndoPos() const
     {
-        AssertLockHeld(::cs_main);
         FlatFilePos ret;
         if (nStatus & BLOCK_HAVE_UNDO) {
             ret.nFile = nFile;
@@ -255,28 +352,30 @@ public:
 
     //! Check whether this block index entry is valid up to the passed validity level.
     bool IsValid(enum BlockStatus nUpTo) const
-        EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
     {
-        AssertLockHeld(::cs_main);
         assert(!(nUpTo & ~BLOCK_VALID_MASK)); // Only validity flags allowed.
-        if (nStatus & BLOCK_FAILED_VALID)
+        const uint32_t status{nStatus};
+        if (status & BLOCK_FAILED_VALID) {
             return false;
-        return ((nStatus & BLOCK_VALID_MASK) >= nUpTo);
+        }
+        return (status & BLOCK_VALID_MASK) >= nUpTo;
     }
 
     //! Raise the validity level of this block index entry.
     //! Returns true if the validity was changed.
-    bool RaiseValidity(enum BlockStatus nUpTo) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
+    //! Other status bits are left in place. BLOCK_FAILED_VALID blocks a raise.
+    bool RaiseValidity(enum BlockStatus nUpTo)
     {
-        AssertLockHeld(::cs_main);
         assert(!(nUpTo & ~BLOCK_VALID_MASK)); // Only validity flags allowed.
-        if (nStatus & BLOCK_FAILED_VALID) return false;
-
-        if ((nStatus & BLOCK_VALID_MASK) < nUpTo) {
-            nStatus = (nStatus & ~BLOCK_VALID_MASK) | nUpTo;
-            return true;
-        }
-        return false;
+        bool raised{false};
+        nStatus.Transform([&](uint32_t status) {
+            raised = false;
+            if (status & BLOCK_FAILED_VALID) return status;
+            if ((status & BLOCK_VALID_MASK) >= nUpTo) return status;
+            raised = true;
+            return (status & ~BLOCK_VALID_MASK) | static_cast<uint32_t>(nUpTo);
+        });
+        return raised;
     }
 
     //! Build the skiplist pointer for this entry.
@@ -351,11 +450,25 @@ public:
         READWRITE(VARINT_MODE(_nVersion, VarIntMode::NONNEGATIVE_SIGNED));
 
         READWRITE(VARINT_MODE(obj.nHeight, VarIntMode::NONNEGATIVE_SIGNED));
-        READWRITE(VARINT(obj.nStatus));
+        uint32_t nStatus{obj.nStatus};
+        READWRITE(VARINT(nStatus));
+        SER_READ(obj, obj.nStatus = nStatus);
         READWRITE(VARINT(obj.nTx));
-        if (obj.nStatus & (BLOCK_HAVE_DATA | BLOCK_HAVE_UNDO)) READWRITE(VARINT_MODE(obj.nFile, VarIntMode::NONNEGATIVE_SIGNED));
-        if (obj.nStatus & BLOCK_HAVE_DATA) READWRITE(VARINT(obj.nDataPos));
-        if (obj.nStatus & BLOCK_HAVE_UNDO) READWRITE(VARINT(obj.nUndoPos));
+        if (nStatus & (BLOCK_HAVE_DATA | BLOCK_HAVE_UNDO)) {
+            int nFile{obj.nFile};
+            READWRITE(VARINT_MODE(nFile, VarIntMode::NONNEGATIVE_SIGNED));
+            SER_READ(obj, obj.nFile = nFile);
+        }
+        if (nStatus & BLOCK_HAVE_DATA) {
+            unsigned int nDataPos{obj.nDataPos};
+            READWRITE(VARINT(nDataPos));
+            SER_READ(obj, obj.nDataPos = nDataPos);
+        }
+        if (nStatus & BLOCK_HAVE_UNDO) {
+            unsigned int nUndoPos{obj.nUndoPos};
+            READWRITE(VARINT(nUndoPos));
+            SER_READ(obj, obj.nUndoPos = nUndoPos);
+        }
 
         // block header
         READWRITE(obj.nVersion);
@@ -395,7 +508,15 @@ struct DiskBlockIndexWrapper : CDiskBlockIndex {
     SERIALIZE_METHODS(DiskBlockIndexWrapper, obj)
     {
         LOCK(::cs_main);
-        READWRITE(obj.nHeight, obj.nStatus, obj.nTx, obj.nFile, obj.nDataPos, obj.nUndoPos);
+        uint32_t nStatus{obj.nStatus};
+        int nFile{obj.nFile};
+        unsigned int nDataPos{obj.nDataPos};
+        unsigned int nUndoPos{obj.nUndoPos};
+        READWRITE(obj.nHeight, nStatus, obj.nTx, nFile, nDataPos, nUndoPos);
+        SER_READ(obj, obj.nStatus = nStatus);
+        SER_READ(obj, obj.nFile = nFile);
+        SER_READ(obj, obj.nDataPos = nDataPos);
+        SER_READ(obj, obj.nUndoPos = nUndoPos);
         // block header
         READWRITE(obj.nVersion, obj.hashPrev, obj.hashMerkleRoot, obj.nTime, obj.nBits, obj.nNonce);
     }
@@ -477,7 +598,7 @@ public:
     }
 
     /** Check whether this chain's tip exists, has enough work, and is recent. */
-    bool IsTipRecent(const arith_uint256& min_chain_work, std::chrono::seconds max_tip_age, NodeClock::time_point now) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main, !m_mutex)
+    bool IsTipRecent(const arith_uint256& min_chain_work, std::chrono::seconds max_tip_age, NodeClock::time_point now) const EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
     {
         const auto tip{Tip()};
         // Use seconds precision: if max_tip_age is very large (e.g. INT64_MAX),
