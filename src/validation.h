@@ -1221,6 +1221,7 @@ public:
     [[nodiscard]] bool CheckTxAtTip(const CTransaction& tx, TxValidationState& state)
         EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
+
     //! Load the block tree and coins database from disk, initializing state if we're running with -reindex
     [[nodiscard]] util::Result<kernel::InterruptResult, kernel::AbortFailure> LoadBlockIndex() EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
