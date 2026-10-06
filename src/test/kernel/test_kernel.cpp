@@ -1255,6 +1255,7 @@ BOOST_AUTO_TEST_CASE(btck_check_block_context_free)
 
     BOOST_CHECK(block.Check(consensus_params, BlockCheckFlags::ALL, state));
     BOOST_CHECK(state.GetValidationMode() == ValidationMode::VALID);
+    BOOST_CHECK(state.GetRejectReason().empty());
 
     auto bad_merkle_block_data = raw_block;
     bad_merkle_block_data[MERKLE_ROOT_OFFSET] ^= std::byte{0x01};
@@ -1263,6 +1264,7 @@ BOOST_AUTO_TEST_CASE(btck_check_block_context_free)
     BOOST_CHECK(!bad_merkle_block.Check(consensus_params, BlockCheckFlags::MERKLE, state));
     BOOST_CHECK(state.GetValidationMode() == ValidationMode::INVALID);
     BOOST_CHECK(state.GetBlockValidationResult() == BlockValidationResult::MUTATED);
+    BOOST_CHECK_EQUAL(state.GetRejectReason(), "bad-txnmrklroot");
 
     BOOST_CHECK(bad_merkle_block.Check(consensus_params, BlockCheckFlags::BASE, state));
     BOOST_CHECK(state.GetValidationMode() == ValidationMode::VALID);
@@ -1691,6 +1693,7 @@ BOOST_AUTO_TEST_CASE(btck_transaction_check_tests)
         BOOST_CHECK(CheckTransaction(tx, st));
         BOOST_CHECK(st.GetValidationMode() == ValidationMode::VALID);
         BOOST_CHECK(st.GetTxValidationResult() == TxValidationResult::UNSET);
+        BOOST_CHECK(st.GetRejectReason().empty());
     };
 
     auto expect_invalid = [](std::string_view hex) {
@@ -1724,6 +1727,7 @@ BOOST_AUTO_TEST_CASE(btck_transaction_check_tests)
         BOOST_CHECK(btck_transaction_check(invalid_tx.get(), state.get()) == 0);
         BOOST_CHECK(state.GetValidationMode() == ValidationMode::INVALID);
         BOOST_CHECK(state.GetTxValidationResult() == TxValidationResult::CONSENSUS);
+        BOOST_CHECK_EQUAL(state.GetRejectReason(), "bad-txns-vout-empty");
     }
 
     // Negative output (BADTX)
