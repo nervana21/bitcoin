@@ -1407,6 +1407,15 @@ int btck_chainstate_manager_flush(btck_ChainstateManager* chainman)
     return 0;
 }
 
+btck_Coin* btck_chainstate_manager_get_coin(const btck_ChainstateManager* chainman, const btck_TransactionOutPoint* out_point)
+{
+    const auto coin{WITH_LOCK(::cs_main, return btck_ChainstateManager::get(chainman).m_chainman->ActiveChainstate().CoinsTip().GetCoin(btck_TransactionOutPoint::get(out_point)))};
+    if (!coin || coin->IsSpent()) {
+        return nullptr;
+    }
+    return btck_Coin::create(coin->out, static_cast<uint32_t>(coin->nHeight), coin->IsCoinBase());
+}
+
 void btck_chainstate_manager_destroy(btck_ChainstateManager* chainman)
 {
     {
