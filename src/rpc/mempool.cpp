@@ -396,7 +396,6 @@ static RPCMethod testmempoolaccept()
             ChainstateManager& chainman = EnsureChainman(node);
             Chainstate& chainstate = chainman.ActiveChainstate();
             const PackageMempoolAcceptResult package_result = [&] {
-            const PackageMempoolAcceptResult package_result = [&] {
                 if (txns.size() > 1) {
                     auto [mempool_accept, flush_result]{ProcessNewPackage(chainstate, mempool, txns, /*test_accept=*/true, /*client_maxfeerate=*/{})};
                     Assert(flush_result);
