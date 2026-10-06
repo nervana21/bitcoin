@@ -3750,7 +3750,12 @@ void PeerManagerImpl::ProcessCompactBlockTxns(CNode& pfrom, Peer& peer, const Bl
         }
 
         // We should not have gotten this far in compact block processing unless it's attached to a known header
-        const CBlockIndex* prev_block{Assume(m_chainman.m_blockman.LookupBlockIndex(partialBlock.header.hashPrevBlock))};
+        const CBlockIndex* prev_block{nullptr};
+        {
+            LOCK(cs_main);
+            prev_block = m_chainman.m_blockman.LookupBlockIndex(partialBlock.header.hashPrevBlock);
+        }
+        Assume(prev_block);
         ReadStatus status = partialBlock.FillBlock(*pblock, block_transactions.txn,
                                                    /*segwit_active=*/DeploymentActiveAfter(prev_block, m_chainman.GetConsensus(), m_chainman.m_versionbitscache, Consensus::DEPLOYMENT_SEGWIT));
         if (status == READ_STATUS_INVALID) {
