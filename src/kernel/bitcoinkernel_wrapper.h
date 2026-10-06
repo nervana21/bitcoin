@@ -1452,6 +1452,11 @@ public:
         return BlockValidationState{state};
     }
 
+    bool CheckTx(const Transaction& tx, TxValidationState& state)
+    {
+        return btck_chainstate_manager_check_tx(get(), tx.get(), state.get()) == 1;
+    }
+
     ChainView GetChain() const
     {
         return ChainView{btck_chainstate_manager_get_active_chain(get())};

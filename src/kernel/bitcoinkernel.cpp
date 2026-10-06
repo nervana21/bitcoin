@@ -1435,6 +1435,16 @@ int btck_chainstate_manager_process_block(
     return result ? 0 : -1;
 }
 
+int btck_chainstate_manager_check_tx(
+    btck_ChainstateManager* chainman,
+    const btck_Transaction* tx,
+    btck_TxValidationState* validation_state)
+{
+    auto& state = btck_TxValidationState::get(validation_state);
+    const bool ok{WITH_LOCK(::cs_main, return btck_ChainstateManager::get(chainman).m_chainman->CheckTxAgainstTip(*btck_Transaction::get(tx), state))};
+    return ok ? 1 : 0;
+}
+
 btck_BlockValidationState* btck_chainstate_manager_process_block_header(
     btck_ChainstateManager* chainstate_manager,
     const btck_BlockHeader* header)

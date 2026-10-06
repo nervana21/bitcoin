@@ -1366,6 +1366,26 @@ BITCOINKERNEL_API int BITCOINKERNEL_WARN_UNUSED_RESULT btck_chainstate_manager_p
     int* new_block) BITCOINKERNEL_ARG_NONNULL(1, 2, 3);
 
 /**
+ * @brief Check one transaction against the active chainstate tip.
+ *
+ * Runs the consensus checks a non-coinbase transaction must pass to be mined
+ * on top of the current tip. Context-free structure, finality, input
+ * availability, BIP68 sequence locks, input amounts, and input scripts. Does
+ * not submit the transaction to a mempool and does not update the UTXO set.
+ * Script flags are the flags of the current tip.
+ *
+ * @param[in] chainstate_manager Non-null.
+ * @param[in] tx                 Non-null.
+ * @param[in,out] validation_state Non-null. Overwritten in place.
+ * @return                       1 if the transaction is consensus-valid for
+ *                               the next block, 0 if it is not.
+ */
+BITCOINKERNEL_API int BITCOINKERNEL_WARN_UNUSED_RESULT btck_chainstate_manager_check_tx(
+    btck_ChainstateManager* chainstate_manager,
+    const btck_Transaction* tx,
+    btck_TxValidationState* validation_state) BITCOINKERNEL_ARG_NONNULL(1, 2, 3);
+
+/**
  * @brief Returns the best known currently active chain. Its lifetime is
  * dependent on the chainstate manager. It can be thought of as a view on a
  * vector of block tree entries that form the best chain. The returned chain
