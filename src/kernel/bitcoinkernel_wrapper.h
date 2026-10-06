@@ -1554,6 +1554,13 @@ public:
         return btck_chainstate_manager_flush(get()) == 0;
     }
 
+    std::optional<Coin> GetCoin(const OutPointView& out_point) const
+    {
+        btck_Coin* coin{btck_chainstate_manager_get_coin(get(), out_point.get())};
+        if (!coin) return std::nullopt;
+        return Coin{coin};
+    }
+
     BlockValidationState ProcessBlockHeader(const BlockHeader& header)
     {
         auto state = btck_chainstate_manager_process_block_header(get(), header.get());

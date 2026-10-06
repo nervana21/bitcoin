@@ -1555,6 +1555,20 @@ BITCOINKERNEL_API int BITCOINKERNEL_WARN_UNUSED_RESULT btck_chainstate_manager_f
     btck_ChainstateManager* chainstate_manager) BITCOINKERNEL_ARG_NONNULL(1);
 
 /**
+ * @brief Look up a coin in the active chainstate.
+ *
+ * The returned coin is an owned copy. The caller destroys it with btck_coin_destroy.
+ * A missing outpoint returns null.
+ *
+ * @param[in] chainstate_manager Non-null.
+ * @param[in] out_point          Non-null.
+ * @return                       The coin, or null if the outpoint is not in the UTXO set.
+ */
+BITCOINKERNEL_API btck_Coin* BITCOINKERNEL_WARN_UNUSED_RESULT btck_chainstate_manager_get_coin(
+    const btck_ChainstateManager* chainstate_manager,
+    const btck_TransactionOutPoint* out_point) BITCOINKERNEL_ARG_NONNULL(1, 2);
+
+/**
  * Destroy the chainstate manager.
  */
 BITCOINKERNEL_API void btck_chainstate_manager_destroy(btck_ChainstateManager* chainstate_manager);
