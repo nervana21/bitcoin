@@ -2613,7 +2613,6 @@ arith_uint256 CalculateClaimedHeadersWork(std::span<const CBlockHeader> headers)
 bool ContextualCheckBlockHeader(
         const CBlockHeader& block,
         BlockValidationState& state,
-        BlockManager& blockman,
         const Consensus::Params& consensusParams,
         VersionBitsCache& versionbitscache,
         const CBlockIndex* pindexPrev,
@@ -2754,7 +2753,7 @@ bool ChainstateManager::AcceptBlockHeader(const CBlockHeader& block, BlockValida
             LogDebug(m_log, "header %s has prev block invalid: %s\n", hash.ToString(), block.hashPrevBlock.ToString());
             return state.Invalid(BlockValidationResult::BLOCK_INVALID_PREV, "bad-prevblk");
         }
-        if (!ContextualCheckBlockHeader(block, state, m_blockman, GetConsensus(), m_versionbitscache, pindexPrev, Now())) {
+        if (!ContextualCheckBlockHeader(block, state, GetConsensus(), m_versionbitscache, pindexPrev, Now())) {
             LogDebug(m_log, "%s: Consensus::ContextualCheckBlockHeader: %s, %s\n", __func__, hash.ToString(), state.ToString());
             return false;
         }
@@ -3116,7 +3115,7 @@ FlushResult<void, BlockValidationState> TestBlockValidity(
      * - do run ContextualCheckBlock()
      */
 
-    if (!ContextualCheckBlockHeader(block, state, chainstate.m_blockman, chainstate.m_chainparams.GetConsensus(), chainstate.m_versionbitscache, tip, chainstate.m_chainman.Now())) {
+    if (!ContextualCheckBlockHeader(block, state, chainstate.m_chainparams.GetConsensus(), chainstate.m_versionbitscache, tip, chainstate.m_chainman.Now())) {
         if (state.IsValid()) NONFATAL_UNREACHABLE();
         result.update({util::Error{}, std::move(state)});
         return result;
