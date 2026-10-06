@@ -103,7 +103,6 @@ add_library(bitcoin_kernel STATIC EXCLUDE_FROM_ALL
   kernel/coinstats.cpp
   kernel/context.cpp
   kernel/cs_main.cpp
-  kernel/disconnected_transactions.cpp
   node/blockstorage.cpp
   node/chainstate.cpp
   node/utxo_snapshot.cpp
@@ -300,6 +299,7 @@ add_library(bitcoin_node STATIC EXCLUDE_FROM_ALL
   txgraph.cpp
   txmempool.cpp
   txrequest.cpp
+  kernel/disconnected_transactions.cpp
   $<$<TARGET_EXISTS:bitcoin_wallet>:wallet/init.cpp>
   $<$<NOT:$<TARGET_EXISTS:bitcoin_wallet>>:dummywallet.cpp>
 )
