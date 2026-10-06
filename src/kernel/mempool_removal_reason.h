@@ -5,6 +5,7 @@
 #ifndef BITCOIN_KERNEL_MEMPOOL_REMOVAL_REASON_H
 #define BITCOIN_KERNEL_MEMPOOL_REMOVAL_REASON_H
 
+#include <cassert>
 #include <string>
 
 /** Reason why a transaction was removed from the mempool,
@@ -19,6 +20,17 @@ enum class MemPoolRemovalReason {
     REPLACED,    //!< Removed for replacement
 };
 
-std::string RemovalReasonToString(const MemPoolRemovalReason& r) noexcept;
+inline std::string RemovalReasonToString(const MemPoolRemovalReason& r) noexcept
+{
+    switch (r) {
+        case MemPoolRemovalReason::EXPIRY: return "expiry";
+        case MemPoolRemovalReason::SIZELIMIT: return "sizelimit";
+        case MemPoolRemovalReason::REORG: return "reorg";
+        case MemPoolRemovalReason::BLOCK: return "block";
+        case MemPoolRemovalReason::CONFLICT: return "conflict";
+        case MemPoolRemovalReason::REPLACED: return "replaced";
+    }
+    assert(false);
+}
 
 #endif // BITCOIN_KERNEL_MEMPOOL_REMOVAL_REASON_H
