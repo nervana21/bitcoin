@@ -3177,6 +3177,7 @@ BlockValidationState ChainstateManager::ValidateBlock(
         return state;
     }
 
+
     if (!CheckBlock(block, state, GetConsensus(), /*fCheckPOW=*/true, /*fCheckMerkleRoot=*/true)) {
         if (state.IsValid()) NONFATAL_UNREACHABLE();
         return state;
