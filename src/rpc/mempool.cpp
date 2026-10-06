@@ -398,11 +398,11 @@ static RPCMethod testmempoolaccept()
             const PackageMempoolAcceptResult package_result = [&] {
                 if (txns.size() > 1) {
                     auto [mempool_accept, flush_result]{ProcessNewPackage(chainstate, mempool, txns, /*test_accept=*/true, /*client_maxfeerate=*/{})};
-                    Assert(flush_result);
+                    CHECK_NONFATAL(flush_result);
                     return mempool_accept;
                 }
                 auto [mempool_accept, flush_result]{ProcessTransaction(txns[0], node, /*test_accept=*/true)};
-                Assert(flush_result);
+                CHECK_NONFATAL(flush_result);
                 return PackageMempoolAcceptResult(txns[0]->GetWitnessHash(), mempool_accept);
             }();
 
@@ -1481,7 +1481,7 @@ static RPCMethod submitpackage()
             CTxMemPool& mempool = EnsureMemPool(node);
             Chainstate& chainstate = EnsureChainman(node).ActiveChainstate();
             auto [package_result, flush_result]{ProcessNewPackage(chainstate, mempool, txns, /*test_accept=*/ false, client_maxfeerate)};
-            Assert(flush_result);
+            CHECK_NONFATAL(flush_result);
 
             std::string package_msg = "success";
 
