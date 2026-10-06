@@ -20,6 +20,7 @@
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
 #include <test/util/time.h>
+#include <txmempool.h>
 #include <util/string.h>
 #include <util/time.h>
 #include <validation.h>
