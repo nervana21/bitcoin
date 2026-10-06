@@ -21,7 +21,9 @@
 #include <flatfile.h>
 #include <hash.h>
 #include <kernel/chainparams.h>
+#include <kernel/coinsstore.h>
 #include <kernel/coinstats.h>
+#include <kernel/legacy_leveldb.h>
 #include <kernel/mempool_entry.h>
 #include <kernel/messagestartchars.h>
 #include <kernel/notifications_interface.h>
@@ -4316,9 +4318,20 @@ Chainstate& ChainstateManager::InitializeChainstate()
 
     LogInfo(log, "Removing coins directory at %s\n", fs::PathToString(db_path));
 
+    // New format coins store. Remove named files only.
+    kernel::CoinsStore::RemoveFiles(db_path);
+
+    // Leftover LevelDB coins from a pre-migration datadir.
+    if (fs::exists(db_path / "CURRENT")) {
+        if (!kernel::RemoveLegacyLevelDBFiles(db_path)) {
+            LogError(log, "Failed to remove legacy leveldb coins directory at %s", fs::PathToString(db_path));
+            return false;
+        }
+    }
+
     std::error_code ec;
-    fs::remove_all(db_path, ec);
-    if (ec) {
+    fs::remove(db_path, ec);
+    if (ec && ec != std::errc::no_such_file_or_directory) {
         LogError(log, "Failed to remove coins directory at %s", fs::PathToString(db_path));
         return false;
     }
