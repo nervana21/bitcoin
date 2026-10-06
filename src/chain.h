@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -400,45 +401,68 @@ struct DiskBlockIndexWrapper : CDiskBlockIndex {
     }
 };
 
-/** An in-memory indexed chain of blocks. */
+/** An in-memory indexed chain of blocks.
+ *
+ * Copies share the block list until a write. A copy is a snapshot: later
+ * SetTip calls on the original do not change the copy. Readers copy the
+ * chain, then walk the snapshot without holding the writer lock.
+ */
 class CChain
 {
 private:
-    std::vector<CBlockIndex*> vChain;
+    mutable Mutex m_mutex;
+    //! Published block list. Replaced, not edited, on SetTip.
+    std::shared_ptr<const std::vector<CBlockIndex*>> m_blocks{std::make_shared<const std::vector<CBlockIndex*>>()};
+
+    std::shared_ptr<const std::vector<CBlockIndex*>> Load() const EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
+    {
+        LOCK(m_mutex);
+        return m_blocks;
+    }
 
 public:
     CChain() = default;
-    CChain(const CChain&) = delete;
-    CChain& operator=(const CChain&) = delete;
+    CChain(const CChain& other) EXCLUSIVE_LOCKS_REQUIRED(!other.m_mutex) : m_blocks{other.Load()} {}
+    CChain& operator=(const CChain& other) EXCLUSIVE_LOCKS_REQUIRED(!m_mutex, !other.m_mutex)
+    {
+        if (this == &other) return *this;
+        auto blocks{other.Load()};
+        LOCK(m_mutex);
+        m_blocks = std::move(blocks);
+        return *this;
+    }
 
     /** Returns the index entry for the genesis block of this chain, or nullptr if none. */
-    CBlockIndex* Genesis() const
+    CBlockIndex* Genesis() const EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
     {
-        return vChain.size() > 0 ? vChain[0] : nullptr;
+        const auto blocks{Load()};
+        return blocks->empty() ? nullptr : blocks->front();
     }
 
     /** Returns the index entry for the tip of this chain, or nullptr if none. */
-    CBlockIndex* Tip() const
+    CBlockIndex* Tip() const EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
     {
-        return vChain.size() > 0 ? vChain[vChain.size() - 1] : nullptr;
+        const auto blocks{Load()};
+        return blocks->empty() ? nullptr : blocks->back();
     }
 
     /** Returns the index entry at a particular height in this chain, or nullptr if no such height exists. */
-    CBlockIndex* operator[](int nHeight) const
+    CBlockIndex* operator[](int nHeight) const EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
     {
-        if (nHeight < 0 || nHeight >= (int)vChain.size())
+        const auto blocks{Load()};
+        if (nHeight < 0 || nHeight >= (int)blocks->size())
             return nullptr;
-        return vChain[nHeight];
+        return (*blocks)[nHeight];
     }
 
     /** Efficiently check whether a block is present in this chain. */
-    bool Contains(const CBlockIndex& index) const
+    bool Contains(const CBlockIndex& index) const EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
     {
         return (*this)[index.nHeight] == &index;
     }
 
     /** Find the successor of a block in this chain, or nullptr if the given index is not found or is the tip. */
-    CBlockIndex* Next(const CBlockIndex& index) const
+    CBlockIndex* Next(const CBlockIndex& index) const EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
     {
         if (Contains(index))
             return (*this)[index.nHeight + 1];
@@ -447,13 +471,13 @@ public:
     }
 
     /** Return the maximal height in the chain. Is equal to chain.Tip() ? chain.Tip()->nHeight : -1. */
-    int Height() const
+    int Height() const EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
     {
-        return int(vChain.size()) - 1;
+        return int(Load()->size()) - 1;
     }
 
     /** Check whether this chain's tip exists, has enough work, and is recent. */
-    bool IsTipRecent(const arith_uint256& min_chain_work, std::chrono::seconds max_tip_age, NodeClock::time_point now) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
+    bool IsTipRecent(const arith_uint256& min_chain_work, std::chrono::seconds max_tip_age, NodeClock::time_point now) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main, !m_mutex)
     {
         const auto tip{Tip()};
         // Use seconds precision: if max_tip_age is very large (e.g. INT64_MAX),
@@ -464,13 +488,13 @@ public:
     }
 
     /** Set/initialize a chain with a given tip. */
-    void SetTip(CBlockIndex& block);
+    void SetTip(CBlockIndex& block) EXCLUSIVE_LOCKS_REQUIRED(!m_mutex);
 
     /** Find the last common block between this chain and a block index entry. */
-    const CBlockIndex* FindFork(const CBlockIndex& index) const;
+    const CBlockIndex* FindFork(const CBlockIndex& index) const EXCLUSIVE_LOCKS_REQUIRED(!m_mutex);
 
     /** Find the earliest block with timestamp equal or greater than the given time and height equal or greater than the given height. */
-    CBlockIndex* FindEarliestAtLeast(int64_t nTime, int height) const;
+    CBlockIndex* FindEarliestAtLeast(int64_t nTime, int height) const EXCLUSIVE_LOCKS_REQUIRED(!m_mutex);
 };
 
 /** Get a locator for a block index entry. */
