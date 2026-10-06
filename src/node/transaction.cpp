@@ -33,7 +33,7 @@ std::tuple<MempoolAcceptResult, kernel::FlushResult<void, kernel::AbortFailure>>
     if (!node.mempool) {
         TxValidationState state;
         state.Invalid(TxValidationResult::TX_NO_MEMPOOL, "no-mempool");
-        return {MempoolAcceptResult::Failure(state), {}};
+        return {MempoolAcceptResult::Failure(state), kernel::FlushResult<void, kernel::AbortFailure>{}};
     }
     return ProcessTransaction(tx, active_chainstate, *node.mempool, test_accept);
 }
