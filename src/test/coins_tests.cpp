@@ -1044,25 +1044,19 @@ BOOST_FIXTURE_TEST_CASE(ccoins_flush_behavior, FlushTest)
     }
 }
 
-BOOST_FIXTURE_TEST_CASE(coins_db_leveldb_layout, FlushTest)
+BOOST_FIXTURE_TEST_CASE(coins_db_flush_readback, FlushTest)
 {
-    auto level2_files{[](CCoinsViewDB& base) {
-        return *Assert(ToIntegral<int>(*Assert(base.GetDBProperty("leveldb.num-files-at-level2"))));
-    }};
+    // CoinsStore replaced LevelDB. Keep durable flush/readback coverage only.
     const COutPoint outpoint{Txid::FromUint256(m_rng.rand256()), 0};
     const Coin coin{MakeCoin()};
     const uint256 block_hash{m_rng.rand256()};
 
-    CCoinsViewDB base{m_logger, {.path = m_args.GetDataDirBase() / "coins_db_leveldb_layout", .cache_bytes = 1_MiB, .wipe_data = true}, {}};
+    CCoinsViewDB base{m_logger, {.path = m_args.GetDataDirBase() / "coins_db_flush_readback", .cache_bytes = 1_MiB, .wipe_data = true}, {}};
     CCoinsViewCache cache{&base};
 
     cache.EmplaceCoinInternalDANGER(COutPoint{outpoint}, Coin{coin});
     cache.SetBestBlock(block_hash);
     cache.Sync();
-
-    BOOST_CHECK_EQUAL(level2_files(base), 0);
-    WITH_LOCK(::cs_main, return base.CompactFullAsync()).wait();
-    BOOST_CHECK_EQUAL(level2_files(base), 1);
 
     BOOST_CHECK_EQUAL(*Assert(base.GetCoin(outpoint)), coin);
     BOOST_CHECK_EQUAL(base.GetBestBlock(), block_hash);
