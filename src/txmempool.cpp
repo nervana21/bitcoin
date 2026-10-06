@@ -1167,7 +1167,7 @@ static void LimitMempoolSize(CTxMemPool& pool, CCoinsViewCache& coins_cache)
 {
     AssertLockHeld(::cs_main);
     AssertLockHeld(pool.cs);
-    int expired = pool.Expire(GetTime<std::chrono::seconds>() - pool.m_opts.expiry);
+    int expired = pool.Expire(pool.Now() - pool.m_opts.expiry);
     if (expired != 0) {
         LogDebug(pool.m_log, "Expired %i transactions from the memory pool\n", expired);
     }
@@ -1826,7 +1826,7 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
     if (!m_subpackage.m_changeset) {
         m_subpackage.m_changeset = m_pool.GetChangeSet();
     }
-    ws.m_tx_handle = m_subpackage.m_changeset->StageAddition(ptx, ws.m_base_fees, nAcceptTime, m_active_chainstate.m_chain.Height(), entry_sequence, fSpendsCoinbase, nSigOpsCost, lock_points.value());
+    ws.m_tx_handle = m_subpackage.m_changeset->StageAddition(ptx, ws.m_base_fees, MempoolTime{std::chrono::seconds{nAcceptTime}}, m_active_chainstate.m_chain.Height(), entry_sequence, fSpendsCoinbase, nSigOpsCost, lock_points.value());
 
     // ws.m_modified_fees includes any fee deltas from PrioritiseTransaction
     ws.m_modified_fees = ws.m_tx_handle->GetModifiedFee();
@@ -2127,7 +2127,7 @@ void MemPoolAccept::FinalizeSubpackage(const ATMPArgs& args)
                 it->GetTx().GetHash().data(),
                 it->GetTxSize(),
                 it->GetFee(),
-                std::chrono::duration_cast<std::chrono::duration<std::uint64_t>>(it->GetTime()).count(),
+                TicksSinceEpoch<std::chrono::duration<std::uint64_t>>(it->GetTime()),
                 tx_or_package_hash.data(),
                 feerate.size,
                 feerate.fee,
