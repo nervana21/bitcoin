@@ -2163,7 +2163,8 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     {
         LOCK(chainman.GetMutex());
         const auto& tip{*Assert(chainman.ActiveTip())};
-        LogInfo("block tree size = %u", chainman.BlockIndex().size());
+        const auto index_size{WITH_LOCK(chainman.m_blockman.m_index_mutex, return chainman.BlockIndex().size())};
+        LogInfo("block tree size = %u", index_size);
         chain_active_height = tip.nHeight;
         best_block_time = tip.GetBlockTime();
         if (tip_info) {
@@ -2171,9 +2172,11 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
             tip_info->block_time = best_block_time;
             tip_info->verification_progress = chainman.GuessVerificationProgress(&tip);
         }
-        if (tip_info && chainman.m_blockman.m_best_header) {
-            tip_info->header_height = chainman.m_blockman.m_best_header->nHeight;
-            tip_info->header_time = chainman.m_blockman.m_best_header->GetBlockTime();
+        if (const CBlockIndex* best_header{chainman.m_blockman.BestHeader()}) {
+            if (tip_info) {
+                tip_info->header_height = best_header->nHeight;
+                tip_info->header_time = best_header->GetBlockTime();
+            }
         }
     }
     LogInfo("nBestHeight = %d", chain_active_height);

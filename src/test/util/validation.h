@@ -34,7 +34,7 @@ public:
 
 struct TestBlockManager : public node::BlockManager {
     /** Test-only method to clear internal state for fuzzing */
-    void CleanupForFuzzing();
+    void CleanupForFuzzing() NO_THREAD_SAFETY_ANALYSIS;
 };
 
 struct TestChainstateManager : public ChainstateManager {

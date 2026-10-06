@@ -137,16 +137,19 @@ BOOST_FIXTURE_TEST_CASE(index_unclean_shutdown, TestChain100Setup)
 
                 new_block = std::make_shared<CBlock>(block);
 
-                UniqueLock lock{cs_main};
                 BlockValidationState state;
-                BOOST_CHECK(CheckBlock(block, state, params.GetConsensus()));
-                lock.unlock();
+                {
+                    LOCK(cs_main);
+                    BOOST_CHECK(CheckBlock(block, state, params.GetConsensus()));
+                }
                 FlushResult<void, AbortFailure> accept_result;
                 BOOST_CHECK(m_node.chainman->AcceptBlock(new_block, state, accept_result, &new_block_index, true, nullptr, nullptr, true));
                 BOOST_CHECK(accept_result);
-                lock.lock();
-                CCoinsViewCache view(&chainstate.CoinsTip());
-                BOOST_CHECK(chainstate.ConnectBlock(block, state, new_block_index, view));
+                {
+                    LOCK(cs_main);
+                    CCoinsViewCache view(&chainstate.CoinsTip());
+                    BOOST_CHECK(chainstate.ConnectBlock(block, state, new_block_index, view));
+                }
             }
             // Send block connected notification, then stop the index without
             // sending a chainstate flushed notification. Prior to #24138, this
