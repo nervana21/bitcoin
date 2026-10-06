@@ -125,8 +125,6 @@ TRACEPOINT_SEMAPHORE(utxocache, flush);
 
 const CBlockIndex* Chainstate::FindForkInGlobalIndex(const CBlockLocator& locator) const
 {
-    AssertLockHeld(cs_main);
-
     // Find the latest block common to locator and chain - we expect that
     // locator.vHave is sorted descending by height.
     for (const uint256& hash : locator.vHave) {
@@ -327,16 +325,20 @@ fs::path Chainstate::StoragePath() const
 const CBlockIndex* Chainstate::SnapshotBase() const
 {
     if (!m_from_snapshot_blockhash) return nullptr;
-    if (!m_cached_snapshot_base) m_cached_snapshot_base = Assert(m_blockman.LookupBlockIndex(*m_from_snapshot_blockhash));
-    return m_cached_snapshot_base;
+    if (const CBlockIndex* cached{m_cached_snapshot_base.load(std::memory_order_acquire)}) return cached;
+    const CBlockIndex* found{Assert(m_blockman.LookupBlockIndex(*m_from_snapshot_blockhash))};
+    m_cached_snapshot_base.store(found, std::memory_order_release);
+    return found;
 }
 
 const CBlockIndex* Chainstate::TargetBlock() const
 {
     AssertLockHeld(::cs_main);
+    if (const CBlockIndex* cached{m_cached_target_block.load(std::memory_order_acquire)}) return cached;
     if (!m_target_blockhash) return nullptr;
-    if (!m_cached_target_block) m_cached_target_block = Assert(m_blockman.LookupBlockIndex(*m_target_blockhash));
-    return m_cached_target_block;
+    const CBlockIndex* found{Assert(m_blockman.LookupBlockIndex(*m_target_blockhash))};
+    m_cached_target_block.store(found, std::memory_order_release);
+    return found;
 }
 
 void Chainstate::SetTargetBlock(CBlockIndex* block)
@@ -347,14 +349,14 @@ void Chainstate::SetTargetBlock(CBlockIndex* block)
     } else {
         m_target_blockhash.reset();
     }
-    m_cached_target_block = block;
+    m_cached_target_block.store(block, std::memory_order_release);
 }
 
 void Chainstate::SetTargetBlockHash(uint256 block_hash)
 {
     AssertLockHeld(::cs_main);
     m_target_blockhash = block_hash;
-    m_cached_target_block = nullptr;
+    m_cached_target_block.store(nullptr, std::memory_order_release);
 }
 
 void Chainstate::InitCoinsDB(
@@ -3624,6 +3626,7 @@ util::Result<InterruptResult, AbortFailure> ChainstateManager::LoadBlockIndex()
             }
         }
     }
+    PublishActiveChainstate();
     return result;
 }
 
@@ -4287,6 +4290,7 @@ Chainstate& ChainstateManager::InitializeChainstate()
     AssertLockHeld(::cs_main);
     assert(m_chainstates.empty());
     m_chainstates.emplace_back(std::make_unique<Chainstate>(m_blockman, *this));
+    PublishActiveChainstate();
     return *m_chainstates.back();
 }
 
@@ -4762,6 +4766,7 @@ SnapshotCompletionResult ChainstateManager::MaybeValidateSnapshot(Chainstate& va
         validated_cs.SetTargetBlock(nullptr);
 
         unvalidated_cs.m_assumeutxo = Assumeutxo::INVALID;
+        PublishActiveChainstate();
 
         auto rename_result = unvalidated_cs.InvalidateCoinsDBOnDisk();
         if (!rename_result) {
@@ -4828,6 +4833,7 @@ SnapshotCompletionResult ChainstateManager::MaybeValidateSnapshot(Chainstate& va
 
     unvalidated_cs.m_assumeutxo = Assumeutxo::VALIDATED;
     validated_cs.m_target_utxohash = AssumeutxoHash{validated_cs_stats->hashSerialized};
+    PublishActiveChainstate();
     // Propagate flush messages to result, but do not treat a flush failure as a
     // snapshot validation failure.
     this->MaybeRebalanceCaches() >> result;
@@ -4835,8 +4841,31 @@ SnapshotCompletionResult ChainstateManager::MaybeValidateSnapshot(Chainstate& va
     return SnapshotCompletionResult::SUCCESS;
 }
 
+void ChainstateManager::PublishActiveChainstate()
+{
+    AssertLockHeld(::cs_main);
+    if (m_chainstates.empty()) {
+        m_active_chainstate.store(nullptr, std::memory_order_release);
+        m_historical_chainstate.store(nullptr, std::memory_order_release);
+        return;
+    }
+    m_active_chainstate.store(&CurrentChainstate(), std::memory_order_release);
+    Chainstate* historical{HistoricalChainstate()};
+    // Resolve the target index under cs_main once it is present so peer readers
+    // can use the published pointer. Skip until the block index is loaded.
+    if (historical) {
+        if (const auto target_hash{historical->TargetBlockHash()}) {
+            if (historical->m_blockman.LookupBlockIndex(*target_hash)) {
+                historical->TargetBlock();
+            }
+        }
+    }
+    m_historical_chainstate.store(historical, std::memory_order_release);
+}
+
 Chainstate& ChainstateManager::ActiveChainstate() const
 {
+    if (Chainstate* active{m_active_chainstate.load(std::memory_order_acquire)}) return *active;
     LOCK(::cs_main);
     return CurrentChainstate();
 }
@@ -4884,6 +4913,7 @@ FlushResult<> ChainstateManager::MaybeRebalanceCaches()
 void ChainstateManager::ResetChainstates()
 {
     m_chainstates.clear();
+    PublishActiveChainstate();
 }
 
 /**
@@ -4947,6 +4977,7 @@ Chainstate& ChainstateManager::AddChainstate(std::unique_ptr<Chainstate> chainst
     m_chainstates.push_back(std::move(chainstate));
     Chainstate& curr_chainstate{CurrentChainstate()};
     assert(&curr_chainstate == m_chainstates.back().get());
+    PublishActiveChainstate();
     return curr_chainstate;
 }
 
@@ -5139,9 +5170,11 @@ std::pair<int, int> Chainstate::GetPruneRange(int last_height_can_prune) const
 
 std::optional<std::pair<const CBlockIndex*, const CBlockIndex*>> ChainstateManager::GetHistoricalBlockRange() const
 {
-    const Chainstate* chainstate{HistoricalChainstate()};
+    const Chainstate* chainstate{m_historical_chainstate.load(std::memory_order_acquire)};
     if (!chainstate) return {};
-    return std::make_pair(chainstate->m_chain.Tip(), chainstate->TargetBlock());
+    const CBlockIndex* target{chainstate->PublishedTargetBlock()};
+    if (!target) return {};
+    return std::make_pair(chainstate->m_chain.Tip(), target);
 }
 
 util::Result<void> ChainstateManager::ActivateBestChains()

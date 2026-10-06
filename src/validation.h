@@ -433,7 +433,7 @@ protected:
     std::unique_ptr<CoinsViews> m_coins_views;
 
     //! Cached result of LookupBlockIndex(*m_from_snapshot_blockhash)
-    mutable const CBlockIndex* m_cached_snapshot_base GUARDED_BY(::cs_main){nullptr};
+    mutable std::atomic<const CBlockIndex*> m_cached_snapshot_base{nullptr};
 
     //! Target block for this chainstate. If this is not set, chainstate will
     //! target the most-work, valid block. If this is set, ChainstateManager
@@ -442,7 +442,7 @@ protected:
     std::optional<uint256> m_target_blockhash GUARDED_BY(::cs_main);
 
     //! Cached result of LookupBlockIndex(*m_target_blockhash)
-    mutable const CBlockIndex* m_cached_target_block GUARDED_BY(::cs_main){nullptr};
+    mutable std::atomic<const CBlockIndex*> m_cached_target_block{nullptr};
 
     std::optional<const char*> m_last_script_check_reason_logged GUARDED_BY(::cs_main){};
 
@@ -531,7 +531,7 @@ public:
     //! Assumeutxo state indicating whether all blocks in the chain were
     //! validated, or if the chainstate is based on an assumeutxo snapshot and
     //! the snapshot has not been validated.
-    Assumeutxo m_assumeutxo GUARDED_BY(::cs_main);
+    std::atomic<Assumeutxo> m_assumeutxo;
 
     /**
      * The blockhash which is the base of the snapshot this chainstate was created from.
@@ -549,13 +549,19 @@ public:
      *
      * nullptr if this chainstate was not created from a snapshot.
      */
-    const CBlockIndex* SnapshotBase() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    const CBlockIndex* SnapshotBase() const;
 
     //! Return target block which chainstate tip is expected to reach, if this
     //! is a historic chainstate being used to validate a snapshot, or null if
     //! chainstate targets the most-work block. Requires the block index to be
     //! loaded, so prefer TargetBlockHash() when the block itself is not needed.
     const CBlockIndex* TargetBlock() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    //! Published target pointer for peers. Null until SetTargetBlock or a
+    //! TargetBlock() lookup under cs_main has run.
+    const CBlockIndex* PublishedTargetBlock() const
+    {
+        return m_cached_target_block.load(std::memory_order_acquire);
+    }
     //! Return hash of the target block, or nullopt if chainstate targets the
     //! most-work block. Unlike TargetBlock(), does not require the block index
     //! to be loaded.
@@ -713,7 +719,7 @@ public:
     void PopulateBlockIndexCandidates() EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
     /** Find the last common block of this chain and a locator. */
-    const CBlockIndex* FindForkInGlobalIndex(const CBlockLocator& locator) const EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    const CBlockIndex* FindForkInGlobalIndex(const CBlockLocator& locator) const;
 
     /** Update the chain tip based on database information, i.e. CoinsTip()'s best block. */
     bool LoadChainTip() EXCLUSIVE_LOCKS_REQUIRED(cs_main);
@@ -1047,6 +1053,7 @@ public:
         if (it != m_chainstates.end()) {
             auto ret{std::move(*it)};
             m_chainstates.erase(it);
+            PublishActiveChainstate();
             return ret;
         }
         return nullptr;
@@ -1058,9 +1065,11 @@ public:
     //! should use CurrentChainstate() instead.
     //! @{
     Chainstate& ActiveChainstate() const;
-    CChain& ActiveChain() const EXCLUSIVE_LOCKS_REQUIRED(GetMutex()) { return ActiveChainstate().m_chain; }
-    int ActiveHeight() const EXCLUSIVE_LOCKS_REQUIRED(GetMutex()) { return ActiveChain().Height(); }
-    CBlockIndex* ActiveTip() const EXCLUSIVE_LOCKS_REQUIRED(GetMutex()) { return ActiveChain().Tip(); }
+    /** Publish the chainstate CurrentChainstate() would return. Call after the set or its roles change. */
+    void PublishActiveChainstate() EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    CChain& ActiveChain() const { return ActiveChainstate().m_chain; }
+    int ActiveHeight() const { return ActiveChain().Height(); }
+    CBlockIndex* ActiveTip() const { return ActiveChain().Tip(); }
     //! @}
 
     /**
@@ -1263,8 +1272,9 @@ public:
     //! @sa node/chainstate:LoadChainstate()
     [[nodiscard]] util::Result<void, kernel::AbortFailure> ValidatedSnapshotCleanup(Chainstate& validated_cs, Chainstate& unvalidated_cs) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
-    //! Get range of historical blocks to download.
-    std::optional<std::pair<const CBlockIndex*, const CBlockIndex*>> GetHistoricalBlockRange() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    //! Get range of historical blocks to download. Reads the published
+    //! historical chainstate; does not take cs_main.
+    std::optional<std::pair<const CBlockIndex*, const CBlockIndex*>> GetHistoricalBlockRange() const;
 
     //! Call ActivateBestChain() on every chainstate.
     util::Result<void> ActivateBestChains() LOCKS_EXCLUDED(::cs_main);
@@ -1284,6 +1294,10 @@ public:
     //! is not locked at other times when the chainstate is in use.)
     std::vector<std::unique_ptr<Chainstate>> m_chainstates GUARDED_BY(::cs_main);
 
+    /** Chainstate returned by ActiveChainstate(). Published under cs_main, read without it. */
+    mutable std::atomic<Chainstate*> m_active_chainstate{nullptr};
+    /** HistoricalChainstate() result. Published under cs_main, read without it. */
+    mutable std::atomic<Chainstate*> m_historical_chainstate{nullptr};
 };
 
 /** Deployment* info via ChainstateManager */
