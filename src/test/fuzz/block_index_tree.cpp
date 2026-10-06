@@ -200,6 +200,7 @@ FUZZ_TARGET(block_index_tree, .init = initialize_block_index_tree)
     // clean up global state changed by last iteration and prepare for next iteration
     {
         LOCK(cs_main);
+        LOCK(blockman.m_index_mutex);
         genesis->nStatus |= BLOCK_HAVE_DATA;
         genesis->nStatus |= BLOCK_HAVE_UNDO;
         blockman.m_best_header = genesis;

@@ -1457,7 +1457,8 @@ RPCMethod getblockchaininfo()
     UniValue obj(UniValue::VOBJ);
     obj.pushKV("chain", chainman.GetParams().GetChainTypeString());
     obj.pushKV("blocks", height);
-    obj.pushKV("headers", chainman.m_blockman.m_best_header ? chainman.m_blockman.m_best_header->nHeight : -1);
+    const CBlockIndex* best_header{chainman.m_blockman.BestHeader()};
+    obj.pushKV("headers", best_header ? best_header->nHeight : -1);
     obj.pushKV("bestblockhash", tip.GetBlockHash().GetHex());
     obj.pushKV("bits", strprintf("%08x", tip.nBits));
     obj.pushKV("target", GetTarget(tip, chainman.GetConsensus().powLimit).GetHex());
@@ -1641,6 +1642,7 @@ static RPCMethod getchaintips()
 {
     ChainstateManager& chainman = EnsureAnyChainman(request.context);
     LOCK(cs_main);
+    LOCK(chainman.m_blockman.m_index_mutex);
     CChain& active_chain = chainman.ActiveChain();
 
     /*
@@ -3657,7 +3659,8 @@ return RPCMethod{
         return data;
     };
 
-    obj.pushKV("headers", chainman.m_blockman.m_best_header ? chainman.m_blockman.m_best_header->nHeight : -1);
+    const CBlockIndex* best_header{chainman.m_blockman.BestHeader()};
+    obj.pushKV("headers", best_header ? best_header->nHeight : -1);
 
     UniValue obj_chainstates{UniValue::VARR};
     if (const Chainstate * cs{chainman.HistoricalChainstate()}) {
