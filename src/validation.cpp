@@ -4299,24 +4299,18 @@ Chainstate& ChainstateManager::InitializeChainstate()
         }
     }
 
-    std::string path_str = fs::PathToString(db_path);
-    LogInfo(log, "Removing leveldb dir at %s\n", path_str);
+    LogInfo(log, "Removing coins directory at %s\n", fs::PathToString(db_path));
 
-    // We have to destruct before this call leveldb::DB in order to release the db
-    // lock, otherwise `DestroyDB` will fail. See `leveldb::~DBImpl()`.
-    const bool destroyed = DestroyDB(path_str);
-
-    if (!destroyed) {
-        LogError(log, "leveldb DestroyDB call failed on %s", path_str);
+    std::error_code ec;
+    fs::remove_all(db_path, ec);
+    if (ec) {
+        LogError(log, "Failed to remove coins directory at %s", fs::PathToString(db_path));
+        return false;
     }
 
     // Datadir should be removed from filesystem; otherwise initialization may detect
-    // it on subsequent statups and get confused.
-    //
-    // If the base_blockhash_path removal above fails in the case of snapshot
-    // chainstates, this will return false since leveldb won't remove a non-empty
-    // directory.
-    return destroyed && !fs::exists(db_path);
+    // it on subsequent startups and get confused.
+    return !fs::exists(db_path);
 }
 
 FlushResult<CBlockIndex*, AbortFailure> ChainstateManager::ActivateSnapshot(
@@ -4419,12 +4413,11 @@ FlushResult<CBlockIndex*, AbortFailure> ChainstateManager::ActivateSnapshot(
         // Propagate flush messages to result, but do not treat a cache rebalance failure as a snapshot activation failure.
         this->MaybeRebalanceCaches() >> result;
 
-        // PopulateAndValidateSnapshot can return (in error) before the leveldb datadir
+        // PopulateAndValidateSnapshot can return (in error) before the coins directory
         // has been created, so only attempt removal if we got that far.
         if (auto snapshot_datadir = node::FindAssumeutxoChainstateDir(m_options.datadir)) {
-            // We have to destruct leveldb::DB in order to release the db lock, otherwise
-            // DestroyDB() (in DeleteCoinsDBFromDisk()) will fail. See `leveldb::~DBImpl()`.
-            // Destructing the chainstate (and so resetting the coinsviews object) does this.
+            // Destruct the chainstate before removing its coins directory so no writer
+            // still holds the store. Resetting the chainstate resets the coins view.
             snapshot_chainstate.reset();
             bool removed = DeleteCoinsDBFromDisk(m_log, *snapshot_datadir, /*is_snapshot=*/true);
             if (!removed) {
