@@ -2891,9 +2891,9 @@ bool PeerManagerImpl::CheckHeadersPoW(const std::vector<CBlockHeader>& headers, 
 arith_uint256 PeerManagerImpl::GetAntiDoSWorkThreshold()
 {
     arith_uint256 near_chaintip_work = 0;
-    LOCK(cs_main);
-    if (m_chainman.ActiveChain().Tip() != nullptr) {
-        const CBlockIndex *tip = m_chainman.ActiveChain().Tip();
+    // Tip() takes the chain mutex. ActiveChain() still requires cs_main, so read m_chain directly.
+    const CBlockIndex* tip{m_chainman.ActiveChainstate().m_chain.Tip()};
+    if (tip != nullptr) {
         // Use a 144 block buffer, so that we'll accept headers that fork from
         // near our tip.
         near_chaintip_work = tip->nChainWork - std::min<arith_uint256>(144*GetBlockProof(*tip), tip->nChainWork);
