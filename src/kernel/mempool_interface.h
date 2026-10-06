@@ -6,6 +6,7 @@
 #define BITCOIN_KERNEL_MEMPOOL_INTERFACE_H
 
 #include <kernel/mempool_entry.h>
+#include <kernel/result.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -15,7 +16,6 @@ class CBlock;
 class Chainstate;
 class CCoinsViewCache;
 class CTransaction;
-class DisconnectedBlockTransactions;
 
 namespace kernel {
 
@@ -35,7 +35,14 @@ public:
     virtual void check(const CCoinsViewCache& active_coins_tip, int64_t spendheight) {}
     virtual bool empty() { return true; }
     virtual size_t maxSizeBytes() { return 0; }
-    virtual void MaybeUpdateMempoolForReorg(Chainstate& active_chainstate, DisconnectedBlockTransactions& disconnectpool, bool fAddToMempool) {}
+    //! Drop any transactions saved from a previous reorg and start a new queue.
+    virtual void ResetDisconnectedTransactions() {}
+    //! Save block transactions so they can be restored after a reorg. Empty when no pool is plugged in.
+    virtual std::vector<CTransactionRef> AddDisconnectedTransactions(const std::vector<CTransactionRef>&) { return {}; }
+    //! Drop saved transactions that the new chain already confirms.
+    virtual void RemoveDisconnectedForBlock(const std::vector<CTransactionRef>&) {}
+    //! Re-add or erase the saved transactions. The base implementation has no queue.
+    virtual kernel::FlushResult<> MaybeUpdateMempoolForReorg(Chainstate&, bool) { return {}; }
     virtual void BeginChainstateUpdate() {}
     virtual void EndChainstateUpdate() {}
 };
