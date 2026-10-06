@@ -84,7 +84,7 @@ inline constexpr int DEFAULT_CHECKLEVEL{3};
 inline constexpr uint64_t MIN_DISK_SPACE_FOR_BLOCK_FILES{550_MiB};
 
 /** Fake height value used in Coin to signify they are only in the memory pool (since 0.8) */
-static const uint32_t MEMPOOL_HEIGHT = 0x7FFFFFFF;
+inline constexpr uint32_t MEMPOOL_HEIGHT = 0x7FFFFFFF;
 
 /** Maximum number of dedicated script-checking threads allowed */
 inline constexpr int MAX_SCRIPTCHECK_THREADS{15};
