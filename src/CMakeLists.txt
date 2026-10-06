@@ -104,7 +104,6 @@ add_library(bitcoin_kernel STATIC EXCLUDE_FROM_ALL
   kernel/context.cpp
   kernel/cs_main.cpp
   kernel/disconnected_transactions.cpp
-  kernel/mempool_removal_reason.cpp
   node/blockstorage.cpp
   node/chainstate.cpp
   node/utxo_snapshot.cpp
