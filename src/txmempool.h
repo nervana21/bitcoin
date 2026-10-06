@@ -59,7 +59,7 @@ inline constexpr uint64_t ACCEPTABLE_COST = 75'000;
 /** How many linearization iterations required for TxGraph clusters to have
  * "acceptable" quality, if they cannot be optimally linearized with fewer
  * iterations. */
-static constexpr uint64_t ACCEPTABLE_ITERS = 1'700;
+inline constexpr uint64_t ACCEPTABLE_ITERS = 1'700;
 
 /** How much work we ask TxGraph to do after a mempool change occurs (either
  * due to a changeset being applied, a new block being found, or a reorg). */
