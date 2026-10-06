@@ -1383,6 +1383,30 @@ const btck_BlockTreeEntry* btck_chainstate_manager_get_best_entry(const btck_Cha
     return btck_BlockTreeEntry::ref(WITH_LOCK(chainman.GetMutex(), return chainman.m_blockman.m_best_header));
 }
 
+int btck_chainstate_manager_flush(btck_ChainstateManager* chainman)
+{
+    auto& manager{*btck_ChainstateManager::get(chainman).m_chainman};
+    if (manager.m_blockman.IsReadOnly()) {
+        LogError(btck_ChainstateManager::get(chainman).m_context->m_log, "Refusing to flush a read-only chainstate.");
+        return -1;
+    }
+    try {
+        LOCK(manager.GetMutex());
+        for (const auto& chainstate : manager.m_chainstates) {
+            if (!chainstate->CanFlushToDisk()) continue;
+            auto flush_result{chainstate->ForceFlushStateToDisk()};
+            if (!flush_result) {
+                LogError(btck_ChainstateManager::get(chainman).m_context->m_log, "%s", util::ErrorString(flush_result).original);
+                return -1;
+            }
+        }
+    } catch (const std::exception& e) {
+        LogError(btck_ChainstateManager::get(chainman).m_context->m_log, "Failed to flush chainstate: %s", e.what());
+        return -1;
+    }
+    return 0;
+}
+
 void btck_chainstate_manager_destroy(btck_ChainstateManager* chainman)
 {
     {
