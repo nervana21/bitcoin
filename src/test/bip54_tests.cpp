@@ -1400,10 +1400,10 @@ BOOST_AUTO_TEST_CASE(bip54_timestamps)
 /** Run AcceptBlock() on this chain of blocks in order. */
 static bool AcceptBlocks(ChainstateManager& chainman, std::vector<CBlock> blocks, BlockValidationState& state)
 {
-    LOCK(chainman.GetMutex());
     for (auto& block: blocks) {
         const auto shared_blk{std::make_shared<const CBlock>(std::move(block))};
-        if (!chainman.AcceptBlock(shared_blk, state, /*ppindex=*/nullptr, /*fRequested*/true, /*dbp=*/nullptr, /*fNewBlock=*/nullptr, /*min_pow_checked=*/true)) {
+        kernel::FlushResult<void, kernel::AbortFailure> accept_result;
+        if (!chainman.AcceptBlock(shared_blk, state, accept_result, /*ppindex=*/nullptr, /*fRequested*/true, /*dbp=*/nullptr, /*fNewBlock=*/nullptr, /*min_pow_checked=*/true) || !accept_result) {
             return false;
         }
     }
@@ -1582,7 +1582,6 @@ BOOST_AUTO_TEST_CASE(bip54_txsize)
     RegTestingSetup test_setup{};
     auto& chainman{*test_setup.m_node.chainman};
     const auto& params{chainman.GetConsensus()};
-    LOCK(chainman.GetMutex());
     for (const auto& test_case: test_vectors) {
         // Craft a block containing this transaction.
         auto block{node::BlockAssembler{chainman.ActiveChainstate(), /*mempool=*/nullptr, {}}.CreateNewBlock()->block};
@@ -1593,7 +1592,8 @@ BOOST_AUTO_TEST_CASE(bip54_txsize)
         // Preliminary checks performed on the block before storing it will detect any 64-byte
         // transaction.
         BlockValidationState state;
-        const bool res{chainman.AcceptBlock(pblock, state, /*ppindex=*/nullptr, /*fRequested=*/true, /*dbp=*/nullptr, /*fNewBlock=*/nullptr, /*min_pow_checked=*/true)};
+        kernel::FlushResult<void, kernel::AbortFailure> accept_result;
+        const bool res{chainman.AcceptBlock(pblock, state, accept_result, /*ppindex=*/nullptr, /*fRequested=*/true, /*dbp=*/nullptr, /*fNewBlock=*/nullptr, /*min_pow_checked=*/true) && bool(accept_result)};
         BOOST_CHECK_MESSAGE(res == test_case.valid, test_case.comment);
         if (!test_case.valid) {
             BOOST_CHECK_MESSAGE(state.GetRejectReason() == "bad-txns-size", test_case.comment);

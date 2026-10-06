@@ -2649,7 +2649,7 @@ bool ContextualCheckBlockHeader(
         if (consensusParams.enforce_BIP94) {
             static_assert(MAX_TIMEWARP_TESTNET4 <= MAX_TIMEWARP_BIP54);
             max_timewarp = MAX_TIMEWARP_TESTNET4;
-        } else if (DeploymentActiveAfter(pindexPrev, chainman, Consensus::DEPLOYMENT_CONSENSUSCLEANUP)) {
+        } else if (DeploymentActiveAfter(pindexPrev, consensusParams, versionbitscache, Consensus::DEPLOYMENT_CONSENSUSCLEANUP)) {
             max_timewarp = MAX_TIMEWARP_BIP54;
         }
         if (max_timewarp && block.GetBlockTime() < pindexPrev->GetBlockTime() - *max_timewarp) {
@@ -2662,7 +2662,7 @@ bool ContextualCheckBlockHeader(
     // reduce difficulty similarly to the timewarp vulnerability. Along with the timewarp fix, this effectively makes retarget periods
     // monotonic (modulo the timewarp fix grace period).
     const bool is_last_block{nHeight % dai == dai - 1};
-    if (is_last_block && DeploymentActiveAfter(pindexPrev, chainman, Consensus::DEPLOYMENT_CONSENSUSCLEANUP)) {
+    if (is_last_block && DeploymentActiveAfter(pindexPrev, consensusParams, versionbitscache, Consensus::DEPLOYMENT_CONSENSUSCLEANUP)) {
         int first_height{nHeight - dai + 1};
         const CBlockIndex* first_block{Assert(pindexPrev->GetAncestor(first_height))};
         if (block.GetBlockTime() < first_block->GetBlockTime()) {
@@ -2724,7 +2724,7 @@ bool ContextualCheckBlock(const CBlock& block, BlockValidationState& state, cons
     }
 
     // Make sure the coinbase transaction is timelocked to the block's height.
-    if (nHeight > 0 && DeploymentActiveAfter(pindexPrev, chainman, Consensus::DEPLOYMENT_CONSENSUSCLEANUP)) {
+    if (nHeight > 0 && DeploymentActiveAfter(pindexPrev, params, versionbitscache, Consensus::DEPLOYMENT_CONSENSUSCLEANUP)) {
         Assert(!block.vtx.empty() && block.vtx[0] && !block.vtx[0]->vin.empty());
         if (block.vtx[0]->nLockTime != static_cast<uint32_t>(nHeight - 1)) {
             return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-locktime", "block height mismatch in coinbase nLockTime");

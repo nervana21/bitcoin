@@ -148,7 +148,7 @@ BOOST_AUTO_TEST_CASE(contextual_time_timewarp_attack)
 
     CBlockHeader header{chainparams->GenesisBlock()};
     header.nVersion = 4;
-    header.nTime = prev.nTime - MAX_TIMEWARP - 1;
+    header.nTime = prev.nTime - MAX_TIMEWARP_TESTNET4 - 1;
     header.nBits = prev.nBits;
     BOOST_REQUIRE(header.GetBlockTime() > prev.GetMedianTimePast());
 
