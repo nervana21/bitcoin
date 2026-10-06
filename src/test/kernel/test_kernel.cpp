@@ -1704,7 +1704,7 @@ BOOST_AUTO_TEST_CASE(btck_chainstate_manager_set_clock_time_tests)
     auto context{create_context(notifications, ChainType::REGTEST)};
     auto chainman{create_chainman(
         test_directory, /*reindex=*/false, /*wipe_chainstate=*/false,
-        /*block_tree_db_in_memory=*/true, /*chainstate_db_in_memory=*/true, context)};
+        /*chainstate_db_in_memory=*/true, context)};
 
     // Out-of-range timestamps are rejected
     constexpr std::chrono::seconds max_time{std::numeric_limits<uint32_t>::max()};
