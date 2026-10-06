@@ -6122,14 +6122,18 @@ bool PeerManagerImpl::SendMessages(CNode& node)
     ProcessInvBacklog(now);
 
     {
-        LOCK2(cs_processing, cs_main);
-
-        CNodeState &state = *State(node.GetId());
-
-        // Start block sync
+        LOCK(cs_main);
+        // Start block sync. This is the validation write. Keep it out of the
+        // peer-state section below.
         if (m_chainman.m_blockman.m_best_header == nullptr) {
             m_chainman.m_blockman.m_best_header = m_chainman.ActiveChain().Tip();
         }
+    }
+
+    {
+        LOCK2(cs_processing, cs_main);
+
+        CNodeState &state = *State(node.GetId());
 
         // Determine whether we might try initial headers sync or parallel
         // block download from this peer -- this mostly affects behavior while
