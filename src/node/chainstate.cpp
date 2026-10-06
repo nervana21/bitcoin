@@ -39,7 +39,7 @@ namespace node {
 // to ChainstateManager::InitializeChainstate().
 static FlushResult<InterruptResult, ChainstateLoadError> CompleteChainstateInitialization(
     ChainstateManager& chainman,
-    const ChainstateLoadOptions& options) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
+    const ChainstateLoadOptions& options) EXCLUSIVE_LOCKS_REQUIRED(::cs_main, !chainman.m_blockman.m_index_mutex)
 {
     const util::log::Context& log{chainman.m_log};
     if (chainman.m_interrupt) return Interrupted{};
@@ -58,7 +58,8 @@ static FlushResult<InterruptResult, ChainstateLoadError> CompleteChainstateIniti
         return result;
     }
 
-    if (!chainman.BlockIndex().empty() &&
+    const bool index_nonempty{WITH_LOCK(chainman.m_blockman.m_index_mutex, return !chainman.BlockIndex().empty())};
+    if (index_nonempty &&
             !chainman.m_blockman.LookupBlockIndex(chainman.GetConsensus().hashGenesisBlock)) {
         // If the loaded chain has a wrong genesis, bail out immediately
         // (we're likely using a testnet datadir, or the other way around).
@@ -179,6 +180,7 @@ static FlushResult<InterruptResult, ChainstateLoadError> CompleteChainstateIniti
 
 FlushResult<InterruptResult, ChainstateLoadError> LoadChainstate(ChainstateManager& chainman, const CacheSizes& cache_sizes,
                                                                  const ChainstateLoadOptions& options)
+    EXCLUSIVE_LOCKS_REQUIRED(!chainman.m_blockman.m_index_mutex)
 {
     const util::log::Context& log{chainman.m_log};
     FlushResult<InterruptResult, ChainstateLoadError> result;

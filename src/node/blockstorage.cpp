@@ -91,7 +91,7 @@ bool CBlockIndexHeightOnlyComparator::operator()(const CBlockIndex* pa, const CB
 
 std::vector<CBlockIndex*> BlockManager::GetAllBlockIndices()
 {
-    AssertLockHeld(cs_main);
+    LOCK(m_index_mutex);
     std::vector<CBlockIndex*> rv;
     rv.reserve(m_block_index.size());
     for (auto& [_, block_index] : m_block_index) {
@@ -102,21 +102,42 @@ std::vector<CBlockIndex*> BlockManager::GetAllBlockIndices()
 
 CBlockIndex* BlockManager::LookupBlockIndex(const uint256& hash)
 {
-    AssertLockHeld(cs_main);
+    LOCK(m_index_mutex);
     BlockMap::iterator it = m_block_index.find(hash);
     return it == m_block_index.end() ? nullptr : &it->second;
 }
 
 const CBlockIndex* BlockManager::LookupBlockIndex(const uint256& hash) const
 {
-    AssertLockHeld(cs_main);
+    LOCK(m_index_mutex);
     BlockMap::const_iterator it = m_block_index.find(hash);
     return it == m_block_index.end() ? nullptr : &it->second;
+}
+
+CBlockIndex* BlockManager::BestHeader() const
+{
+    LOCK(m_index_mutex);
+    return m_best_header;
+}
+
+void BlockManager::SetBestHeader(CBlockIndex* header)
+{
+    LOCK(m_index_mutex);
+    m_best_header = header;
+}
+
+void BlockManager::SeedBestHeader(CBlockIndex* tip)
+{
+    LOCK(m_index_mutex);
+    if (m_best_header == nullptr) {
+        m_best_header = tip;
+    }
 }
 
 CBlockIndex* BlockManager::AddToBlockIndex(const CBlockHeader& block)
 {
     AssertLockHeld(cs_main);
+    LOCK(m_index_mutex);
 
     auto [mi, inserted] = m_block_index.try_emplace(block.GetHash(), block);
     if (!inserted) {
@@ -164,6 +185,7 @@ void BlockManager::PruneOneBlockFileImpl(const int fileNumber)
 {
     AssertLockHeld(cs_main);
     AssertLockHeld(m_blockfile_mutex);
+    LOCK(m_index_mutex);
 
     for (auto& entry : m_block_index) {
         CBlockIndex* pindex = &entry.second;
@@ -241,7 +263,7 @@ void BlockManager::FindFilesToPrune(
     const int num_chainstates{chainman.HistoricalChainstate() ? 2 : 1};
     const auto target = std::max(
         MIN_DISK_SPACE_FOR_BLOCK_FILES, GetPruneTarget() / num_chainstates);
-    const uint64_t target_sync_height = m_best_header->nHeight;
+    const uint64_t target_sync_height{static_cast<uint64_t>(WITH_LOCK(m_index_mutex, return m_best_header->nHeight))};
 
     if (chain.m_chain.Height() < 0 || target == 0) {
         return;
@@ -320,6 +342,7 @@ bool BlockManager::DeletePruneLock(const std::string& name)
 CBlockIndex* BlockManager::InsertBlockIndex(const uint256& hash)
 {
     AssertLockHeld(cs_main);
+    LOCK(m_index_mutex);
 
     if (hash.IsNull()) {
         return nullptr;
@@ -336,7 +359,7 @@ CBlockIndex* BlockManager::InsertBlockIndex(const uint256& hash)
 util::Result<InterruptResult, AbortFailure> BlockManager::LoadBlockIndexData(const std::optional<uint256>& snapshot_blockhash)
 {
     if (!m_block_tree_db->LoadBlockIndexGuts(
-            GetConsensus(), [this](const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(cs_main) { return this->InsertBlockIndex(hash); }, m_interrupt)) {
+            GetConsensus(), [this](const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(cs_main, !m_index_mutex) { return this->InsertBlockIndex(hash); }, m_interrupt)) {
         if (m_interrupt) return Interrupted{};
         return util::Error{};
     }
@@ -408,7 +431,9 @@ util::Result<InterruptResult, AbortFailure> BlockManager::LoadBlockIndexData(con
 
         if (pindex->nStatus & BLOCK_FAILED_CHILD) {
             // BLOCK_FAILED_CHILD is deprecated, but may still exist on disk. Replace it with BLOCK_FAILED_VALID.
-            pindex->nStatus = (pindex->nStatus & ~BLOCK_FAILED_CHILD) | BLOCK_FAILED_VALID;
+            pindex->nStatus.Transform([](uint32_t status) {
+                return (status & ~BLOCK_FAILED_CHILD) | BLOCK_FAILED_VALID;
+            });
             m_dirty_blockindex.insert(pindex);
         }
         if (!(pindex->nStatus & BLOCK_FAILED_VALID) && pindex->pprev && (pindex->pprev->nStatus & BLOCK_FAILED_VALID)) {
@@ -423,8 +448,11 @@ util::Result<InterruptResult, AbortFailure> BlockManager::LoadBlockIndexData(con
         if (pindex->nStatus & BLOCK_FAILED_VALID && (!m_best_invalid || pindex->nChainWork > m_best_invalid->nChainWork)) {
             m_best_invalid = pindex;
         }
-        if (pindex->IsValid(BLOCK_VALID_TREE) && (m_best_header == nullptr || CBlockIndexWorkComparator()(m_best_header, pindex))) {
-            m_best_header = pindex;
+        {
+            LOCK(m_index_mutex);
+            if (pindex->IsValid(BLOCK_VALID_TREE) && (m_best_header == nullptr || CBlockIndexWorkComparator()(m_best_header, pindex))) {
+                m_best_header = pindex;
+            }
         }
     }
 
@@ -473,9 +501,12 @@ util::Result<InterruptResult, AbortFailure> BlockManager::LoadBlockIndexDB(const
     // Check presence of blk files
     LogInfo(m_log, "Checking all blk files are present...");
     std::set<int> setBlkDataFiles;
-    for (const auto& [_, block_index] : m_block_index) {
-        if (block_index.nStatus & BLOCK_HAVE_DATA) {
-            setBlkDataFiles.insert(block_index.nFile);
+    {
+        LOCK(m_index_mutex);
+        for (const auto& [_, block_index] : m_block_index) {
+            if (block_index.nStatus & BLOCK_HAVE_DATA) {
+                setBlkDataFiles.insert(block_index.nFile);
+            }
         }
     }
     for (std::set<int>::iterator it = setBlkDataFiles.begin(); it != setBlkDataFiles.end(); it++) {
@@ -531,7 +562,6 @@ void BlockManager::ScanAndUnlinkAlreadyPrunedFiles()
 
 bool BlockManager::IsBlockPruned(const CBlockIndex& block) const
 {
-    AssertLockHeld(::cs_main);
     return m_have_pruned && !(block.nStatus & BLOCK_HAVE_DATA) && (block.nTx > 0);
 }
 
