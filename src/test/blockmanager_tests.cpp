@@ -318,4 +318,24 @@ BOOST_FIXTURE_TEST_CASE(prune_lock_update_and_delete, TestingSetup)
     BOOST_CHECK(!blockman.DeletePruneLock("nonexistent"));
 }
 
+BOOST_AUTO_TEST_CASE(raise_validity_compare_exchange)
+{
+    CBlockIndex index;
+    BOOST_CHECK(index.RaiseValidity(BLOCK_VALID_TREE));
+    BOOST_CHECK(!index.RaiseValidity(BLOCK_VALID_TREE));
+    BOOST_CHECK(index.IsValid(BLOCK_VALID_TREE));
+
+    index.nStatus |= BLOCK_HAVE_DATA;
+    BOOST_CHECK(index.RaiseValidity(BLOCK_VALID_TRANSACTIONS));
+    BOOST_CHECK(index.nStatus & BLOCK_HAVE_DATA);
+    BOOST_CHECK(index.IsValid(BLOCK_VALID_TRANSACTIONS));
+    BOOST_CHECK(!index.RaiseValidity(BLOCK_VALID_TREE));
+
+    index.nStatus |= BLOCK_FAILED_VALID;
+    BOOST_CHECK(!index.IsValid(BLOCK_VALID_TRANSACTIONS));
+    BOOST_CHECK(!index.RaiseValidity(BLOCK_VALID_SCRIPTS));
+    BOOST_CHECK(index.nStatus & BLOCK_HAVE_DATA);
+    BOOST_CHECK(index.nStatus & BLOCK_FAILED_VALID);
+}
+
 BOOST_AUTO_TEST_SUITE_END()
