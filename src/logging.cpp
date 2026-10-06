@@ -632,6 +632,8 @@ bool BCLog::Logger::SetCategoryLogLevel(std::string_view category_str, std::stri
     return true;
 }
 
+// libbitcoinkernel provides its own hooks in bitcoinkernel.cpp (LogConnection).
+#ifndef BITCOINKERNEL_BUILD
 bool util::log::hooks::ShouldLog(Logger* log, Category category, Level level)
 {
     auto& logger{log ? *static_cast<BCLog::Logger*>(log) : LogInstance()};
@@ -643,3 +645,4 @@ void util::log::hooks::Log(Logger* log, const Options& options, Entry entry)
     auto& logger{log ? *static_cast<BCLog::Logger*>(log) : LogInstance()};
     logger.LogPrint(options, std::move(entry));
 }
+#endif // BITCOINKERNEL_BUILD
