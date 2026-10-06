@@ -1168,6 +1168,20 @@ public:
     virtual void FatalErrorHandler(std::string_view error) {}
 };
 
+template <typename State>
+std::string copy_state_string(const State* state, int (*getter)(const State*, char*, size_t, size_t*))
+{
+    size_t written{0};
+    if (getter(state, nullptr, 0, &written) != 0 || written == 0) {
+        return {};
+    }
+    std::vector<char> buffer(written);
+    if (getter(state, buffer.data(), buffer.size(), &written) != 0) {
+        return {};
+    }
+    return std::string(buffer.data(), written - 1);
+}
+
 template <typename Derived>
 class BlockValidationStateApi
 {
@@ -1189,6 +1203,11 @@ public:
     BlockValidationResult GetBlockValidationResult() const
     {
         return static_cast<BlockValidationResult>(btck_block_validation_state_get_block_validation_result(impl()));
+    }
+
+    std::string GetRejectReason() const
+    {
+        return copy_state_string(impl(), btck_block_validation_state_get_reject_reason);
     }
 };
 
@@ -1229,6 +1248,11 @@ public:
     TxValidationResult GetTxValidationResult() const
     {
         return static_cast<TxValidationResult>(btck_tx_validation_state_get_tx_validation_result(get()));
+    }
+
+    std::string GetRejectReason() const
+    {
+        return copy_state_string(get(), btck_tx_validation_state_get_reject_reason);
     }
 };
 
