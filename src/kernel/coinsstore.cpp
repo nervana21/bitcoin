@@ -221,7 +221,7 @@ CoinsStore::CoinsStore(const fs::path& path, Mode mode)
     }
 
     if (m_mode == Mode::WIPE) {
-        fs::remove_all(m_dir);
+        RemoveFiles(m_dir);
     }
     fs::create_directories(m_dir);
     m_writer_lock = std::make_unique<WriterLockHolder>(m_dir);
@@ -235,6 +235,16 @@ CoinsStore::CoinsStore(const fs::path& path, Mode mode)
 }
 
 CoinsStore::~CoinsStore() = default;
+
+void CoinsStore::RemoveFiles(const fs::path& dir)
+{
+    std::error_code ec;
+    fs::remove(dir / COINS_FILE_NAME, ec);
+    fs::remove(dir / COINS_LOG_NAME, ec);
+    fs::remove(dir / COINS_LOG_FLAG_NAME, ec);
+    fs::remove(dir / ".lock", ec);
+    fs::remove(dir / ".writer-lock", ec);
+}
 
 void CoinsStore::CheckWrite() const
 {
