@@ -333,6 +333,7 @@ const CBlockIndex* Chainstate::SnapshotBase() const
 
 const CBlockIndex* Chainstate::TargetBlock() const
 {
+    AssertLockHeld(::cs_main);
     if (!m_target_blockhash) return nullptr;
     if (!m_cached_target_block) m_cached_target_block = Assert(m_blockman.LookupBlockIndex(*m_target_blockhash));
     return m_cached_target_block;
@@ -340,6 +341,7 @@ const CBlockIndex* Chainstate::TargetBlock() const
 
 void Chainstate::SetTargetBlock(CBlockIndex* block)
 {
+    AssertLockHeld(::cs_main);
     if (block) {
         m_target_blockhash = block->GetBlockHash();
     } else {
@@ -350,6 +352,7 @@ void Chainstate::SetTargetBlock(CBlockIndex* block)
 
 void Chainstate::SetTargetBlockHash(uint256 block_hash)
 {
+    AssertLockHeld(::cs_main);
     m_target_blockhash = block_hash;
     m_cached_target_block = nullptr;
 }
@@ -416,7 +419,8 @@ void Chainstate::InvalidChainFound(CBlockIndex* pindexNew)
         m_blockman.m_best_invalid = pindexNew;
     }
     SetBlockFailureFlags(pindexNew);
-    if (m_blockman.m_best_header != nullptr && m_blockman.m_best_header->GetAncestor(pindexNew->nHeight) == pindexNew) {
+    const CBlockIndex* best_header{m_blockman.BestHeader()};
+    if (best_header != nullptr && best_header->GetAncestor(pindexNew->nHeight) == pindexNew) {
         RecalculateBestHeader();
     }
 
@@ -806,16 +810,17 @@ FlushResult<void, AbortFailure> Chainstate::ConnectBlock(const CBlock& block, Bl
         //  relative to a piece of software is an objective fact these defaults can be easily reviewed.
         // This setting doesn't force the selection of any particular chain but makes validating some faster by
         //  effectively caching the result of part of the verification.
-        BlockMap::const_iterator it{m_blockman.m_block_index.find(m_assumed_valid_block)};
-        if (it == m_blockman.m_block_index.end()) {
+        const CBlockIndex* assumed{m_blockman.LookupBlockIndex(m_assumed_valid_block)};
+        const CBlockIndex* best_header{m_blockman.BestHeader()};
+        if (assumed == nullptr) {
             script_check_reason = "assumevalid hash not in headers";
-        } else if (it->second.GetAncestor(pindex->nHeight) != pindex) {
-            script_check_reason = (pindex->nHeight > it->second.nHeight) ? "block height above assumevalid height" : "block not in assumevalid chain";
-        } else if (m_blockman.m_best_header->GetAncestor(pindex->nHeight) != pindex) {
+        } else if (assumed->GetAncestor(pindex->nHeight) != pindex) {
+            script_check_reason = (pindex->nHeight > assumed->nHeight) ? "block height above assumevalid height" : "block not in assumevalid chain";
+        } else if (best_header->GetAncestor(pindex->nHeight) != pindex) {
             script_check_reason = "block not in best header chain";
-        } else if (m_blockman.m_best_header->nChainWork < m_minimum_chain_work) {
+        } else if (best_header->nChainWork < m_minimum_chain_work) {
             script_check_reason = "best header chainwork below minimumchainwork";
-        } else if (GetBlockProofEquivalentTime(*m_blockman.m_best_header, *pindex, *m_blockman.m_best_header, params.GetConsensus()) <= TWO_WEEKS_IN_SECONDS) {
+        } else if (GetBlockProofEquivalentTime(*best_header, *pindex, *best_header, params.GetConsensus()) <= TWO_WEEKS_IN_SECONDS) {
             script_check_reason = "block too recent relative to best header";
         } else {
             // This block is a member of the assumed verified chain and an ancestor of the best header.
@@ -1801,7 +1806,7 @@ bool ChainstateManager::NotifyHeaderTip()
     CBlockIndex* pindexHeader = nullptr;
     {
         LOCK(GetMutex());
-        pindexHeader = m_blockman.m_best_header;
+        pindexHeader = m_blockman.BestHeader();
 
         if (pindexHeader != m_last_notified_header) {
             fNotify = true;
@@ -2078,6 +2083,7 @@ FlushResult<> Chainstate::InvalidateBlock(BlockValidationState& state, CBlockInd
 
     {
         LOCK(cs_main);
+        LOCK(m_blockman.m_index_mutex);
         for (auto& entry : m_blockman.m_block_index) {
             CBlockIndex& candidate = entry.second;
             // We don't need to put anything in our active chain into the
@@ -2145,6 +2151,7 @@ FlushResult<> Chainstate::InvalidateBlock(BlockValidationState& state, CBlockInd
         // Recalculate m_best_header if it became invalid.
         auto candidate_it = highpow_outofchain_headers.lower_bound(new_tip->nChainWork);
 
+        LOCK(m_blockman.m_index_mutex);
         const bool best_header_needs_update{m_blockman.m_best_header->GetAncestor(disconnected_tip->nHeight) == disconnected_tip};
         if (best_header_needs_update) {
             // new_tip is definitely still valid at this point, but there may be better ones
@@ -2204,9 +2211,12 @@ FlushResult<> Chainstate::InvalidateBlock(BlockValidationState& state, CBlockInd
         // it up here, this should be an essentially unobservable error.
         // Loop back over all block index entries and add any missing entries
         // to setBlockIndexCandidates.
-        for (auto& [_, block_index] : m_blockman.m_block_index) {
-            if (block_index.IsValid(BLOCK_VALID_TRANSACTIONS) && block_index.HaveNumChainTxs() && !setBlockIndexCandidates.value_comp()(&block_index, m_chain.Tip())) {
-                setBlockIndexCandidates.insert(&block_index);
+        {
+            LOCK(m_blockman.m_index_mutex);
+            for (auto& [_, block_index] : m_blockman.m_block_index) {
+                if (block_index.IsValid(BLOCK_VALID_TRANSACTIONS) && block_index.HaveNumChainTxs() && !setBlockIndexCandidates.value_comp()(&block_index, m_chain.Tip())) {
+                    setBlockIndexCandidates.insert(&block_index);
+                }
             }
         }
 
@@ -2239,6 +2249,7 @@ FlushResult<> Chainstate::InvalidateBlock(BlockValidationState& state, CBlockInd
 void Chainstate::SetBlockFailureFlags(CBlockIndex* invalid_block)
 {
     AssertLockHeld(cs_main);
+    LOCK(m_blockman.m_index_mutex);
 
     for (auto& [_, block_index] : m_blockman.m_block_index) {
         if (invalid_block != &block_index && block_index.GetAncestor(invalid_block->nHeight) == invalid_block) {
@@ -2250,6 +2261,7 @@ void Chainstate::SetBlockFailureFlags(CBlockIndex* invalid_block)
 
 void Chainstate::ResetBlockFailureFlags(CBlockIndex *pindex) {
     AssertLockHeld(cs_main);
+    LOCK(m_blockman.m_index_mutex);
 
     int nHeight = pindex->nHeight;
 
@@ -2716,11 +2728,9 @@ bool ChainstateManager::AcceptBlockHeader(const CBlockHeader& block, BlockValida
 
     // Check for duplicate
     uint256 hash = block.GetHash();
-    BlockMap::iterator miSelf{m_blockman.m_block_index.find(hash)};
     if (hash != GetConsensus().hashGenesisBlock) {
-        if (miSelf != m_blockman.m_block_index.end()) {
+        if (CBlockIndex* pindex{m_blockman.LookupBlockIndex(hash)}) {
             // Block header is already known.
-            CBlockIndex* pindex = &(miSelf->second);
             if (ppindex)
                 *ppindex = pindex;
             if (pindex->nStatus & BLOCK_FAILED_VALID) {
@@ -2737,13 +2747,11 @@ bool ChainstateManager::AcceptBlockHeader(const CBlockHeader& block, BlockValida
         }
 
         // Get prev block index
-        CBlockIndex* pindexPrev = nullptr;
-        BlockMap::iterator mi{m_blockman.m_block_index.find(block.hashPrevBlock)};
-        if (mi == m_blockman.m_block_index.end()) {
+        CBlockIndex* pindexPrev{m_blockman.LookupBlockIndex(block.hashPrevBlock)};
+        if (pindexPrev == nullptr) {
             LogDebug(m_log, "header %s has prev block not found: %s\n", hash.ToString(), block.hashPrevBlock.ToString());
             return state.Invalid(BlockValidationResult::BLOCK_MISSING_PREV, "prev-blk-not-found");
         }
-        pindexPrev = &((*mi).second);
         if (pindexPrev->nStatus & BLOCK_FAILED_VALID) {
             LogDebug(m_log, "header %s has prev block invalid: %s\n", hash.ToString(), block.hashPrevBlock.ToString());
             return state.Invalid(BlockValidationResult::BLOCK_INVALID_PREV, "bad-prevblk");
@@ -2804,7 +2812,8 @@ void ChainstateManager::ReportHeadersPresync(int64_t height, int64_t timestamp)
         // Don't report headers presync progress if we already have a post-minchainwork header chain.
         // This means we lose reporting for potentially legitimate, but unlikely, deep reorgs, but
         // prevent attackers that spam low-work headers from filling our logs.
-        if (m_blockman.m_best_header->nChainWork >= UintToArith256(GetConsensus().nMinimumChainWork)) return;
+        const CBlockIndex* best_header{m_blockman.BestHeader()};
+        if (best_header->nChainWork >= UintToArith256(GetConsensus().nMinimumChainWork)) return;
         // Rate limit headers presync updates to 4 per second, as these are not subject to DoS
         // protection.
         auto now = MockableSteadyClock::_now_nondet();
@@ -3484,18 +3493,18 @@ bool Chainstate::ReplayBlocks()
     const CBlockIndex* pindexNew;            // New tip during the interrupted flush.
     const CBlockIndex* pindexFork = nullptr; // Latest block common to both the old and the new tip.
 
-    if (!m_blockman.m_block_index.contains(hashHeads[0])) {
+    pindexNew = m_blockman.LookupBlockIndex(hashHeads[0]);
+    if (pindexNew == nullptr) {
         LogError(m_log, "ReplayBlocks(): reorganization to unknown block requested\n");
         return false;
     }
-    pindexNew = &(m_blockman.m_block_index[hashHeads[0]]);
 
     if (!hashHeads[1].IsNull()) { // The old tip is allowed to be 0, indicating it's the first flush.
-        if (!m_blockman.m_block_index.contains(hashHeads[1])) {
+        pindexOld = m_blockman.LookupBlockIndex(hashHeads[1]);
+        if (pindexOld == nullptr) {
             LogError(m_log, "ReplayBlocks(): reorganization from unknown block requested\n");
             return false;
         }
-        pindexOld = &(m_blockman.m_block_index[hashHeads[1]]);
         pindexFork = LastCommonAncestor(pindexOld, pindexNew);
         assert(pindexFork != nullptr);
     }
@@ -3629,7 +3638,7 @@ FlushResult<> ChainstateManager::LoadGenesisBlock()
     // m_blockman.m_block_index. Note that we can't use a chainstate's m_chain here, since it is
     // set based on the coins db, not the block index db, which is the only
     // thing loaded at this point.
-    if (m_blockman.m_block_index.contains(genesis_block.GetHash())) {
+    if (m_blockman.LookupBlockIndex(genesis_block.GetHash()) != nullptr) {
         return result;
     }
 
@@ -3865,6 +3874,7 @@ void ChainstateManager::CheckBlockIndex() const
     }
 
     LOCK(cs_main);
+    LOCK(m_blockman.m_index_mutex);
 
     // During a reindex, we read the genesis block and call CheckBlockIndex before ActivateBestChain,
     // so we have the genesis block in m_blockman.m_block_index but no active chain. (A few of the
@@ -4234,16 +4244,17 @@ double Chainstate::GuessVerificationProgress(const CBlockIndex* pindex) const
         return 0.0;
     }
 
+    const CBlockIndex* best_header{m_blockman.BestHeader()};
     const NodeClock::time_point now{m_chainman.Now()};
     const NodeClock::time_point block_time{
-        (Assume(m_blockman.m_best_header) && std::chrono::abs(now - pindex->Time()) <= 2h &&
-         Assume(m_blockman.m_best_header->nHeight >= pindex->nHeight)) ?
+        (Assume(best_header) && std::chrono::abs(now - pindex->Time()) <= 2h &&
+         Assume(best_header->nHeight >= pindex->nHeight)) ?
             // When the header is known to be recent, switch to a height-based
             // approach. This ensures the returned value is quantized when
             // close to "1.0", because some users expect it to be. This also
             // avoids relying too much on the exact miner-set timestamp, which
             // may be off.
-            now - std::chrono::seconds((m_blockman.m_best_header->nHeight - pindex->nHeight) * m_chainparams.GetConsensus().nPowTargetSpacing) :
+            now - std::chrono::seconds((best_header->nHeight - pindex->nHeight) * m_chainparams.GetConsensus().nPowTargetSpacing) :
             pindex->Time(),
     };
 
@@ -4353,7 +4364,8 @@ FlushResult<CBlockIndex*, AbortFailure> ChainstateManager::ActivateSnapshot(
             return result;
         }
 
-        if (!m_blockman.m_best_header || m_blockman.m_best_header->GetAncestor(snapshot_start_block->nHeight) != snapshot_start_block) {
+        const CBlockIndex* best_header{m_blockman.BestHeader()};
+        if (!best_header || best_header->GetAncestor(snapshot_start_block->nHeight) != snapshot_start_block) {
             return util::Error{Untranslated("A forked headers-chain with more work than the chain with the snapshot base block header exists. Please proceed to sync without AssumeUtxo.")};
         }
 
@@ -5004,6 +5016,7 @@ ChainstateRole Chainstate::GetRole() const
 void Chainstate::RecalculateBestHeader()
 {
     AssertLockHeld(cs_main);
+    LOCK(m_blockman.m_index_mutex);
     m_blockman.m_best_header = m_chain.Tip();
     for (auto& entry : m_blockman.m_block_index) {
         if (!(entry.second.nStatus & BLOCK_FAILED_VALID) && m_blockman.m_best_header->nChainWork < entry.second.nChainWork) {
@@ -5015,7 +5028,7 @@ void Chainstate::RecalculateBestHeader()
 std::optional<int> ChainstateManager::BlocksAheadOfTip() const
 {
     LOCK(::cs_main);
-    const CBlockIndex* best_header{m_blockman.m_best_header};
+    const CBlockIndex* best_header{m_blockman.BestHeader()};
     const CBlockIndex* tip{ActiveChain().Tip()};
     // Only consider headers that extend the active tip; ignore competing branches.
     if (best_header && tip && best_header->nChainWork > tip->nChainWork &&

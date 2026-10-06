@@ -471,7 +471,7 @@ private:
      * collections like m_dirty_blockindex.
      */
     [[nodiscard]] util::Result<kernel::InterruptResult, kernel::AbortFailure> LoadBlockIndexData(const std::optional<uint256>& snapshot_blockhash)
-        EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+        EXCLUSIVE_LOCKS_REQUIRED(cs_main, !m_index_mutex);
 
     /** Return false if block file or undo file flushing fails. */
     [[nodiscard]] kernel::FlushResult<> FlushBlockFile(int blockfile_num, bool fFinalize, bool finalize_undo) EXCLUSIVE_LOCKS_REQUIRED(m_blockfile_mutex);
@@ -496,7 +496,7 @@ private:
     void FindFilesToPruneManual(
         std::set<int>& setFilesToPrune,
         int nManualPruneHeight,
-        const Chainstate& chain) EXCLUSIVE_LOCKS_REQUIRED(!m_blockfile_mutex);
+        const Chainstate& chain) EXCLUSIVE_LOCKS_REQUIRED(!m_blockfile_mutex, !m_index_mutex);
 
     /**
      * Prune block and undo files (blk???.dat and rev???.dat) so that the disk space used is less than a user-defined target.
@@ -518,7 +518,7 @@ private:
         std::set<int>& setFilesToPrune,
         int last_prune,
         const Chainstate& chain,
-        ChainstateManager& chainman) EXCLUSIVE_LOCKS_REQUIRED(!m_blockfile_mutex);
+        ChainstateManager& chainman) EXCLUSIVE_LOCKS_REQUIRED(!m_blockfile_mutex, !m_index_mutex);
 
     mutable Mutex m_blockfile_mutex;
     //! Since assumedvalid chainstates may be syncing a range of the chain that is very
@@ -547,7 +547,7 @@ private:
 
     uint64_t CalculateCurrentUsageImpl() EXCLUSIVE_LOCKS_REQUIRED(m_blockfile_mutex);
 
-    void PruneOneBlockFileImpl(const int fileNumber) EXCLUSIVE_LOCKS_REQUIRED(cs_main, m_blockfile_mutex);
+    void PruneOneBlockFileImpl(const int fileNumber) EXCLUSIVE_LOCKS_REQUIRED(cs_main, m_blockfile_mutex, !m_index_mutex);
 
     /** Global flag to indicate we should check to see if there are
      *  block/undo files that should be deleted.  Set on startup
@@ -603,13 +603,19 @@ public:
      */
     std::atomic_bool m_blockfiles_indexed{true};
 
-    BlockMap m_block_index GUARDED_BY(cs_main);
+    mutable Mutex m_index_mutex;
+    BlockMap m_block_index GUARDED_BY(m_index_mutex);
 
     /** Best header we've seen so far for which the block is not known to be invalid
         (used, among others, for getheaders queries' starting points).
         In case of multiple best headers with the same work, it could point to any
         because CBlockIndexWorkComparator tiebreaker rules are not applied. */
-    CBlockIndex* m_best_header GUARDED_BY(::cs_main){nullptr};
+    CBlockIndex* m_best_header GUARDED_BY(m_index_mutex){nullptr};
+
+    CBlockIndex* BestHeader() const EXCLUSIVE_LOCKS_REQUIRED(!m_index_mutex);
+    void SetBestHeader(CBlockIndex* header) EXCLUSIVE_LOCKS_REQUIRED(!m_index_mutex);
+    //! Publish tip as the best header only when none is set yet.
+    void SeedBestHeader(CBlockIndex* tip) EXCLUSIVE_LOCKS_REQUIRED(!m_index_mutex);
 
     CBlockIndex* m_best_invalid GUARDED_BY(::cs_main){nullptr};
 
@@ -648,7 +654,7 @@ public:
      */
     std::optional<int> m_snapshot_height;
 
-    std::vector<CBlockIndex*> GetAllBlockIndices() EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    std::vector<CBlockIndex*> GetAllBlockIndices() EXCLUSIVE_LOCKS_REQUIRED(!m_index_mutex);
 
     /**
      * All pairs A->B, where A (or one of its ancestors) misses transactions, but B has transactions.
@@ -660,7 +666,7 @@ public:
 
     void WriteBlockIndexDB() EXCLUSIVE_LOCKS_REQUIRED(::cs_main, !m_blockfile_mutex);
     [[nodiscard]] util::Result<kernel::InterruptResult, kernel::AbortFailure> LoadBlockIndexDB(const std::optional<uint256>& snapshot_blockhash)
-        EXCLUSIVE_LOCKS_REQUIRED(::cs_main, !m_blockfile_mutex);
+        EXCLUSIVE_LOCKS_REQUIRED(::cs_main, !m_blockfile_mutex, !m_index_mutex);
 
     /**
      * Remove any pruned block & undo files that are still on disk.
@@ -669,19 +675,19 @@ public:
      */
     void ScanAndUnlinkAlreadyPrunedFiles() EXCLUSIVE_LOCKS_REQUIRED(::cs_main, !m_blockfile_mutex);
 
-    CBlockIndex* AddToBlockIndex(const CBlockHeader& block) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    CBlockIndex* AddToBlockIndex(const CBlockHeader& block) EXCLUSIVE_LOCKS_REQUIRED(cs_main, !m_index_mutex);
     /** Create a new block index entry for a given block hash */
-    CBlockIndex* InsertBlockIndex(const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    CBlockIndex* InsertBlockIndex(const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(cs_main, !m_index_mutex);
 
     //! Mark one block file as pruned (modify associated database entries)
-    void PruneOneBlockFile(const int fileNumber) EXCLUSIVE_LOCKS_REQUIRED(cs_main, !m_blockfile_mutex)
+    void PruneOneBlockFile(const int fileNumber) EXCLUSIVE_LOCKS_REQUIRED(cs_main, !m_blockfile_mutex, !m_index_mutex)
     {
         LOCK(m_blockfile_mutex);
         return PruneOneBlockFileImpl(fileNumber);
     }
 
-    CBlockIndex* LookupBlockIndex(const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
-    const CBlockIndex* LookupBlockIndex(const uint256& hash) const EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    CBlockIndex* LookupBlockIndex(const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(!m_index_mutex);
+    const CBlockIndex* LookupBlockIndex(const uint256& hash) const EXCLUSIVE_LOCKS_REQUIRED(!m_index_mutex);
 
     /** Get block file info entry for one block file */
     CBlockFileInfo* GetBlockFileInfo(size_t n) EXCLUSIVE_LOCKS_REQUIRED(::cs_main, !m_blockfile_mutex);
@@ -763,7 +769,7 @@ public:
     bool m_have_pruned = false;
 
     //! Check whether the block associated with this index entry is pruned or not.
-    bool IsBlockPruned(const CBlockIndex& block) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    bool IsBlockPruned(const CBlockIndex& block) const;
 
     //! Create or update a prune lock identified by its name
     void UpdatePruneLock(const std::string& name, const PruneLockInfo& lock_info) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);

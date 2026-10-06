@@ -35,6 +35,7 @@
 #include <node/mining_args.h>
 #include <node/mining_types.h>
 #include <node/peerman_args.h>
+#include <node/transaction.h>
 #include <node/warnings.h>
 #include <noui.h>
 #include <policy/feerate.h>
