@@ -8,6 +8,7 @@
 #include <coins.h>
 #include <dbwrapper.h>
 #include <kernel/coinsstore.h>
+#include <kernel/legacy_leveldb.h>
 #include <logging/timer.h>
 #include <primitives/transaction.h>
 #include <random.h>
@@ -44,6 +45,15 @@ CCoinsViewDB::CCoinsViewDB(util::log::Logger& logger, DBParams db_params, CoinsV
                     : m_db_params.wipe_data  ? kernel::CoinsStore::Mode::WIPE
                     : m_db_params.read_only  ? kernel::CoinsStore::Mode::READ
                                              : kernel::CoinsStore::Mode::WRITE};
+    // Legacy LevelDB coins. Kernel does not link leveldb, so delete the known
+    // LevelDB file names before opening the file store. Leave the directory
+    // for CoinsStore WIPE.
+    if (mode == kernel::CoinsStore::Mode::WIPE && fs::exists(m_db_params.path / "CURRENT")) {
+        if (!kernel::RemoveLegacyLevelDBFiles(m_db_params.path)) {
+            throw dbwrapper_error{strprintf("Failed to remove legacy leveldb coins directory at %s",
+                                            fs::PathToString(m_db_params.path))};
+        }
+    }
     try {
         m_db = std::make_unique<kernel::CoinsStore>(m_db_params.path, mode);
     } catch (const kernel::CoinsStoreError& err) {
