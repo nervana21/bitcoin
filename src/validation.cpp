@@ -22,7 +22,6 @@
 #include <hash.h>
 #include <kernel/chainparams.h>
 #include <kernel/coinstats.h>
-#include <kernel/disconnected_transactions.h>
 #include <kernel/mempool_entry.h>
 #include <kernel/messagestartchars.h>
 #include <kernel/notifications_interface.h>
@@ -1406,15 +1405,11 @@ void Chainstate::UpdateTip(const CBlockIndex* pindexNew)
 
 /** Disconnect m_chain's tip.
   * After calling, the mempool will be in an inconsistent state, with
-  * transactions from disconnected blocks being added to disconnectpool.  You
-  * should make the mempool consistent again by calling MaybeUpdateMempoolForReorg.
-  * with cs_main held.
-  *
-  * If disconnectpool is nullptr, then no disconnected transactions are added to
-  * disconnectpool (note that the caller is responsible for mempool consistency
-  * in any case).
+  * transactions from disconnected blocks saved on the mempool interface.
+  * Make the mempool consistent again by calling MaybeUpdateMempoolForReorg
+  * with cs_main held. A chainstate with no plugged-in pool saves nothing.
   */
-FlushResult<> Chainstate::DisconnectTip(BlockValidationState& state, DisconnectedBlockTransactions* disconnectpool)
+FlushResult<> Chainstate::DisconnectTip(BlockValidationState& state)
 {
     AssertLockHeld(cs_main);
 
@@ -1464,10 +1459,10 @@ FlushResult<> Chainstate::DisconnectTip(BlockValidationState& state, Disconnecte
         return result;
     }
 
-    if (disconnectpool && !GetRole().historical) {
+    if (!GetRole().historical) {
         // Save transactions to re-add to mempool at end of reorg. If any entries are evicted for
         // exceeding memory limits, remove them and their descendants from the mempool.
-        for (auto&& evicted_tx : disconnectpool->AddTransactionsFromBlock(block.vtx)) {
+        for (auto&& evicted_tx : m_chainman.GetMempool().AddDisconnectedTransactions(block.vtx)) {
             m_chainman.GetMempool().removeRecursive(*evicted_tx);
         }
     }
@@ -1499,8 +1494,7 @@ FlushResult<void, AbortFailure> Chainstate::ConnectTip(
     BlockValidationState& state,
     CBlockIndex* pindexNew,
     std::shared_ptr<const CBlock> block_to_connect,
-    std::vector<ConnectedBlock>& connected_blocks,
-    DisconnectedBlockTransactions& disconnectpool)
+    std::vector<ConnectedBlock>& connected_blocks)
 {
     AssertLockHeld(cs_main);
 
@@ -1573,7 +1567,7 @@ FlushResult<void, AbortFailure> Chainstate::ConnectTip(
     std::vector<RemovedMempoolTransactionInfo> txs_removed_for_block;
     if (!GetRole().historical) {
         txs_removed_for_block = m_chainman.GetMempool().removeForBlock(*block_to_connect);
-        disconnectpool.removeForBlock(block_to_connect->vtx);
+        m_chainman.GetMempool().RemoveDisconnectedForBlock(block_to_connect->vtx);
     }
     // Update m_chain & related variables.
     m_chain.SetTip(*pindexNew);
@@ -1703,13 +1697,13 @@ FlushResult<void, AbortFailure> Chainstate::ActivateBestChainStep(BlockValidatio
 
     // Disconnect active blocks which are no longer in the best chain.
     bool fBlocksDisconnected = false;
-    DisconnectedBlockTransactions disconnectpool{MAX_DISCONNECTED_TX_POOL_BYTES};
+    if (!GetRole().historical) m_chainman.GetMempool().ResetDisconnectedTransactions();
     while (m_chain.Tip() && m_chain.Tip() != pindexFork) {
-        if (!(DisconnectTip(state, &disconnectpool) >> result)) {
+        if (!(DisconnectTip(state) >> result)) {
             // This is likely a fatal error, but keep the mempool consistent,
             // just in case. Only remove from the mempool in this case.
             // Propagate flush messages to result, but do not treat flush failure as a chain activation failure.
-            if (!GetRole().historical) m_chainman.GetMempool().MaybeUpdateMempoolForReorg(*this, disconnectpool, false) >> result;
+            if (!GetRole().historical) m_chainman.GetMempool().MaybeUpdateMempoolForReorg(*this, false) >> result;
 
             // If we're unable to disconnect a block during normal operation,
             // then that is a failure of our local system -- we should abort
@@ -1741,7 +1735,7 @@ FlushResult<void, AbortFailure> Chainstate::ActivateBestChainStep(BlockValidatio
 
         // Connect new blocks.
         for (CBlockIndex* pindexConnect : vpindexToConnect | std::views::reverse) {
-            if (!(ConnectTip(state, pindexConnect, pindexConnect == &index_most_work ? pblock : std::shared_ptr<const CBlock>(), connected_blocks, disconnectpool) >> result)) {
+            if (!(ConnectTip(state, pindexConnect, pindexConnect == &index_most_work ? pblock : std::shared_ptr<const CBlock>(), connected_blocks) >> result)) {
                 if (state.IsInvalid()) {
                     // The block violates a consensus rule.
                     if (state.GetResult() != BlockValidationResult::BLOCK_MUTATED) {
@@ -1755,7 +1749,7 @@ FlushResult<void, AbortFailure> Chainstate::ActivateBestChainStep(BlockValidatio
                     // A system error occurred (disk space, database error, ...).
                     // Make the mempool consistent with the current tip, just in case
                     // any observers try to use it before shutdown.
-                    if (!GetRole().historical) m_chainman.GetMempool().MaybeUpdateMempoolForReorg(*this, disconnectpool, false) >> result;
+                    if (!GetRole().historical) m_chainman.GetMempool().MaybeUpdateMempoolForReorg(*this, false) >> result;
                     result.update(util::Error{});
                     return result;
                 }
@@ -1771,10 +1765,10 @@ FlushResult<void, AbortFailure> Chainstate::ActivateBestChainStep(BlockValidatio
     }
 
     if (fBlocksDisconnected) {
-        // If any blocks were disconnected, disconnectpool may be non empty.  Add
+        // If any blocks were disconnected, saved transactions may remain. Add
         // any disconnected transactions back to the mempool.
         // Propagate flush messages to result, but do not treat flush failure as a chain activation failure.
-        if (!GetRole().historical) m_chainman.GetMempool().MaybeUpdateMempoolForReorg(*this, disconnectpool, true) >> result;
+        if (!GetRole().historical) m_chainman.GetMempool().MaybeUpdateMempoolForReorg(*this, true) >> result;
     }
     if (!GetRole().historical) m_chainman.GetMempool().check(this->CoinsTip(), this->m_chain.Height() + 1);
 
@@ -2111,8 +2105,8 @@ FlushResult<> Chainstate::InvalidateBlock(BlockValidationState& state, CBlockInd
         if (m_signals) LimitValidationInterfaceQueue(*m_signals);
 
         LOCK(cs_main);
-        // Lock for as long as disconnectpool is in scope to make sure MaybeUpdateMempoolForReorg is
-        // called after DisconnectTip without unlocking in between
+        // Hold cs_main across DisconnectTip and MaybeUpdateMempoolForReorg so the
+        // saved transactions are applied before the lock is released.
         ChainstateUpdateGuard guard{m_chainman.GetMempool(), GetRole()};
         if (!m_chain.Contains(*pindex)) break;
         pindex_was_in_chain = true;
@@ -2120,15 +2114,15 @@ FlushResult<> Chainstate::InvalidateBlock(BlockValidationState& state, CBlockInd
 
         // ActivateBestChain considers blocks already in m_chain
         // unconditionally valid already, so force disconnect away from it.
-        DisconnectedBlockTransactions disconnectpool{MAX_DISCONNECTED_TX_POOL_BYTES};
-        bool ret = bool{DisconnectTip(state, &disconnectpool) >> result};
-        // DisconnectTip will add transactions to disconnectpool.
+        if (!GetRole().historical) m_chainman.GetMempool().ResetDisconnectedTransactions();
+        bool ret = bool{DisconnectTip(state) >> result};
+        // DisconnectTip saved the block's transactions on the mempool interface.
         // Adjust the mempool to be consistent with the new tip, adding
         // transactions back to the mempool if disconnecting was successful,
         // and we're not doing a very deep invalidation (in which case
         // keeping the mempool up to date is probably futile anyway).
         // Propagate flush messages to result, but do not treat flush failure as a block invalidation failure.
-        if (!GetRole().historical) m_chainman.GetMempool().MaybeUpdateMempoolForReorg(*this, disconnectpool, /* fAddToMempool = */ (++disconnected <= 10) && ret) >> result;
+        if (!GetRole().historical) m_chainman.GetMempool().MaybeUpdateMempoolForReorg(*this, /*fAddToMempool=*/(++disconnected <= 10) && ret) >> result;
         if (!ret) {
             result.update(util::Error{});
             return result;
