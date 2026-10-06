@@ -1311,7 +1311,7 @@ void btck_chainstate_manager_destroy(btck_ChainstateManager* chainman)
         for (const auto& chainstate : btck_ChainstateManager::get(chainman).m_chainman->m_chainstates) {
             if (chainstate->CanFlushToDisk()) {
                 auto flush_result{chainstate->ForceFlushStateToDisk()};
-                if (!flush_result) LogError("%s", util::ErrorString(flush_result).original);
+                if (!flush_result) LogError(btck_ChainstateManager::get(chainman).m_context->m_log, "%s", util::ErrorString(flush_result).original);
                 chainstate->ResetCoinsViews();
             }
         }
@@ -1332,7 +1332,7 @@ int btck_chainstate_manager_import_blocks(btck_ChainstateManager* chainman, cons
         }
         auto& chainman_ref{*btck_ChainstateManager::get(chainman).m_chainman};
         auto result{node::ImportBlocks(chainman_ref, import_files)};
-        if (!result) LogError("%s", util::ErrorString(result).original);
+        if (!result) LogError(btck_ChainstateManager::get(chainman).m_context->m_log, "%s", util::ErrorString(result).original);
         WITH_LOCK(::cs_main, chainman_ref.UpdateIBDStatus());
     } catch (const std::exception& e) {
         LogError(btck_ChainstateManager::get(chainman).m_context->m_log, "Failed to import blocks: %s", e.what());
@@ -1559,7 +1559,7 @@ int btck_chainstate_manager_process_block(
     bool new_block;
     kernel::FlushResult<void, kernel::AbortFailure> process_result;
     bool accepted = btck_ChainstateManager::get(chainman).m_chainman->ProcessNewBlock(btck_Block::get(block), /*force_processing=*/true, /*min_pow_checked=*/true, /*new_block=*/&new_block, process_result);
-    if (!process_result) LogError("%s", util::ErrorString(process_result).original);
+    if (!process_result) LogError(btck_ChainstateManager::get(chainman).m_context->m_log, "%s", util::ErrorString(process_result).original);
     if (_new_block) {
         *_new_block = new_block ? 1 : 0;
     }
