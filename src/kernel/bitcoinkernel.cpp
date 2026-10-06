@@ -1225,6 +1225,28 @@ btck_BlockValidationResult btck_block_validation_state_get_block_validation_resu
     assert(false);
 }
 
+static int copy_c_string(const std::string& value, char* output, size_t output_len, size_t* written)
+{
+    const size_t required{value.size() + 1};
+    if (written != nullptr) {
+        *written = required;
+    }
+    if (output == nullptr) {
+        return 0;
+    }
+    if (output_len < required) {
+        return -1;
+    }
+    std::memcpy(output, value.data(), value.size());
+    output[value.size()] = '\0';
+    return 0;
+}
+
+int btck_block_validation_state_get_reject_reason(const btck_BlockValidationState* block_validation_state, char* output, size_t output_len, size_t* written)
+{
+    return copy_c_string(btck_BlockValidationState::get(block_validation_state).GetRejectReason(), output, output_len, written);
+}
+
 btck_ChainstateManagerOptions* btck_chainstate_manager_options_create(const btck_Context* context, const char* data_dir, size_t data_dir_len, const char* blocks_dir, size_t blocks_dir_len)
 {
     assert(data_dir != nullptr || data_dir_len == 0);
@@ -1866,6 +1888,11 @@ btck_TxValidationResult btck_tx_validation_state_get_tx_validation_result(const 
     case TxValidationResult::TX_UNKNOWN:             return btck_TxValidationResult_UNKNOWN;
     } // no default case, so the compiler can warn about missing cases
     assert(false);
+}
+
+int btck_tx_validation_state_get_reject_reason(const btck_TxValidationState* state, char* output, size_t output_len, size_t* written)
+{
+    return copy_c_string(btck_TxValidationState::get(state).GetRejectReason(), output, output_len, written);
 }
 
 void btck_tx_validation_state_destroy(btck_TxValidationState* state)

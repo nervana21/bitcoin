@@ -650,6 +650,25 @@ BITCOINKERNEL_API btck_TxValidationResult btck_tx_validation_state_get_tx_valida
     const btck_TxValidationState* state) BITCOINKERNEL_ARG_NONNULL(1);
 
 /**
+ * @brief Copy the reject reason into a caller buffer.
+ *
+ * Writes a NUL-terminated string. If output is null, only reports the
+ * required size, including the NUL, through written and returns 0.
+ * If output is non-null and output_len is smaller than that size, writes
+ * nothing, sets written to the required size, and returns -1.
+ *
+ * @param[out] output     Nullable destination.
+ * @param[in] output_len  Size of output in bytes.
+ * @param[out] written    Non-null. Required size including the NUL.
+ * @return                0 on success, -1 if the buffer is too small.
+ */
+BITCOINKERNEL_API int btck_tx_validation_state_get_reject_reason(
+    const btck_TxValidationState* state,
+    char* output,
+    size_t output_len,
+    size_t* written) BITCOINKERNEL_ARG_NONNULL(1, 4);
+
+/**
  * Destroy the btck_TxValidationState.
  */
 BITCOINKERNEL_API void btck_tx_validation_state_destroy(btck_TxValidationState* state);
@@ -1730,6 +1749,25 @@ BITCOINKERNEL_API btck_ValidationMode btck_block_validation_state_get_validation
  */
 BITCOINKERNEL_API btck_BlockValidationResult btck_block_validation_state_get_block_validation_result(
     const btck_BlockValidationState* block_validation_state) BITCOINKERNEL_ARG_NONNULL(1);
+
+/**
+ * @brief Copy the reject reason into a caller buffer.
+ *
+ * Writes a NUL-terminated string. If output is null, only reports the
+ * required size, including the NUL, through written and returns 0.
+ * If output is non-null and output_len is smaller than that size, writes
+ * nothing, sets written to the required size, and returns -1.
+ *
+ * @param[out] output     Nullable destination.
+ * @param[in] output_len  Size of output in bytes.
+ * @param[out] written    Non-null. Required size including the NUL.
+ * @return                0 on success, -1 if the buffer is too small.
+ */
+BITCOINKERNEL_API int btck_block_validation_state_get_reject_reason(
+    const btck_BlockValidationState* block_validation_state,
+    char* output,
+    size_t output_len,
+    size_t* written) BITCOINKERNEL_ARG_NONNULL(1, 4);
 
 /**
  * @brief Copies the btck_BlockValidationState.
