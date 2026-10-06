@@ -56,6 +56,10 @@ target_link_libraries(bitcoinkernel
 add_custom_target(libbitcoinkernel)
 add_dependencies(libbitcoinkernel bitcoinkernel)
 
+# Select libbitcoinkernel log hooks (in bitcoinkernel.cpp) instead of the node
+# hooks in logging.cpp when those sources are compiled into this target.
+target_compile_definitions(bitcoinkernel PRIVATE BITCOINKERNEL_BUILD)
+
 get_target_property(bitcoinkernel_type bitcoinkernel TYPE)
 if(bitcoinkernel_type STREQUAL "STATIC_LIBRARY")
   target_compile_definitions(bitcoinkernel PUBLIC BITCOINKERNEL_STATIC)
