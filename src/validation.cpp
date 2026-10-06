@@ -3118,9 +3118,7 @@ bool ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlock>& blo
      }
 
     return true;
-}
-bool ChainstateManager::CheckTxAtTip(const CTransaction& tx, TxValidationState& state)
-{
+}bool ChainstateManager::CheckTxAtTip(const CTransaction& tx, TxValidationState& state){
     AssertLockHeld(cs_main);
     state = TxValidationState{};
 

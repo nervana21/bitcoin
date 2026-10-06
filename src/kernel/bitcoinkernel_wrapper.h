@@ -1558,11 +1558,14 @@ public:
         return AcceptHeader(header);
     }
 
-    void SetClockTime(std::optional<std::chrono::seconds> now)
+    bool CheckTxAtTip(const Transaction& tx, TxValidationState& state)
     {
-        if (btck_chainstate_manager_set_clock_time(get(), now ? now->count() : 0) != 0) {
-            throw std::runtime_error("timestamp out of range");
-        }
+        return btck_check_tx_at_tip(get(), tx.get(), state.get()) == 1;
+    }
+
+    [[deprecated("Use CheckTxAtTip")]] bool CheckTx(const Transaction& tx, TxValidationState& state)
+    {
+        return CheckTxAtTip(tx, state);
     }
 
     bool ValidateBlock(const Block& block,
@@ -1578,6 +1581,13 @@ public:
                        return btck_coin_copy(coin->get());
                    },
                    &fetcher, state.get()) == 0;
+    }
+
+    void SetClockTime(std::optional<std::chrono::seconds> now)
+    {
+        if (btck_chainstate_manager_set_clock_time(get(), now ? now->count() : 0) != 0) {
+            throw std::runtime_error("timestamp out of range");
+        }
     }
 
     ChainView GetChain() const
