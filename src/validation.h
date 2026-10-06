@@ -1319,6 +1319,18 @@ public:
     [[nodiscard]] MempoolAcceptResult ProcessTransaction(const CTransactionRef& tx, bool test_accept=false)
         EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
+    /**
+     * Consensus-check one non-coinbase transaction against the active chain tip.
+     *
+     * Runs the same checks ConnectBlock applies before updating the UTXO set:
+     * CheckTransaction, finality, input availability, BIP68 sequence locks,
+     * Consensus::CheckTxInputs at the next height, and input scripts under the
+     * tip's block script flags. Does not consult a mempool and does not write
+     * the UTXO set.
+     */
+    [[nodiscard]] bool CheckTxAgainstTip(const CTransaction& tx, TxValidationState& state)
+        EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+
     //! Load the block tree and coins database from disk, initializing state if we're running with -reindex
     bool LoadBlockIndex() EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 

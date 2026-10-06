@@ -4474,6 +4474,49 @@ MempoolAcceptResult ChainstateManager::ProcessTransaction(const CTransactionRef&
     return result;
 }
 
+bool ChainstateManager::CheckTxAgainstTip(const CTransaction& tx, TxValidationState& state)
+{
+    AssertLockHeld(cs_main);
+    state = TxValidationState{};
+
+    Chainstate& active{ActiveChainstate()};
+    CBlockIndex* tip{active.m_chain.Tip()};
+    if (tip == nullptr) {
+        return state.Error("no-tip");
+    }
+
+    if (!CheckTransaction(tx, state)) {
+        return false;
+    }
+    if (tx.IsCoinBase()) {
+        return state.Invalid(TxValidationResult::TX_CONSENSUS, "coinbase");
+    }
+    if (!CheckFinalTxAtTip(*tip, tx)) {
+        return state.Invalid(TxValidationResult::TX_PREMATURE_SPEND, "non-final");
+    }
+
+    CCoinsViewCache view{&active.CoinsTip()};
+    for (const CTxIn& txin : tx.vin) {
+        if (!view.HaveCoin(txin.prevout)) {
+            return state.Invalid(TxValidationResult::TX_MISSING_INPUTS, "bad-txns-inputs-missingorspent");
+        }
+    }
+
+    const std::optional<LockPoints> lock_points{CalculateLockPointsAtTip(tip, view, tx)};
+    if (!lock_points.has_value() || !CheckSequenceLocksAtTip(tip, *lock_points)) {
+        return state.Invalid(TxValidationResult::TX_PREMATURE_SPEND, "non-BIP68-final");
+    }
+
+    CAmount txfee{0};
+    if (!Consensus::CheckTxInputs(tx, state, view, active.m_chain.Height() + 1, txfee)) {
+        return false;
+    }
+
+    const script_verify_flags flags{GetBlockScriptFlags(*tip, *this)};
+    PrecomputedTransactionData txdata;
+    return CheckInputScripts(tx, state, view, flags, /*cacheSigStore=*/false, /*cacheFullScriptStore=*/false, txdata, m_validation_cache);
+}
+
 
 BlockValidationState TestBlockValidity(
     Chainstate& chainstate,
