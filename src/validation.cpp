@@ -369,6 +369,7 @@ void Chainstate::InitCoinsDB(
             .cache_bytes = cache_size_bytes,
             .memory_only = in_memory,
             .wipe_data = should_wipe,
+            .read_only = m_blockman.IsReadOnly(),
             .obfuscate = true,
             .options = coins_db},
         coins_view);
@@ -3635,6 +3636,13 @@ FlushResult<> ChainstateManager::LoadGenesisBlock()
     // set based on the coins db, not the block index db, which is the only
     // thing loaded at this point.
     if (m_blockman.m_block_index.contains(genesis_block.GetHash())) {
+        return result;
+    }
+
+    if (m_blockman.IsReadOnly()) {
+        auto error{Untranslated("Read-only chainstate has no genesis block")};
+        LogError(m_log, "%s: %s\n", __func__, error.original);
+        result.update(util::Error{std::move(error)});
         return result;
     }
 

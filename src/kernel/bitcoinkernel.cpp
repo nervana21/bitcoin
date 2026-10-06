@@ -1269,6 +1269,19 @@ void btck_chainstate_manager_options_destroy(btck_ChainstateManagerOptions* opti
     delete options;
 }
 
+int btck_chainstate_manager_options_set_read_only(btck_ChainstateManagerOptions* chainman_opts, int read_only)
+{
+    auto& opts{btck_ChainstateManagerOptions::get(chainman_opts)};
+    LOCK(opts.m_mutex);
+    if (read_only == 1 && (opts.m_blockman_options.wipe_block_tree_data || opts.m_chainstate_load_options.wipe_chainstate_db || opts.m_chainstate_load_options.coins_db_in_memory)) {
+        LogError(opts.m_context->m_log, "Read-only chainstate cannot wipe or use an in-memory coins database.");
+        return -1;
+    }
+    opts.m_blockman_options.read_only = read_only == 1;
+    opts.m_chainstate_load_options.read_only = read_only == 1;
+    return 0;
+}
+
 int btck_chainstate_manager_options_set_wipe_dbs(btck_ChainstateManagerOptions* chainman_opts, int wipe_block_tree_db, int wipe_chainstate_db)
 {
     auto& opts{btck_ChainstateManagerOptions::get(chainman_opts)};
@@ -1277,6 +1290,10 @@ int btck_chainstate_manager_options_set_wipe_dbs(btck_ChainstateManagerOptions* 
         return -1;
     }
     LOCK(opts.m_mutex);
+    if (opts.m_blockman_options.read_only && (wipe_block_tree_db == 1 || wipe_chainstate_db == 1)) {
+        LogError(opts.m_context->m_log, "Read-only chainstate cannot wipe.");
+        return -1;
+    }
     opts.m_blockman_options.wipe_block_tree_data = wipe_block_tree_db == 1;
     opts.m_chainstate_load_options.wipe_chainstate_db = wipe_chainstate_db == 1;
     return 0;
@@ -1288,6 +1305,10 @@ void btck_chainstate_manager_options_update_chainstate_db_in_memory(
 {
     auto& opts{btck_ChainstateManagerOptions::get(chainman_opts)};
     LOCK(opts.m_mutex);
+    if (chainstate_db_in_memory == 1 && opts.m_blockman_options.read_only) {
+        LogError(opts.m_context->m_log, "Read-only chainstate cannot use an in-memory coins database.");
+        return;
+    }
     opts.m_chainstate_load_options.coins_db_in_memory = chainstate_db_in_memory == 1;
 }
 
@@ -1331,9 +1352,11 @@ btck_ChainstateManager* btck_chainstate_manager_create(
             LogError(opts.m_context->m_log, "Failed to verify loaded chain state from your datadir: %s", util::ErrorString(load_result).original);
             return nullptr;
         }
-        if (auto result = chainman->ActivateBestChains(); !result) {
-            LogError(opts.m_context->m_log, "%s", util::ErrorString(result).original);
-            return nullptr;
+        if (!chainstate_load_opts.read_only) {
+            if (auto result = chainman->ActivateBestChains(); !result) {
+                LogError(opts.m_context->m_log, "%s", util::ErrorString(result).original);
+                return nullptr;
+            }
         }
     } catch (const std::exception& e) {
         LogError(opts.m_context->m_log, "Failed to load chainstate: %s", e.what());
@@ -1364,12 +1387,14 @@ void btck_chainstate_manager_destroy(btck_ChainstateManager* chainman)
 {
     {
         LOCK(btck_ChainstateManager::get(chainman).m_chainman->GetMutex());
+        const bool read_only{btck_ChainstateManager::get(chainman).m_chainman->m_blockman.IsReadOnly()};
         for (const auto& chainstate : btck_ChainstateManager::get(chainman).m_chainman->m_chainstates) {
-            if (chainstate->CanFlushToDisk()) {
+            if (!chainstate->CanFlushToDisk()) continue;
+            if (!read_only) {
                 auto flush_result{chainstate->ForceFlushStateToDisk()};
                 if (!flush_result) LogError(btck_ChainstateManager::get(chainman).m_context->m_log, "%s", util::ErrorString(flush_result).original);
-                chainstate->ResetCoinsViews();
             }
+            chainstate->ResetCoinsViews();
         }
     }
 
