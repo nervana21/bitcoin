@@ -15,12 +15,15 @@ std::string CBlockIndex::ToString() const
 
 void CChain::SetTip(CBlockIndex& block)
 {
+    LOCK(m_mutex);
+    auto next{std::make_shared<std::vector<CBlockIndex*>>(*m_blocks)};
     CBlockIndex* pindex = &block;
-    vChain.resize(pindex->nHeight + 1);
-    while (pindex && vChain[pindex->nHeight] != pindex) {
-        vChain[pindex->nHeight] = pindex;
+    next->resize(static_cast<size_t>(pindex->nHeight) + 1);
+    while (pindex && (*next)[pindex->nHeight] != pindex) {
+        (*next)[pindex->nHeight] = pindex;
         pindex = pindex->pprev;
     }
+    m_blocks = std::shared_ptr<const std::vector<CBlockIndex*>>{std::move(next)};
 }
 
 std::vector<uint256> LocatorEntries(const CBlockIndex* index)
@@ -49,20 +52,23 @@ CBlockLocator GetLocator(const CBlockIndex* index)
 
 const CBlockIndex* CChain::FindFork(const CBlockIndex& index) const
 {
+    const auto blocks{Load()};
     const auto* pindex{&index};
-    if (pindex->nHeight > Height())
-        pindex = pindex->GetAncestor(Height());
-    while (pindex && !Contains(*pindex))
+    const int height{int(blocks->size()) - 1};
+    if (pindex->nHeight > height)
+        pindex = pindex->GetAncestor(height);
+    while (pindex && (pindex->nHeight >= (int)blocks->size() || (*blocks)[pindex->nHeight] != pindex))
         pindex = pindex->pprev;
     return pindex;
 }
 
 CBlockIndex* CChain::FindEarliestAtLeast(int64_t nTime, int height) const
 {
+    const auto blocks{Load()};
     std::pair<int64_t, int> blockparams = std::make_pair(nTime, height);
-    std::vector<CBlockIndex*>::const_iterator lower = std::lower_bound(vChain.begin(), vChain.end(), blockparams,
+    auto lower = std::lower_bound(blocks->begin(), blocks->end(), blockparams,
         [](CBlockIndex* pBlock, const std::pair<int64_t, int>& blockparams) -> bool { return pBlock->GetBlockTimeMax() < blockparams.first || pBlock->nHeight < blockparams.second; });
-    return (lower == vChain.end() ? nullptr : *lower);
+    return (lower == blocks->end() ? nullptr : *lower);
 }
 
 /** Turn the lowest '1' bit in the binary representation of a number into a '0'. */
