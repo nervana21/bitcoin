@@ -67,9 +67,10 @@ BOOST_AUTO_TEST_CASE(contextual_valid)
 
     const NodeClock::time_point now{std::chrono::seconds{header.nTime}};
 
+    VersionBitsCache versionbits;
     BlockValidationState state;
 
-    BOOST_CHECK(ContextualCheckBlockHeader(header, state, consensusParams, &prev, now));
+    BOOST_CHECK(ContextualCheckBlockHeader(header, state, consensusParams, versionbits, &prev, now));
     BOOST_CHECK(state.IsValid());
 }
 
@@ -91,9 +92,10 @@ BOOST_AUTO_TEST_CASE(contextual_bad_diffbits)
 
     const NodeClock::time_point now{std::chrono::seconds{header.nTime}};
 
+    VersionBitsCache versionbits;
     BlockValidationState state;
 
-    BOOST_CHECK(!ContextualCheckBlockHeader(header, state, consensusParams, &prev, now));
+    BOOST_CHECK(!ContextualCheckBlockHeader(header, state, consensusParams, versionbits, &prev, now));
     BOOST_CHECK(state.IsInvalid());
     BOOST_CHECK(state.GetRejectReason() == "bad-diffbits");
 }
@@ -115,9 +117,10 @@ BOOST_AUTO_TEST_CASE(contextual_time_too_old)
 
     const NodeClock::time_point now{std::chrono::seconds{header.nTime}};
 
+    VersionBitsCache versionbits;
     BlockValidationState state;
 
-    BOOST_CHECK(!ContextualCheckBlockHeader(header, state, consensusParams, &prev, now));
+    BOOST_CHECK(!ContextualCheckBlockHeader(header, state, consensusParams, versionbits, &prev, now));
     BOOST_CHECK(state.IsInvalid());
     BOOST_CHECK(state.GetRejectReason() == "time-too-old");
 }
@@ -151,9 +154,10 @@ BOOST_AUTO_TEST_CASE(contextual_time_timewarp_attack)
 
     const NodeClock::time_point now{std::chrono::seconds{header.nTime}};
 
+    VersionBitsCache versionbits;
     BlockValidationState state;
 
-    BOOST_CHECK(!ContextualCheckBlockHeader(header, state, consensusParams, &prev, now));
+    BOOST_CHECK(!ContextualCheckBlockHeader(header, state, consensusParams, versionbits, &prev, now));
     BOOST_CHECK(state.IsInvalid());
     BOOST_CHECK(state.GetRejectReason() == "time-timewarp-attack");
 }
@@ -177,9 +181,10 @@ BOOST_AUTO_TEST_CASE(contextual_time_too_new)
     // MAX_FUTURE_BLOCK_TIME ahead of it.
     const NodeClock::time_point now{std::chrono::seconds{prev.nTime}};
 
+    VersionBitsCache versionbits;
     BlockValidationState state;
 
-    BOOST_CHECK(!ContextualCheckBlockHeader(header, state, consensusParams, &prev, now));
+    BOOST_CHECK(!ContextualCheckBlockHeader(header, state, consensusParams, versionbits, &prev, now));
     BOOST_CHECK(state.IsInvalid());
     BOOST_CHECK(state.GetRejectReason() == "time-too-new");
 }
@@ -204,9 +209,10 @@ BOOST_AUTO_TEST_CASE(contextual_version_1_after_heightincb)
 
     const NodeClock::time_point now{std::chrono::seconds{header.nTime}};
 
+    VersionBitsCache versionbits;
     BlockValidationState state;
 
-    BOOST_CHECK(!ContextualCheckBlockHeader(header, state, consensusParams, &prev, now));
+    BOOST_CHECK(!ContextualCheckBlockHeader(header, state, consensusParams, versionbits, &prev, now));
     BOOST_CHECK(state.IsInvalid());
     BOOST_CHECK(state.GetRejectReason() == "bad-version(0x00000001)");
 }
@@ -231,9 +237,10 @@ BOOST_AUTO_TEST_CASE(contextual_version_2_after_dersig)
 
     const NodeClock::time_point now{std::chrono::seconds{header.nTime}};
 
+    VersionBitsCache versionbits;
     BlockValidationState state;
 
-    BOOST_CHECK(!ContextualCheckBlockHeader(header, state, consensusParams, &prev, now));
+    BOOST_CHECK(!ContextualCheckBlockHeader(header, state, consensusParams, versionbits, &prev, now));
     BOOST_CHECK(state.IsInvalid());
     BOOST_CHECK(state.GetRejectReason() == "bad-version(0x00000002)");
 }
@@ -258,9 +265,10 @@ BOOST_AUTO_TEST_CASE(contextual_version_3_after_cltv)
 
     const NodeClock::time_point now{std::chrono::seconds{header.nTime}};
 
+    VersionBitsCache versionbits;
     BlockValidationState state;
 
-    BOOST_CHECK(!ContextualCheckBlockHeader(header, state, consensusParams, &prev, now));
+    BOOST_CHECK(!ContextualCheckBlockHeader(header, state, consensusParams, versionbits, &prev, now));
     BOOST_CHECK(state.IsInvalid());
     BOOST_CHECK(state.GetRejectReason() == "bad-version(0x00000003)");
 }
@@ -283,10 +291,11 @@ BOOST_AUTO_TEST_CASE(contextual_version_2_before_dersig)
 
     const NodeClock::time_point now{std::chrono::seconds{header.nTime}};
 
+    VersionBitsCache versionbits;
     BlockValidationState state;
 
     // Version 2 is only outdated once DERSIG requires version 3.
-    BOOST_CHECK(ContextualCheckBlockHeader(header, state, consensusParams, &prev, now));
+    BOOST_CHECK(ContextualCheckBlockHeader(header, state, consensusParams, versionbits, &prev, now));
     BOOST_CHECK(state.IsValid());
 }
 
@@ -308,10 +317,11 @@ BOOST_AUTO_TEST_CASE(contextual_version_3_before_cltv)
 
     const NodeClock::time_point now{std::chrono::seconds{header.nTime}};
 
+    VersionBitsCache versionbits;
     BlockValidationState state;
 
     // Version 3 is only outdated once CLTV requires version 4.
-    BOOST_CHECK(ContextualCheckBlockHeader(header, state, consensusParams, &prev, now));
+    BOOST_CHECK(ContextualCheckBlockHeader(header, state, consensusParams, versionbits, &prev, now));
     BOOST_CHECK(state.IsValid());
 }
 
@@ -335,10 +345,11 @@ BOOST_AUTO_TEST_CASE(contextual_version_4_after_cltv)
 
     const NodeClock::time_point now{std::chrono::seconds{header.nTime}};
 
+    VersionBitsCache versionbits;
     BlockValidationState state;
 
     // Version 4 is accepted with every version deployment active.
-    BOOST_CHECK(ContextualCheckBlockHeader(header, state, consensusParams, &prev, now));
+    BOOST_CHECK(ContextualCheckBlockHeader(header, state, consensusParams, versionbits, &prev, now));
     BOOST_CHECK(state.IsValid());
 }
 
