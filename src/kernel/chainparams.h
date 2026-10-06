@@ -149,6 +149,10 @@ public:
         DeploymentOptions dep_opts{};
         std::optional<std::vector<uint8_t>> challenge{};
         std::optional<std::vector<std::string>> seeds{};
+        //! Empty unless the caller passes a hash. The kernel does not embed one.
+        uint256 assume_valid{};
+        //! Empty unless the caller passes snapshot data. AssumeUTXO stays off.
+        std::vector<AssumeutxoData> assumeutxo{};
     };
 
     /**
@@ -158,14 +162,20 @@ public:
         DeploymentOptions dep_opts{};
         bool fastprune{false};
         bool enforce_bip94{false};
+        uint256 assume_valid{};
+        std::vector<AssumeutxoData> assumeutxo{};
     };
 
     struct MainNetOptions {
         DeploymentOptions dep_opts{};
+        uint256 assume_valid{};
+        std::vector<AssumeutxoData> assumeutxo{};
     };
 
     struct TestNetOptions {
         DeploymentOptions dep_opts{};
+        uint256 assume_valid{};
+        std::vector<AssumeutxoData> assumeutxo{};
     };
 
     static std::unique_ptr<const CChainParams> RegTest(const RegTestOptions& options);
