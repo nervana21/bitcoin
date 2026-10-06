@@ -91,7 +91,6 @@ add_library(bitcoin_kernel STATIC EXCLUDE_FROM_ALL
   coins.cpp
   compressor.cpp
   consensus/tx_verify.cpp
-  dbwrapper.cpp
   deploymentinfo.cpp
   deploymentstatus.cpp
   flatfile.cpp
@@ -120,7 +119,6 @@ target_link_libraries(bitcoin_kernel
     core_interface
     bitcoin_consensus
     bitcoin_util
-    leveldb
     secp256k1
     $<TARGET_NAME_IF_EXISTS:USDT::headers>
     $<$<PLATFORM_ID:Windows>:ws2_32>
@@ -305,6 +303,7 @@ add_library(bitcoin_node STATIC EXCLUDE_FROM_ALL
   util/asmap.cpp
   util/batchpriority.cpp
   util/readwritefile.cpp
+  dbwrapper.cpp
   kernel/disconnected_transactions.cpp
   $<$<TARGET_EXISTS:bitcoin_wallet>:wallet/init.cpp>
   $<$<NOT:$<TARGET_EXISTS:bitcoin_wallet>>:dummywallet.cpp>
@@ -317,6 +316,7 @@ target_link_libraries(bitcoin_node
     bitcoin_util
     $<TARGET_NAME_IF_EXISTS:bitcoin_zmq>
     minisketch
+    leveldb
     univalue
     $<TARGET_NAME_IF_EXISTS:Boost::headers>
     $<TARGET_NAME_IF_EXISTS:USDT::headers>
