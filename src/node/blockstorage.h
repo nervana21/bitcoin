@@ -7,7 +7,6 @@
 
 #include <attributes.h>
 #include <chain.h>
-#include <dbwrapper.h>
 #include <flatfile.h>
 #include <kernel/blockmanager_opts.h>
 #include <kernel/blocktreestorage.h>
@@ -57,25 +56,8 @@ namespace util {
 class SignalInterrupt;
 } // namespace util
 
-namespace kernel {
-
-/** Access to the legacy block database (blocks/index/) used during migration*/
-class BlockTreeDB : public CDBWrapper
-{
-public:
-    using CDBWrapper::CDBWrapper;
-    bool ReadBlockFileInfo(int nFile, CBlockFileInfo& info);
-    bool ReadLastBlockFile(int& nFile);
-    void ReadReindexing(bool& fReindexing);
-    bool ReadFlag(const std::string& name, bool& fValue);
-    bool LoadBlockIndexGuts(const Consensus::Params& consensusParams, std::function<CBlockIndex*(const uint256&)> insertBlockIndex, const util::SignalInterrupt& interrupt)
-        EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
-};
-} // namespace kernel
-
 namespace node {
 using kernel::CBlockFileInfo;
-using kernel::BlockTreeDB;
 
 /** The pre-allocation chunk size for blk?????.dat files (since 0.8) */
 inline constexpr unsigned int BLOCKFILE_CHUNK_SIZE{16_MiB};
