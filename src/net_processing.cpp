@@ -98,6 +98,7 @@ using kernel::FlushResult;
 TRACEPOINT_SEMAPHORE(net, inbound_message);
 TRACEPOINT_SEMAPHORE(net, misbehaving_connection);
 
+// Peer block download and sync state. Never hold with m_tx_download_mutex.
 RecursiveMutex cs_processing;
 
 /** Headers download timeout.
@@ -4378,38 +4379,87 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
         std::unordered_set<uint256, SaltedUint256Hasher> seen_txids{0, m_txhash_hasher};
         std::unordered_set<uint256, SaltedUint256Hasher> seen_wtxids{0, m_txhash_hasher};
 
-        LOCK2(cs_processing, m_tx_download_mutex);
-
         const auto current_time{GetTime<std::chrono::microseconds>()};
+        // Block INVs need cs_processing. TX INVs need m_tx_download_mutex and
+        // may take the mempool via AlreadyHaveTx. Never hold both locks.
         uint256* best_block{nullptr};
 
-        for (CInv& inv : vInv) {
-            if (interruptMsgProc) return;
+        {
+            LOCK(cs_processing);
+            for (CInv& inv : vInv) {
+                if (interruptMsgProc) return;
 
-            // Ignore INVs that don't match wtxidrelay setting.
-            // Note that orphan parent fetching always uses MSG_TX GETDATAs regardless of the wtxidrelay setting.
-            // This is fine as no INV messages are involved in that process.
-            if (peer.m_wtxid_relay) {
-                if (inv.IsMsgTx()) continue;
-            } else {
-                if (inv.IsMsgWtx()) continue;
+                // Ignore INVs that don't match wtxidrelay setting.
+                // Note that orphan parent fetching always uses MSG_TX GETDATAs regardless of the wtxidrelay setting.
+                // This is fine as no INV messages are involved in that process.
+                if (peer.m_wtxid_relay) {
+                    if (inv.IsMsgTx()) continue;
+                } else {
+                    if (inv.IsMsgWtx()) continue;
+                }
+
+                if (inv.IsMsgBlk()) {
+                    const bool fAlreadyHave = AlreadyHaveBlock(inv.hash);
+                    LogDebug(BCLog::NET, "got inv: %s %s peer=%d", inv.ToString(), fAlreadyHave ? "have" : "new", pfrom.GetId());
+
+                    UpdateBlockAvailability(pfrom.GetId(), inv.hash);
+                    if (!fAlreadyHave && !m_chainman.m_blockman.LoadingBlocks() && !IsBlockRequested(inv.hash)) {
+                        // Headers-first is the primary method of announcement on
+                        // the network. If a node fell back to sending blocks by
+                        // inv, it may be for a re-org, or because we haven't
+                        // completed initial headers sync. The final block hash
+                        // provided should be the highest, so send a getheaders and
+                        // then fetch the blocks we need to catch up.
+                        best_block = &inv.hash;
+                    }
+                } else if (!inv.IsGenTxMsg()) {
+                    LogDebug(BCLog::NET, "Unknown inv type \"%s\" received from peer=%d\n", inv.ToString(), pfrom.GetId());
+                }
             }
 
-            if (inv.IsMsgBlk()) {
-                const bool fAlreadyHave = AlreadyHaveBlock(inv.hash);
-                LogDebug(BCLog::NET, "got inv: %s %s peer=%d", inv.ToString(), fAlreadyHave ? "have" : "new", pfrom.GetId());
-
-                UpdateBlockAvailability(pfrom.GetId(), inv.hash);
-                if (!fAlreadyHave && !m_chainman.m_blockman.LoadingBlocks() && !IsBlockRequested(inv.hash)) {
-                    // Headers-first is the primary method of announcement on
-                    // the network. If a node fell back to sending blocks by
-                    // inv, it may be for a re-org, or because we haven't
-                    // completed initial headers sync. The final block hash
-                    // provided should be the highest, so send a getheaders and
-                    // then fetch the blocks we need to catch up.
-                    best_block = &inv.hash;
+            if (best_block != nullptr) {
+                // If we haven't started initial headers-sync with this peer, then
+                // consider sending a getheaders now. On initial startup, there's a
+                // reliability vs bandwidth tradeoff, where we are only trying to do
+                // initial headers sync with one peer at a time, with a long
+                // timeout (at which point, if the sync hasn't completed, we will
+                // disconnect the peer and then choose another). In the meantime,
+                // as new blocks are found, we are willing to add one new peer per
+                // block to sync with as well, to sync quicker in the case where
+                // our initial peer is unresponsive (but less bandwidth than we'd
+                // use if we turned on sync with all peers).
+                CNodeState& state{*Assert(State(pfrom.GetId()))};
+                if (state.fSyncStarted || (!peer.m_inv_triggered_getheaders_before_sync && *best_block != m_last_block_inv_triggering_headers_sync)) {
+                    const CBlockIndex* best_header{m_chainman.m_blockman.BestHeader()};
+                    if (MaybeSendGetHeaders(pfrom, GetLocator(best_header), peer)) {
+                        LogDebug(BCLog::NET, "getheaders (%d) %s to peer=%d\n",
+                                best_header->nHeight, best_block->ToString(),
+                                pfrom.GetId());
+                    }
+                    if (!state.fSyncStarted) {
+                        peer.m_inv_triggered_getheaders_before_sync = true;
+                        // Update the last block hash that triggered a new headers
+                        // sync, so that we don't turn on headers sync with more
+                        // than 1 new peer every new block.
+                        m_last_block_inv_triggering_headers_sync = *best_block;
+                    }
                 }
-            } else if (inv.IsGenTxMsg()) {
+            }
+        } // release cs_processing before TX announcements
+
+        AssertLockNotHeld(cs_processing);
+        {
+            LOCK(m_tx_download_mutex);
+            for (CInv& inv : vInv) {
+                if (interruptMsgProc) return;
+
+                if (peer.m_wtxid_relay) {
+                    if (inv.IsMsgTx()) continue;
+                } else {
+                    if (inv.IsMsgWtx()) continue;
+                }
+                if (!inv.IsGenTxMsg()) continue;
+
                 if (reject_tx_invs) {
                     LogDebug(BCLog::NET, "transaction (%s) inv sent in violation of protocol, %s", inv.hash.ToString(), pfrom.DisconnectMsg());
                     pfrom.fDisconnect = true;
@@ -4424,37 +4474,6 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
                 if (!m_chainman.IsInitialBlockDownload()) {
                     const bool fAlreadyHave{m_txdownloadman.AddTxAnnouncement(pfrom.GetId(), gtxid, current_time)};
                     LogDebug(BCLog::NET, "got inv: %s %s peer=%d", inv.ToString(), fAlreadyHave ? "have" : "new", pfrom.GetId());
-                }
-            } else {
-                LogDebug(BCLog::NET, "Unknown inv type \"%s\" received from peer=%d\n", inv.ToString(), pfrom.GetId());
-            }
-        }
-
-        if (best_block != nullptr) {
-            // If we haven't started initial headers-sync with this peer, then
-            // consider sending a getheaders now. On initial startup, there's a
-            // reliability vs bandwidth tradeoff, where we are only trying to do
-            // initial headers sync with one peer at a time, with a long
-            // timeout (at which point, if the sync hasn't completed, we will
-            // disconnect the peer and then choose another). In the meantime,
-            // as new blocks are found, we are willing to add one new peer per
-            // block to sync with as well, to sync quicker in the case where
-            // our initial peer is unresponsive (but less bandwidth than we'd
-            // use if we turned on sync with all peers).
-            CNodeState& state{*Assert(State(pfrom.GetId()))};
-            if (state.fSyncStarted || (!peer.m_inv_triggered_getheaders_before_sync && *best_block != m_last_block_inv_triggering_headers_sync)) {
-                const CBlockIndex* best_header{m_chainman.m_blockman.BestHeader()};
-                if (MaybeSendGetHeaders(pfrom, GetLocator(best_header), peer)) {
-                    LogDebug(BCLog::NET, "getheaders (%d) %s to peer=%d\n",
-                            best_header->nHeight, best_block->ToString(),
-                            pfrom.GetId());
-                }
-                if (!state.fSyncStarted) {
-                    peer.m_inv_triggered_getheaders_before_sync = true;
-                    // Update the last block hash that triggered a new headers
-                    // sync, so that we don't turn on headers sync with more
-                    // than 1 new peer every new block.
-                    m_last_block_inv_triggering_headers_sync = *best_block;
                 }
             }
         }
