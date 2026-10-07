@@ -99,6 +99,8 @@ TRACEPOINT_SEMAPHORE(net, inbound_message);
 TRACEPOINT_SEMAPHORE(net, misbehaving_connection);
 
 // Peer block download and sync state. Never hold with m_tx_download_mutex.
+// Never take m_mempool.cs while already holding this. When both mempool and
+// this lock are required, take mempool first (matches validation order).
 RecursiveMutex cs_processing;
 
 /** Headers download timeout.
@@ -4889,6 +4891,9 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
         bool fBlockReconstructed = false;
 
         {
+        // InitData locks the mempool. Take mempool first so the order matches
+        // validation (mempool then cs_processing), not the reverse.
+        LOCK(m_mempool.cs);
         LOCK(cs_processing);
         UpdateBlockAvailability(pfrom.GetId(), pindex->GetBlockHash());
 
@@ -5034,7 +5039,7 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
                 fRevertToHeaderProcessing = true;
             }
         }
-        } // cs_processing
+        } // release m_mempool.cs and cs_processing
 
         if (fProcessBLOCKTXN) {
             BlockTransactions txn;
