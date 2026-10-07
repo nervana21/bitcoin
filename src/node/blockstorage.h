@@ -548,7 +548,7 @@ private:
 
     uint64_t CalculateCurrentUsageImpl() EXCLUSIVE_LOCKS_REQUIRED(m_blockfile_mutex);
 
-    void PruneOneBlockFileImpl(const int fileNumber) EXCLUSIVE_LOCKS_REQUIRED(cs_main, m_blockfile_mutex, !m_index_mutex);
+    void PruneOneBlockFileImpl(int fileNumber) EXCLUSIVE_LOCKS_REQUIRED(cs_main, m_blockfile_mutex, !m_index_mutex);
 
     /** Global flag to indicate we should check to see if there are
      *  block/undo files that should be deleted.  Set on startup
@@ -681,7 +681,7 @@ public:
     CBlockIndex* InsertBlockIndex(const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(cs_main, !m_index_mutex);
 
     //! Mark one block file as pruned (modify associated database entries)
-    void PruneOneBlockFile(const int fileNumber) EXCLUSIVE_LOCKS_REQUIRED(cs_main, !m_blockfile_mutex, !m_index_mutex)
+    void PruneOneBlockFile(int fileNumber) EXCLUSIVE_LOCKS_REQUIRED(cs_main, !m_blockfile_mutex, !m_index_mutex)
     {
         LOCK(m_blockfile_mutex);
         return PruneOneBlockFileImpl(fileNumber);
