@@ -301,7 +301,11 @@ FlushResult<InterruptResult, ChainstateLoadError> VerifyLoadedChainstate(Chainst
                 *chainstate, chainman.GetConsensus(), chainstate->CoinsDB(),
                 options.check_level,
                 options.check_blocks) >> result};
-            if (verify_result) {
+            if (!verify_result) {
+                result.update({util::Error{_("Corrupted block database detected")}, ChainstateLoadError::FAILURE});
+            } else {
+                // Copy out of Result before visit. Avoids mingw -Wmaybe-uninitialized false positive.
+                const auto verify_outcome{*verify_result};
                 std::visit(util::Overloaded{
                     [&](VerifySuccess) {},
                     [&](SkippedMissingBlocks) {},
@@ -312,9 +316,7 @@ FlushResult<InterruptResult, ChainstateLoadError> VerifyLoadedChainstate(Chainst
                     },
                     [&](kernel::Interrupted) {
                        result.update(Interrupted{});
-                    }}, *verify_result);
-            } else {
-                result.update({util::Error{_("Corrupted block database detected")}, ChainstateLoadError::FAILURE});
+                    }}, verify_outcome);
             }
         }
     }
