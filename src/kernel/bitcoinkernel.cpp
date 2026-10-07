@@ -1056,19 +1056,29 @@ btck_ChainParameters* btck_chain_parameters_create(const btck_ChainType chain_ty
 {
     switch (chain_type) {
     case btck_ChainType_MAINNET: {
-        return btck_ChainParameters::ref(const_cast<CChainParams*>(CChainParams::Main().release()));
+        auto opts{CChainParams::MainNetOptions{}};
+        opts.assumeutxo = MainAssumeutxo();
+        return btck_ChainParameters::ref(const_cast<CChainParams*>(CChainParams::Main(opts).release()));
     }
     case btck_ChainType_TESTNET: {
-        return btck_ChainParameters::ref(const_cast<CChainParams*>(CChainParams::TestNet().release()));
+        auto opts{CChainParams::TestNetOptions{}};
+        opts.assumeutxo = TestNetAssumeutxo();
+        return btck_ChainParameters::ref(const_cast<CChainParams*>(CChainParams::TestNet(opts).release()));
     }
     case btck_ChainType_TESTNET_4: {
-        return btck_ChainParameters::ref(const_cast<CChainParams*>(CChainParams::TestNet4().release()));
+        auto opts{CChainParams::TestNetOptions{}};
+        opts.assumeutxo = TestNet4Assumeutxo();
+        return btck_ChainParameters::ref(const_cast<CChainParams*>(CChainParams::TestNet4(opts).release()));
     }
     case btck_ChainType_SIGNET: {
-        return btck_ChainParameters::ref(const_cast<CChainParams*>(CChainParams::SigNet().release()));
+        auto opts{CChainParams::SigNetOptions{}};
+        opts.assumeutxo = SigNetAssumeutxo();
+        return btck_ChainParameters::ref(const_cast<CChainParams*>(CChainParams::SigNet(opts).release()));
     }
     case btck_ChainType_REGTEST: {
-        return btck_ChainParameters::ref(const_cast<CChainParams*>(CChainParams::RegTest().release()));
+        auto opts{CChainParams::RegTestOptions{}};
+        opts.assumeutxo = RegTestAssumeutxo();
+        return btck_ChainParameters::ref(const_cast<CChainParams*>(CChainParams::RegTest(opts).release()));
     }
     }
     assert(false);
