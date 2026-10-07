@@ -50,7 +50,7 @@ inline bool RemoveLegacyLevelDBFiles(const fs::path& dir)
         if (stat_ec) return false;
         if (!regular) continue;
         if (!IsLegacyLevelDBFileName(fs::PathToString(it->path().filename()))) continue;
-        files.push_back(it->path());
+        files.emplace_back(it->path());
     }
     if (ec && ec != std::errc::no_such_file_or_directory) return false;
     if (ec) return files.empty();
