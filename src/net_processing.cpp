@@ -6287,8 +6287,11 @@ bool PeerManagerImpl::SendMessages(CNode& node)
                     if (cached_cmpctblock_msg.has_value()) {
                         PushMessage(node, std::move(cached_cmpctblock_msg.value()));
                     } else {
+                        // Use the FlatFilePos overload. ReadBlock(CBlockIndex)
+                        // takes cs_main for GetBlockPos, which must not nest
+                        // under cs_processing.
                         CBlock block;
-                        const bool ret{m_chainman.m_blockman.ReadBlock(block, *pBestIndex)};
+                        const bool ret{m_chainman.m_blockman.ReadBlock(block, pBestIndex->GetBlockPos(), pBestIndex->GetBlockHash())};
                         assert(ret);
                         CBlockHeaderAndShortTxIDs cmpctblock{block, m_rng.rand64()};
                         MakeAndPushMessage(node, NetMsgType::CMPCTBLOCK, cmpctblock);
