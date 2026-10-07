@@ -1784,6 +1784,7 @@ void PeerManagerImpl::ReattemptPrivateBroadcast(CScheduler& scheduler)
 void PeerManagerImpl::FinalizeNode(const CNode& node)
 {
     NodeId nodeid = node.GetId();
+    bool last_peer{false};
     {
     LOCK(cs_processing);
     {
@@ -1812,10 +1813,6 @@ void PeerManagerImpl::FinalizeNode(const CNode& node)
             }
         }
     }
-    {
-        LOCK(m_tx_download_mutex);
-        m_txdownloadman.DisconnectedPeer(nodeid);
-    }
     if (m_txreconciliation) m_txreconciliation->ForgetPeer(nodeid);
     m_num_preferred_download_peers -= state->fPreferredDownload;
     m_peers_downloading_from -= (!state->vBlocksInFlight.empty());
@@ -1831,9 +1828,15 @@ void PeerManagerImpl::FinalizeNode(const CNode& node)
         assert(m_num_preferred_download_peers == 0);
         assert(m_peers_downloading_from == 0);
         assert(m_outbound_peers_with_protect_from_disconnect == 0);
-        WITH_LOCK(m_tx_download_mutex, m_txdownloadman.CheckIsEmpty());
+        last_peer = true;
     }
-    } // cs_processing
+    } // release cs_processing before m_tx_download_mutex
+
+    {
+        LOCK(m_tx_download_mutex);
+        m_txdownloadman.DisconnectedPeer(nodeid);
+        if (last_peer) m_txdownloadman.CheckIsEmpty();
+    }
     if (node.fSuccessfullyConnected &&
         !node.IsBlockOnlyConn() && !node.IsPrivateBroadcastConn() && !node.IsInboundConn()) {
         // Only change visible addrman state for full outbound peers.  We don't
