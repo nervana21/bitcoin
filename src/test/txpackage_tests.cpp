@@ -1126,7 +1126,6 @@ BOOST_AUTO_TEST_CASE(package_rbf_tests)
         CTransactionRef tx_child_2 = MakeTransactionRef(CreateValidMempoolTransaction(tx_parent, 0, 101, child_key, child_spk, coinbase_value - low_fee_amt - 500, false));
         package2.push_back(tx_child_2);
 
-        LOCK(m_node.mempool->cs);
         auto [submit1, process_result1]{ProcessNewPackage(m_node.chainman->ActiveChainstate(), *m_node.mempool, package1, /*test_accept=*/false, std::nullopt)};
         BOOST_CHECK(process_result1);
         if (auto err_1{CheckPackageMempoolAcceptResult(package1, submit1, /*expect_valid=*/true, m_node.mempool.get())}) {
