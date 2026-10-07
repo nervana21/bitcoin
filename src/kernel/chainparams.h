@@ -48,6 +48,15 @@ struct AssumeutxoData {
     uint256 blockhash;
 };
 
+//! Standard AssumeUTXO snapshots for each chain. Callers that build chain
+//! params through the options structs start with an empty list and pass one
+//! of these when the chain should accept those snapshots.
+std::vector<AssumeutxoData> MainAssumeutxo();
+std::vector<AssumeutxoData> TestNetAssumeutxo();
+std::vector<AssumeutxoData> TestNet4Assumeutxo();
+std::vector<AssumeutxoData> SigNetAssumeutxo();
+std::vector<AssumeutxoData> RegTestAssumeutxo();
+
 /**
  * Holds various statistics on transactions within a chain. Used to estimate
  * verification progress during chain sync.
