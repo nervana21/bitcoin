@@ -144,7 +144,9 @@ wallet::DescriptorScriptPubKeyMan* CreateDescriptor(CWallet& keystore, const std
     WalletDescriptor w_desc(std::move(desc), timestamp, range_start, range_end, next_index);
 
     LOCK(keystore.cs_wallet);
-    auto spkm = Assert(keystore.AddWalletDescriptor(w_desc, keys,/*label=*/"", /*internal=*/false));
-    return &spkm.value().get();
+    // Avoid mingw -Wmaybe-uninitialized false positive on util::Result + Assert.
+    auto spkm = keystore.AddWalletDescriptor(w_desc, keys, /*label=*/"", /*internal=*/false);
+    Assert(spkm);
+    return &spkm->get();
 };
 } // namespace wallet
