@@ -21,7 +21,6 @@
 #include <compat/compat.h>
 #include <consensus/params.h>
 #include <crypto/hex_base.h>
-#include <dbwrapper.h>
 #include <httprpc.h>
 #include <httpserver.h>
 #include <index/base.h>
@@ -42,6 +41,7 @@
 #include <kernel/chainstatemanager_opts.h>
 #include <kernel/checks.h>
 #include <kernel/context.h>
+#include <kernel/mempool_interface.h>
 #include <kernel/notifications_interface.h>
 #include <kernel/result.h>
 #include <key.h>

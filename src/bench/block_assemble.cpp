@@ -10,12 +10,10 @@
 #include <primitives/transaction.h>
 #include <random.h>
 #include <script/script.h>
-#include <sync.h>
 #include <test/util/mining.h>
 #include <test/util/script.h>
 #include <test/util/setup_common.h>
 #include <util/check.h>
-#include <validation.h>
 
 #include <array>
 #include <cstddef>
