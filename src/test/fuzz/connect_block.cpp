@@ -213,8 +213,7 @@ void AddExtraTxsToMempool(TestingSetup& setup)
         ctx.vout[3].nValue = CAmount(10 * COIN);
         ctx.vout[3].scriptPubKey = CScript();
 
-        LOCK(::cs_main);
-        // Add transaction to the mempool.
+        // Add transaction to the mempool. ProcessTransaction excludes cs_main.
         auto [ctx_result, ctx_flush] = node::ProcessTransaction(MakeTransactionRef(ctx), setup.m_node);
         Assert(ctx_result.m_result_type == MempoolAcceptResult::ResultType::VALID);
 
