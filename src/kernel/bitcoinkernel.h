@@ -1050,7 +1050,7 @@ BITCOINKERNEL_API void btck_logging_connection_destroy(btck_LoggingConnection* l
 
 /**
  * @brief Creates a chain parameters struct with default parameters based on the
- * passed in chain type.
+ * passed in chain type, including that chain's standard AssumeUTXO snapshots.
  *
  * @param[in] chain_type Controls the chain parameters type created.
  * @return               An allocated chain parameters opaque struct.
