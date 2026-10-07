@@ -18,7 +18,6 @@
 #include <primitives/transaction.h>
 #include <random.h>
 #include <serialize.h>
-#include <streams.h>
 #include <sync.h>
 #include <uint256.h>
 #include <util/fs.h>

@@ -15,7 +15,11 @@
 #include <util/fs_helpers.h>
 
 #include <array>
+#include <cassert>
 #include <cstdint>
+#include <cstdio>
+#include <span>
+#include <system_error>
 #include <utility>
 
 namespace kernel {
