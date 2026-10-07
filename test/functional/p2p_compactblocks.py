@@ -1050,6 +1050,34 @@ class CompactBlocksTest(BitcoinTestFramework):
         hb_peer = self.nodes[0].p2ps[hb_peer_idx]
         assert not ignores_compact_block(hb_peer, solicited=False)
 
+    def test_uncached_cmpctblock_announcement(self):
+        # NewPoWValidBlock stores a compact block only when height increases.
+        # A same-height replacement is still announced as one high-bandwidth
+        # compact block, but the hash does not match m_most_recent_block_hash,
+        # so SendMessages reads it from disk.
+        node = self.nodes[0]
+        peer = node.add_p2p_connection(TestP2PConn())
+        self.request_cb_announcements(peer)
+
+        peer.clear_block_announcement()
+        cached_tip = self.generate(node, 1)[0]
+        peer.wait_for_block_announcement(int(cached_tip, 16))
+        # Drain the header relay queue while this tip is still active.
+        peer.sync_with_ping()
+
+        node.invalidateblock(cached_tip)
+        block = self.build_block_on_tip(node)
+        assert_not_equal(block.hash_hex, cached_tip)
+
+        peer.clear_block_announcement()
+        assert_equal(node.submitblock(block.serialize().hex()), None)
+        assert_equal(node.getbestblockhash(), block.hash_hex)
+
+        peer.wait_until(lambda: "cmpctblock" in peer.last_message, timeout=30)
+        with p2p_lock:
+            header_and_shortids = HeaderAndShortIDs(peer.last_message["cmpctblock"].header_and_shortids)
+        self.check_compactblock_construction_from_block(header_and_shortids, block.hash_int, block)
+
     def run_test(self):
         self.wallet = MiniWallet(self.nodes[0])
 
@@ -1132,6 +1160,9 @@ class CompactBlocksTest(BitcoinTestFramework):
 
         self.log.info("Testing CMPCTBLOCK messages are ignored when expected...")
         self.test_compact_blocks_ignored()
+
+        self.log.info("Testing high-bandwidth announcement of a block that is not the cached compact block...")
+        self.test_uncached_cmpctblock_announcement()
 
 
 if __name__ == '__main__':
