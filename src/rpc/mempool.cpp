@@ -4,7 +4,6 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <rpc/mempool.h>
-#include <rpc/register.h> // IWYU pragma: associated
 
 #include <common/args.h>
 #include <consensus/amount.h>
@@ -21,11 +20,13 @@
 #include <node/txorphanage.h>
 #include <node/types.h>
 #include <policy/feerate.h>
+#include <policy/mempool_accept_result.h>
 #include <policy/packages.h>
 #include <policy/policy.h>
 #include <policy/rbf.h>
 #include <primitives/transaction.h>
 #include <rpc/protocol.h>
+#include <rpc/register.h> // IWYU pragma: associated
 #include <rpc/request.h>
 #include <rpc/server.h>
 #include <rpc/server_util.h>

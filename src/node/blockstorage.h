@@ -13,9 +13,10 @@
 #include <kernel/chainparams.h>
 #include <kernel/cs_main.h>
 #include <kernel/messagestartchars.h>
-#include <kernel/result.h>
 #include <kernel/notifications_interface.h>
+#include <kernel/result.h>
 #include <primitives/block.h>
+#include <serialize.h>
 #include <streams.h>
 #include <sync.h>
 #include <uint256.h>
@@ -32,7 +33,6 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <iosfwd>
 #include <limits>
 #include <map>
@@ -41,6 +41,7 @@
 #include <set>
 #include <span>
 #include <string>
+#include <system_error>
 #include <unordered_map>
 #include <utility>
 #include <vector>

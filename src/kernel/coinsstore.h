@@ -6,11 +6,12 @@
 #define BITCOIN_KERNEL_COINSSTORE_H
 
 #include <coins.h>
+#include <primitives/transaction.h>
 #include <sync.h>
 #include <uint256.h>
 #include <util/fs.h>
 
-#include <cstdint>
+#include <cstddef>
 #include <map>
 #include <memory>
 #include <optional>
@@ -18,8 +19,6 @@
 #include <string>
 #include <utility>
 #include <vector>
-
-class COutPoint;
 
 namespace kernel {
 
