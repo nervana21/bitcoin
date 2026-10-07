@@ -9,9 +9,11 @@
 #include <pubkey.h>
 #include <random.h>
 #include <script/interpreter.h>
+#include <sync.h>
 #include <uint256.h>
 #include <util/log.h>
 
+#include <utility>
 #include <vector>
 
 #define LOG_REQUIRE_CONTEXT true
