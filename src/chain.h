@@ -102,6 +102,7 @@ public:
         : m_bits{other.m_bits.load(std::memory_order_acquire)} {}
     BlockStatusWord& operator=(const BlockStatusWord& other) noexcept
     {
+        if (this == &other) return *this;
         return *this = static_cast<uint32_t>(other);
     }
     BlockStatusWord(BlockStatusWord&&) = delete;
@@ -160,6 +161,7 @@ public:
         : m_value{other.m_value.load(std::memory_order_relaxed)} {}
     PublishedWord& operator=(const PublishedWord& other) noexcept
     {
+        if (this == &other) return *this;
         return *this = static_cast<T>(other);
     }
     PublishedWord(PublishedWord&&) = delete;
