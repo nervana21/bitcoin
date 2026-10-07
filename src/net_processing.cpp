@@ -6111,6 +6111,12 @@ bool PeerManagerImpl::SendMessages(CNode& node)
 
     m_chainman.m_blockman.SeedBestHeader(m_chainman.ActiveChain().Tip());
 
+    // Survives the cs_processing gap around TX inventory. Mempool must not nest
+    // under cs_processing. Set only in the first locked section below.
+    bool sync_blocks_and_headers_from_peer = false;
+    // Block INVs may remain here across the gap so TX INVs can share the batch.
+    std::vector<CInv> vInv;
+
     {
         LOCK(cs_processing);
         const CBlockIndex* best_header{m_chainman.m_blockman.BestHeader()};
@@ -6120,7 +6126,6 @@ bool PeerManagerImpl::SendMessages(CNode& node)
         // Determine whether we might try initial headers sync or parallel
         // block download from this peer -- this mostly affects behavior while
         // in IBD (once out of IBD, we sync from all peers).
-        bool sync_blocks_and_headers_from_peer = false;
         if (state.fPreferredDownload) {
             sync_blocks_and_headers_from_peer = true;
         } else if (CanServeBlocks(peer) && !node.IsAddrFetchConn()) {
@@ -6301,9 +6306,11 @@ bool PeerManagerImpl::SendMessages(CNode& node)
         }
 
         //
-        // Message: inventory
+        // Message: inventory (blocks)
         //
-        std::vector<CInv> vInv;
+        // Transaction inventory touches the mempool. That must not nest under
+        // cs_processing. Elsewhere the order is mempool then cs_processing.
+        // Build block INVs here. Then release cs_processing before TX inventory.
         {
             LOCK(peer.m_block_inv_mutex);
             vInv.reserve(peer.m_blocks_for_inv_relay.size());
@@ -6318,119 +6325,129 @@ bool PeerManagerImpl::SendMessages(CNode& node)
             }
             peer.m_blocks_for_inv_relay.clear();
         }
+    } // release cs_processing before mempool and tx download work
 
-        if (auto tx_relay = peer.GetTxRelay(); tx_relay != nullptr) {
-                LOCK(tx_relay->m_tx_inventory_mutex);
-                // Check whether periodic sends should happen
-                bool fSendTrickle = node.HasPermission(NetPermissionFlags::NoBan);
-                if (tx_relay->m_next_inv_send_time < current_time) {
-                    fSendTrickle = true;
-                    if (node.IsInboundConn()) {
-                        tx_relay->m_next_inv_send_time = NextInvToInbounds(current_time, INBOUND_INVENTORY_BROADCAST_INTERVAL, node.m_network_key);
-                    } else {
-                        tx_relay->m_next_inv_send_time = current_time + m_rng.rand_exp_duration(OUTBOUND_INVENTORY_BROADCAST_INTERVAL);
-                    }
-                }
-
-                // Time to send but the peer has requested we not relay transactions.
-                if (fSendTrickle) {
-                    LOCK(tx_relay->m_bloom_filter_mutex);
-                    if (!tx_relay->m_relay_txs) tx_relay->m_tx_inventory_to_send.clear();
-                }
-
-                // Respond to BIP35 mempool requests
-                if (fSendTrickle && tx_relay->m_send_mempool) {
-                    auto vtxinfo = m_mempool.infoAll();
-
-                    // Ensure we'll respond to GETDATA requests for anything we're about to announce
-                    tx_relay->m_last_inv_sequence = WITH_LOCK(m_mempool.cs, return m_mempool.GetSequence());
-
-                    tx_relay->m_send_mempool = false;
-                    const CFeeRate filterrate{tx_relay->m_fee_filter_received.load()};
-
-                    // we'll send everything in the mempool momentarily, so this is redundant
-                    tx_relay->m_tx_inventory_to_send.clear();
-
-                    LOCK(tx_relay->m_bloom_filter_mutex);
-
-                    for (const auto& txinfo : vtxinfo) {
-                        const Txid& txid{txinfo.tx->GetHash()};
-                        const Wtxid& wtxid{txinfo.tx->GetWitnessHash()};
-                        const auto inv = peer.m_wtxid_relay ?
-                                             CInv{MSG_WTX, wtxid.ToUint256()} :
-                                             CInv{MSG_TX, txid.ToUint256()};
-
-                        // Don't send transactions that peers will not put into their mempool
-                        if (txinfo.fee < filterrate.GetFee(txinfo.vsize)) {
-                            continue;
-                        }
-                        if (tx_relay->m_bloom_filter) {
-                            if (!tx_relay->m_bloom_filter->IsRelevantAndUpdate(*txinfo.tx)) continue;
-                        }
-                        tx_relay->m_tx_inventory_known_filter.insert(inv.hash);
-                        vInv.push_back(inv);
-                        if (vInv.size() == MAX_INV_SZ) {
-                            MakeAndPushMessage(node, NetMsgType::INV, vInv);
-                            vInv.clear();
-                        }
-                    }
-                }
-
-                // Determine transactions to relay
-                if (fSendTrickle) {
-                    // Topologically and fee-rate sort the inventory we send for privacy and priority reasons.
-                    // (sorted from higher priority to lowest, skipping low fee)
-                    const CFeeRate filterrate{tx_relay->m_fee_filter_received.load()};
-
-                    auto inv_tx = [&]() EXCLUSIVE_LOCKS_REQUIRED(tx_relay->m_tx_inventory_mutex) {
-                        auto& invs = tx_relay->m_tx_inventory_to_send;
-                        std::vector<CTransactionRef> res;
-
-                        if (invs.size() == 0) return res;
-
-                        // if previous allocations were excessive, shrink to the current size
-                        if (invs.capacity() > 2 * invs.size()) invs.shrink_to_fit();
-
-                        LOCK(m_mempool.cs);
-                        auto txiters = m_mempool.ExtractBestByMiningScoreWithTopology(invs, invs.size());
-                        res.reserve(txiters.size());
-                        for (auto txiter : txiters) {
-                            if (txiter->GetFee() < filterrate.GetFee(txiter->GetTxSize())) {
-                                continue; // higher feerate CPFP txs may follow, so just skip, don't stop
-                            }
-                            res.push_back(txiter->GetSharedTx());
-                        }
-                        // Ensure we'll respond to GETDATA requests for anything we're about to announce
-                        tx_relay->m_last_inv_sequence = m_mempool.GetSequence();
-                        return res;
-                    }();
-
-                    LOCK(tx_relay->m_bloom_filter_mutex);
-                    vInv.reserve(std::min<size_t>(MAX_INV_SZ, vInv.size() + inv_tx.size()));
-                    for (auto& tx : inv_tx) {
-                        // `TxRelay::m_tx_inventory_known_filter` contains either txids or wtxids
-                        // depending on whether our peer supports wtxid-relay. Therefore, first
-                        // construct the inv and then use its hash for the filter check.
-                        const auto inv = peer.m_wtxid_relay ?
-                                             CInv{MSG_WTX, tx->GetWitnessHash().ToUint256()} :
-                                             CInv{MSG_TX, tx->GetHash().ToUint256()};
-                        // Check if not in the filter already
-                        if (tx_relay->m_tx_inventory_known_filter.contains(inv.hash)) {
-                            continue;
-                        }
-                        if (tx_relay->m_bloom_filter && !tx_relay->m_bloom_filter->IsRelevantAndUpdate(*tx)) continue;
-                        // Send
-                        vInv.push_back(inv);
-                        if (vInv.size() == MAX_INV_SZ) {
-                            MakeAndPushMessage(node, NetMsgType::INV, vInv);
-                            vInv.clear();
-                        }
-                        tx_relay->m_tx_inventory_known_filter.insert(inv.hash);
-                    }
-                }
+    //
+    // Message: inventory (transactions)
+    //
+    AssertLockNotHeld(cs_processing);
+    if (auto tx_relay = peer.GetTxRelay(); tx_relay != nullptr) {
+        LOCK(tx_relay->m_tx_inventory_mutex);
+        // Check whether periodic sends should happen
+        bool fSendTrickle = node.HasPermission(NetPermissionFlags::NoBan);
+        if (tx_relay->m_next_inv_send_time < current_time) {
+            fSendTrickle = true;
+            if (node.IsInboundConn()) {
+                tx_relay->m_next_inv_send_time = NextInvToInbounds(current_time, INBOUND_INVENTORY_BROADCAST_INTERVAL, node.m_network_key);
+            } else {
+                tx_relay->m_next_inv_send_time = current_time + m_rng.rand_exp_duration(OUTBOUND_INVENTORY_BROADCAST_INTERVAL);
+            }
         }
-        if (!vInv.empty())
-            MakeAndPushMessage(node, NetMsgType::INV, vInv);
+
+        // Time to send but the peer has requested we not relay transactions.
+        if (fSendTrickle) {
+            LOCK(tx_relay->m_bloom_filter_mutex);
+            if (!tx_relay->m_relay_txs) tx_relay->m_tx_inventory_to_send.clear();
+        }
+
+        // Respond to BIP35 mempool requests
+        if (fSendTrickle && tx_relay->m_send_mempool) {
+            auto vtxinfo = m_mempool.infoAll();
+
+            // Ensure we'll respond to GETDATA requests for anything we're about to announce
+            tx_relay->m_last_inv_sequence = WITH_LOCK(m_mempool.cs, return m_mempool.GetSequence());
+
+            tx_relay->m_send_mempool = false;
+            const CFeeRate filterrate{tx_relay->m_fee_filter_received.load()};
+
+            // we'll send everything in the mempool momentarily, so this is redundant
+            tx_relay->m_tx_inventory_to_send.clear();
+
+            LOCK(tx_relay->m_bloom_filter_mutex);
+
+            for (const auto& txinfo : vtxinfo) {
+                const Txid& txid{txinfo.tx->GetHash()};
+                const Wtxid& wtxid{txinfo.tx->GetWitnessHash()};
+                const auto inv = peer.m_wtxid_relay ?
+                                     CInv{MSG_WTX, wtxid.ToUint256()} :
+                                     CInv{MSG_TX, txid.ToUint256()};
+
+                // Don't send transactions that peers will not put into their mempool
+                if (txinfo.fee < filterrate.GetFee(txinfo.vsize)) {
+                    continue;
+                }
+                if (tx_relay->m_bloom_filter) {
+                    if (!tx_relay->m_bloom_filter->IsRelevantAndUpdate(*txinfo.tx)) continue;
+                }
+                tx_relay->m_tx_inventory_known_filter.insert(inv.hash);
+                vInv.push_back(inv);
+                if (vInv.size() == MAX_INV_SZ) {
+                    MakeAndPushMessage(node, NetMsgType::INV, vInv);
+                    vInv.clear();
+                }
+            }
+        }
+
+        // Determine transactions to relay
+        if (fSendTrickle) {
+            // Topologically and fee-rate sort the inventory we send for privacy and priority reasons.
+            // (sorted from higher priority to lowest, skipping low fee)
+            const CFeeRate filterrate{tx_relay->m_fee_filter_received.load()};
+
+            auto inv_tx = [&]() EXCLUSIVE_LOCKS_REQUIRED(tx_relay->m_tx_inventory_mutex) {
+                auto& invs = tx_relay->m_tx_inventory_to_send;
+                std::vector<CTransactionRef> res;
+
+                if (invs.size() == 0) return res;
+
+                // if previous allocations were excessive, shrink to the current size
+                if (invs.capacity() > 2 * invs.size()) invs.shrink_to_fit();
+
+                LOCK(m_mempool.cs);
+                auto txiters = m_mempool.ExtractBestByMiningScoreWithTopology(invs, invs.size());
+                res.reserve(txiters.size());
+                for (auto txiter : txiters) {
+                    if (txiter->GetFee() < filterrate.GetFee(txiter->GetTxSize())) {
+                        continue; // higher feerate CPFP txs may follow, so just skip, don't stop
+                    }
+                    res.push_back(txiter->GetSharedTx());
+                }
+                // Ensure we'll respond to GETDATA requests for anything we're about to announce
+                tx_relay->m_last_inv_sequence = m_mempool.GetSequence();
+                return res;
+            }();
+
+            LOCK(tx_relay->m_bloom_filter_mutex);
+            vInv.reserve(std::min<size_t>(MAX_INV_SZ, vInv.size() + inv_tx.size()));
+            for (auto& tx : inv_tx) {
+                // `TxRelay::m_tx_inventory_known_filter` contains either txids or wtxids
+                // depending on whether our peer supports wtxid-relay. Therefore, first
+                // construct the inv and then use its hash for the filter check.
+                const auto inv = peer.m_wtxid_relay ?
+                                     CInv{MSG_WTX, tx->GetWitnessHash().ToUint256()} :
+                                     CInv{MSG_TX, tx->GetHash().ToUint256()};
+                // Check if not in the filter already
+                if (tx_relay->m_tx_inventory_known_filter.contains(inv.hash)) {
+                    continue;
+                }
+                if (tx_relay->m_bloom_filter && !tx_relay->m_bloom_filter->IsRelevantAndUpdate(*tx)) continue;
+                // Send
+                vInv.push_back(inv);
+                if (vInv.size() == MAX_INV_SZ) {
+                    MakeAndPushMessage(node, NetMsgType::INV, vInv);
+                    vInv.clear();
+                }
+                tx_relay->m_tx_inventory_known_filter.insert(inv.hash);
+            }
+        }
+    }
+    if (!vInv.empty())
+        MakeAndPushMessage(node, NetMsgType::INV, vInv);
+
+    {
+        LOCK(cs_processing);
+        CNodeState &state = *State(node.GetId());
+        const CBlockIndex* best_header{m_chainman.m_blockman.BestHeader()};
 
         // Detect whether we're stalling
         auto stalling_timeout = m_block_stalling_timeout.load();
@@ -6563,23 +6580,29 @@ bool PeerManagerImpl::SendMessages(CNode& node)
             }
         }
 
-        //
-        // Message: getdata (transactions)
-        //
-        {
-            LOCK(m_tx_download_mutex);
-            for (const GenTxid& gtxid : m_txdownloadman.GetRequestsToSend(node.GetId(), current_time)) {
-                vGetData.emplace_back(gtxid.IsWtxid() ? MSG_WTX : (MSG_TX | GetFetchFlags(peer)), gtxid.ToUint256());
-                if (vGetData.size() >= MAX_GETDATA_SZ) {
-                    MakeAndPushMessage(node, NetMsgType::GETDATA, vGetData);
-                    vGetData.clear();
-                }
-            }
-        }
-
         if (!vGetData.empty())
             MakeAndPushMessage(node, NetMsgType::GETDATA, vGetData);
-    } // release cs_main
+    } // release cs_processing
+
+    //
+    // Message: getdata (transactions)
+    //
+    // GetRequestsToSend may take the mempool lock via AlreadyHaveTx. Keep it
+    // outside cs_processing for the same lock order reason as TX inventory.
+    AssertLockNotHeld(cs_processing);
+    {
+        std::vector<CInv> vGetData;
+        LOCK(m_tx_download_mutex);
+        for (const GenTxid& gtxid : m_txdownloadman.GetRequestsToSend(node.GetId(), current_time)) {
+            vGetData.emplace_back(gtxid.IsWtxid() ? MSG_WTX : (MSG_TX | GetFetchFlags(peer)), gtxid.ToUint256());
+            if (vGetData.size() >= MAX_GETDATA_SZ) {
+                MakeAndPushMessage(node, NetMsgType::GETDATA, vGetData);
+                vGetData.clear();
+            }
+        }
+        if (!vGetData.empty())
+            MakeAndPushMessage(node, NetMsgType::GETDATA, vGetData);
+    }
     MaybeSendFeefilter(node, peer, current_time);
     return true;
 }
