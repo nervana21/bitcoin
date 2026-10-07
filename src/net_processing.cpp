@@ -4160,13 +4160,18 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
         }
 
         {
-            LOCK2(::cs_processing, m_tx_download_mutex);
-            const CNodeState* state = State(pfrom.GetId());
-            m_txdownloadman.ConnectedPeer(pfrom.GetId(), node::TxDownloadConnectionInfo {
-                .m_preferred = state->fPreferredDownload,
-                .m_relay_permissions = pfrom.HasPermission(NetPermissionFlags::Relay),
-                .m_wtxid_relay = peer.m_wtxid_relay,
-            });
+            // Do not nest m_tx_download_mutex under cs_processing.
+            const auto tx_info{[&] {
+                LOCK(cs_processing);
+                const CNodeState* state = State(pfrom.GetId());
+                return node::TxDownloadConnectionInfo{
+                    .m_preferred = state->fPreferredDownload,
+                    .m_relay_permissions = pfrom.HasPermission(NetPermissionFlags::Relay),
+                    .m_wtxid_relay = peer.m_wtxid_relay,
+                };
+            }()};
+            LOCK(m_tx_download_mutex);
+            m_txdownloadman.ConnectedPeer(pfrom.GetId(), tx_info);
         }
 
         pfrom.fSuccessfullyConnected = true;
