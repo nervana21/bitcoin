@@ -114,7 +114,7 @@ static inline CTransactionRef make_ephemeral_tx(const std::vector<COutPoint>& in
 BOOST_FIXTURE_TEST_CASE(ephemeral_tests, RegTestingSetup)
 {
     CTxMemPool& pool = *Assert(m_node.mempool);
-    LOCK(pool.cs);
+    LOCK2(cs_main, pool.cs);
     TestMemPoolEntryHelper entry;
 
     TxValidationState child_state;
