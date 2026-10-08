@@ -46,7 +46,6 @@
 #include <cstddef>
 #include <cstdio>
 #include <exception>
-#include <functional>
 #include <map>
 #include <optional>
 #include <ostream>
@@ -54,9 +53,7 @@
 #include <stdexcept>
 #include <system_error>
 #include <unordered_map>
-#include <utility>
 #include <variant>
-#include <vector>
 
 using kernel::AbortFailure;
 using kernel::FlushResult;
