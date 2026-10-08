@@ -56,6 +56,7 @@
 #include <node/block_template_manager.h>
 #include <node/blockmanager_args.h>
 #include <node/blockstorage.h>
+#include <node/blocktree_migration.h>
 #include <node/caches.h>
 #include <node/chainstate.h>
 #include <node/chainstatemanager_args.h>
@@ -167,6 +168,7 @@ using node::KernelMempool;
 using node::KernelNotifications;
 using node::LoadChainstate;
 using node::LoadMempool;
+using node::MaybeMigrateLegacyBlockTree;
 using node::MempoolPath;
 using node::NodeContext;
 using node::ShouldPersistMempool;
@@ -1450,10 +1452,25 @@ FlushResult<kernel::InterruptResult, ChainstateLoadError> InitAndLoadChainstate(
     };
     Assert(ApplyArgsManOptions(args, blockman_opts)); // no error can happen, already checked in AppInitParameterInteraction
 
+    // LevelDB block-tree content migration is node-only (links LevelDB). Must
+    // run before BlockManager opens BlockTreeStore in the kernel.
+    Assert(!node.chainman); // Was reset above
+    try {
+        MaybeMigrateLegacyBlockTree(
+            LogInstance(),
+            blockman_opts.block_tree_dir,
+            chainparams.GetConsensus(),
+            *Assert(node.shutdown_signal),
+            blockman_opts.wipe_block_tree_data,
+            blockman_opts.read_only);
+    } catch (kernel::BlockTreeStoreError& e) {
+        LogError("%s", e.what());
+        return {util::Error{_("Error opening block database")}, ChainstateLoadError::FAILURE};
+    }
+
     // Creating the chainstate manager internally creates a BlockManager, opens
     // the blocks tree db, and wipes existing block files in case of a reindex.
     // The coinsdb is opened at a later point on LoadChainstate.
-    Assert(!node.chainman); // Was reset above
     try {
         node.chainman = std::make_unique<ChainstateManager>(LogInstance(), *Assert(node.shutdown_signal), chainman_opts, blockman_opts);
     } catch (kernel::BlockTreeStoreError& e) {
