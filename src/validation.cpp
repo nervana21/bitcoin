@@ -2031,8 +2031,9 @@ FlushResult<> ChainstateManager::PreciousBlock(BlockValidationState& state, CBlo
     auto& chainstate{ActiveChainstate()};
     {
         AssertLockNotHeld(chainstate.m_chainstate_mutex);
-        LOCK(cs_main);
+        // Match ActivateBestChain: m_chainstate_mutex before cs_main.
         LOCK(chainstate.m_chainstate_mutex);
+        LOCK(cs_main);
         if (pindex->nChainWork < chainstate.m_chain.Tip()->nChainWork) {
             // Nothing to do, this block is not at the tip.
             return {};
