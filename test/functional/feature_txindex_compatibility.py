@@ -51,8 +51,10 @@ class TxIndexTest(BitcoinTestFramework):
         self.cleanup_folder(node.chain_path)
         shutil.copytree(legacy_node.chain_path, node.chain_path)
         msg = "txindex contains entries in the legacy format"
+        # Block tree migrates; LevelDB UTXO does not. Rebuild coins on first tip open.
         with node.assert_debug_log(expected_msgs=[msg]):
-            self.start_node(0)
+            self.start_node(0, extra_args=["-txindex", "-reindex-chainstate"])
+        self.wait_for_index_sync([node])
         assert_equal(node.getrawtransaction(txId1), tx1['hex'])
 
         self.log.info("Test that looking up a newly added transaction in a mixed-format db is possible")

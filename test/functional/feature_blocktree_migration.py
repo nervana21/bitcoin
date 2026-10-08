@@ -43,9 +43,10 @@ class BlockTreeMigrationTest(BitcoinTestFramework):
         detect_legacy_log = "Detected legacy leveldb block tree db - removing it"
 
         self.log.info("Start the node with a legacy data directory to trigger migration")
+        # CoinsStore does not migrate LevelDB UTXO; rebuild coins while migrating the block tree.
         shutil.copytree(legacy_node.chain_path, block_tree_store_node.chain_path)
         with block_tree_store_node.assert_debug_log(expected_msgs=[migrate_log]):
-            self.start_node(0)
+            self.start_node(0, extra_args=["-reindex-chainstate"])
         index_dir = block_tree_store_node.chain_path / "blocks" / "index"
         assert (index_dir / "headers.dat").exists()
         assert not (index_dir / "CURRENT").exists()
@@ -97,9 +98,17 @@ class BlockTreeMigrationTest(BitcoinTestFramework):
         shutil.copytree(legacy_node.chain_path, block_tree_store_node.chain_path)
         with block_tree_store_node.assert_debug_log(expected_msgs=[migrate_log, "Loading block index db: Block files have previously been pruned"]):
             block_tree_store_node.assert_start_raises_init_error()
-        with block_tree_store_node.assert_debug_log(expected_msgs=["Loading block index db: Block files have previously been pruned"]):
-            self.start_node(0, extra_args=["-prune=1"])
-        self.stop_node(0)
+        # Block tree already migrated. -prune=1 passes the prune check, then
+        # CoinsStore refuses legacy LevelDB coins. Emptying chainstate cannot
+        # rebuild the tip: pruned block files are gone. Full -reindex would be
+        # required, which redownloads the chain.
+        with block_tree_store_node.assert_debug_log(expected_msgs=["Loading block index db: Block files have previously been pruned"], unexpected_msgs=[migrate_log]):
+            block_tree_store_node.assert_start_raises_init_error(
+                extra_args=["-prune=1"],
+                expected_msg="Error: Unsupported chainstate database format found. "
+                "Please restart with -reindex-chainstate. This will "
+                "rebuild the chainstate database.",
+            )
 
 if __name__ == '__main__':
     BlockTreeMigrationTest(__file__).main()
