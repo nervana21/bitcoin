@@ -1078,6 +1078,38 @@ class CompactBlocksTest(BitcoinTestFramework):
             header_and_shortids = HeaderAndShortIDs(peer.last_message["cmpctblock"].header_and_shortids)
         self.check_compactblock_construction_from_block(header_and_shortids, block.hash_int, block)
 
+    def test_getdata_after_newpow_announce(self):
+        # Regression for ProcessGetBlockData. Tip getdata must be served from
+        # m_most_recent_block when BLOCK_HAVE_DATA may still be unset after
+        # NewPoWValidBlock. Without that, peers can hit download timeouts.
+        node = self.nodes[0]
+        delivery = node.add_p2p_connection(TestP2PConn())
+        hb = node.add_p2p_connection(TestP2PConn())
+        self.request_cb_announcements(hb)
+
+        block = self.build_block_on_tip(node)
+        hb.clear_block_announcement()
+        with p2p_lock:
+            hb.last_message.pop("block", None)
+
+        # Tip arrives over P2P so HB can see NewPoWValidBlock cmpctblock while
+        # AcceptBlock may still be finishing disk publish.
+        delivery.send_without_ping(msg_block(block))
+
+        hb.wait_until(lambda: "cmpctblock" in hb.last_message, timeout=30)
+        with p2p_lock:
+            assert_equal(
+                hb.last_message["cmpctblock"].header_and_shortids.header.hash_int,
+                block.hash_int,
+            )
+
+        # Immediate tip getdata. Do not sync_with_ping first.
+        hb.send_without_ping(msg_getdata([
+            CInv(MSG_BLOCK | MSG_WITNESS_FLAG, block.hash_int)
+        ]))
+        hb.wait_for_block(block.hash_int, timeout=30)
+        assert_equal(node.getbestblockhash(), block.hash_hex)
+
     def run_test(self):
         self.wallet = MiniWallet(self.nodes[0])
 
@@ -1163,6 +1195,9 @@ class CompactBlocksTest(BitcoinTestFramework):
 
         self.log.info("Testing high-bandwidth announcement of a block that is not the cached compact block...")
         self.test_uncached_cmpctblock_announcement()
+
+        self.log.info("Testing tip getdata after NewPoWValidBlock announce...")
+        self.test_getdata_after_newpow_announce()
 
 
 if __name__ == '__main__':
