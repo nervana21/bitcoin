@@ -8,6 +8,7 @@
 #include <chain.h>
 #include <consensus/params.h>
 #include <crypto/hex_base.h>
+#include <dbwrapper.h>
 #include <flatfile.h>
 #include <hash.h>
 #include <kernel/blockmanager_opts.h>
@@ -46,6 +47,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <exception>
+#include <functional>
 #include <map>
 #include <optional>
 #include <ostream>
@@ -53,7 +55,9 @@
 #include <stdexcept>
 #include <system_error>
 #include <unordered_map>
+#include <utility>
 #include <variant>
+#include <vector>
 
 using kernel::AbortFailure;
 using kernel::FlushResult;
@@ -62,6 +66,95 @@ using kernel::Interrupted;
 using kernel::InterruptResult;
 
 #define LOG_REQUIRE_CONTEXT true
+
+namespace {
+
+//! Read-only access to a legacy LevelDB blocks/index for migration into BlockTreeStore.
+//! Lives in the node (bitcoin_node still links LevelDB); kernel stays LevelDB-free.
+class BlockTreeDB : public CDBWrapper
+{
+public:
+    using CDBWrapper::CDBWrapper;
+
+    bool ReadBlockFileInfo(int nFile, kernel::CBlockFileInfo& info)
+    {
+        return Read(std::make_pair(DB_BLOCK_FILES, nFile), info);
+    }
+
+    bool ReadLastBlockFile(int& nFile)
+    {
+        return Read(DB_LAST_BLOCK, nFile);
+    }
+
+    void ReadReindexing(bool& fReindexing)
+    {
+        fReindexing = Exists(DB_REINDEX_FLAG);
+    }
+
+    bool ReadFlag(const std::string& name, bool& fValue)
+    {
+        uint8_t ch;
+        if (!Read(std::make_pair(DB_FLAG, name), ch)) {
+            return false;
+        }
+        fValue = ch == uint8_t{'1'};
+        return true;
+    }
+
+    bool LoadBlockIndexGuts(const Consensus::Params& consensusParams, std::function<CBlockIndex*(const uint256&)> insertBlockIndex, const util::SignalInterrupt& interrupt)
+        EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
+    {
+        AssertLockHeld(::cs_main);
+        std::unique_ptr<CDBIterator> pcursor(NewIterator());
+        pcursor->Seek(std::make_pair(DB_BLOCK_INDEX, uint256()));
+
+        while (pcursor->Valid()) {
+            if (interrupt) return false;
+            std::pair<uint8_t, uint256> key;
+            if (pcursor->GetKey(key) && key.first == DB_BLOCK_INDEX) {
+                CDiskBlockIndex diskindex;
+                if (pcursor->GetValue(diskindex)) {
+                    CBlockIndex* pindexNew = insertBlockIndex(diskindex.ConstructBlockHash());
+                    pindexNew->pprev = insertBlockIndex(diskindex.hashPrev);
+                    pindexNew->nHeight = diskindex.nHeight;
+                    pindexNew->nFile = diskindex.nFile;
+                    pindexNew->nDataPos = diskindex.nDataPos;
+                    pindexNew->nUndoPos = diskindex.nUndoPos;
+                    pindexNew->nVersion = diskindex.nVersion;
+                    pindexNew->hashMerkleRoot = diskindex.hashMerkleRoot;
+                    pindexNew->nTime = diskindex.nTime;
+                    pindexNew->nBits = diskindex.nBits;
+                    pindexNew->nNonce = diskindex.nNonce;
+                    pindexNew->nStatus = diskindex.nStatus;
+                    pindexNew->nTx = diskindex.nTx;
+
+                    if (!CheckProofOfWork(pindexNew->GetBlockHash(), pindexNew->nBits, consensusParams)) {
+                        LogError(m_log, "%s: CheckProofOfWork failed: %s\n", __func__, pindexNew->ToString());
+                        return false;
+                    }
+
+                    pcursor->Next();
+                } else {
+                    LogError(m_log, "%s: failed to read value\n", __func__);
+                    return false;
+                }
+            } else {
+                break;
+            }
+        }
+
+        return true;
+    }
+
+private:
+    static constexpr uint8_t DB_BLOCK_FILES{'f'};
+    static constexpr uint8_t DB_BLOCK_INDEX{'b'};
+    static constexpr uint8_t DB_FLAG{'F'};
+    static constexpr uint8_t DB_REINDEX_FLAG{'R'};
+    static constexpr uint8_t DB_LAST_BLOCK{'l'};
+};
+
+} // namespace
 
 namespace node {
 
@@ -1212,14 +1305,12 @@ std::unique_ptr<kernel::BlockTreeStore> BlockManager::CreateAndMigrateBlockTree(
         return std::make_unique<kernel::BlockTreeStore>(m_opts.block_tree_dir, OpenMode::READ);
     }
 
-    // A legacy LevelDB block tree is not opened. Wipe deletes it. Anything else refuses.
-    if (legacy) {
-        if (!m_opts.wipe_block_tree_data) {
-            throw kernel::BlockTreeStoreError(strprintf(
-                "Legacy leveldb block tree at %s is not migrated by this kernel",
-                fs::PathToString(m_opts.block_tree_dir)));
-        }
-        LogInfo(m_log, "Detected legacy leveldb block tree db - removing it");
+    const OpenMode open_mode{m_opts.wipe_block_tree_data ? OpenMode::WIPE : OpenMode::WRITE};
+    if (!legacy) {
+        return std::make_unique<kernel::BlockTreeStore>(m_opts.block_tree_dir, open_mode);
+    }
+
+    auto cleanup_leveldb{[&]() {
         if (!kernel::RemoveLegacyLevelDBFiles(m_opts.block_tree_dir)) {
             throw kernel::BlockTreeStoreError(strprintf(
                 "Failed to remove legacy leveldb block tree db at %s",
@@ -1230,10 +1321,86 @@ std::unique_ptr<kernel::BlockTreeStore> BlockManager::CreateAndMigrateBlockTree(
                 "Legacy leveldb block tree db marker still exists at %s",
                 fs::PathToString(m_opts.block_tree_dir / "CURRENT")));
         }
+    }};
+
+    // -reindex / wipe: drop legacy LevelDB files, open a fresh BlockTreeStore.
+    if (m_opts.wipe_block_tree_data) {
+        LogInfo(m_log, "Detected legacy leveldb block tree db - removing it");
+        cleanup_leveldb();
+        return std::make_unique<kernel::BlockTreeStore>(m_opts.block_tree_dir, open_mode);
     }
 
-    const OpenMode open_mode{m_opts.wipe_block_tree_data ? OpenMode::WIPE : OpenMode::WRITE};
-    return std::make_unique<kernel::BlockTreeStore>(m_opts.block_tree_dir, open_mode);
+    // Migration path: node still links LevelDB; read legacy index, write BlockTreeStore, then drop LevelDB files.
+    std::vector<std::pair<int, CBlockFileInfo>> files;
+    int max_blockfile_num{0};
+    bool reindexing{false};
+    bool pruned_block_files{false};
+    BlockMap migration_index;
+
+    {
+        LogInfo(m_log, "Migrating leveldb block tree db to new block tree store.");
+        auto insert_block_index{[&](const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) -> CBlockIndex* {
+            if (hash.IsNull()) return nullptr;
+            const auto [mi, inserted]{migration_index.try_emplace(hash)};
+            CBlockIndex* pindex{&mi->second};
+            if (inserted) pindex->phashBlock = &mi->first;
+            return pindex;
+        }};
+        try {
+            DBParams params{};
+            params.path = m_opts.block_tree_dir;
+            auto block_tree_db{std::make_unique<BlockTreeDB>(*Assert(m_log.logger), params)};
+            LogInfo(m_log, "   Reading data from existing leveldb block tree db...");
+            if (!block_tree_db->ReadLastBlockFile(max_blockfile_num)) {
+                throw std::runtime_error("Failed to read last block file.");
+            }
+            files.reserve(max_blockfile_num + 1);
+            for (int i = 0; i <= max_blockfile_num; i++) {
+                CBlockFileInfo info;
+                if (!block_tree_db->ReadBlockFileInfo(i, info)) {
+                    throw std::runtime_error(strprintf("Failed to read block file info for file %d", i));
+                }
+                files.emplace_back(i, info);
+            }
+
+            if (!block_tree_db->LoadBlockIndexGuts(GetConsensus(), insert_block_index, m_interrupt)) {
+                throw std::runtime_error("Failed to load block index guts");
+            }
+            block_tree_db->ReadReindexing(reindexing);
+            block_tree_db->ReadFlag("prunedblockfiles", pruned_block_files);
+        } catch (const std::exception& e) {
+            throw kernel::BlockTreeStoreError(strprintf("Failed to read existing leveldb block tree data: %s", e.what()));
+        }
+    }
+
+    {
+        // Cleanup a potentially previously failed migration by setting wipe_data
+        LogInfo(m_log, "   Writing data back to a new block tree store, reindexing: %d, pruned: %d", reindexing, pruned_block_files);
+        auto block_tree_store{std::make_unique<kernel::BlockTreeStore>(m_opts.block_tree_dir, OpenMode::WIPE)};
+        block_tree_store->WritePruned(pruned_block_files);
+        block_tree_store->WriteReindexing(reindexing);
+
+        std::vector<std::pair<int, const CBlockFileInfo*>> dump_files;
+        dump_files.reserve(files.size());
+        for (auto& file : files) {
+            dump_files.emplace_back(file.first, &file.second);
+        }
+        std::vector<CBlockIndex*> dump_blockindexes;
+        dump_blockindexes.reserve(migration_index.size());
+        for (auto& pair : migration_index) {
+            dump_blockindexes.push_back(&pair.second);
+        }
+
+        block_tree_store->WriteBatchSync(dump_files, dump_blockindexes);
+    }
+
+    // Re-open to ensure that the migration was successful
+    auto block_tree_store{std::make_unique<kernel::BlockTreeStore>(m_opts.block_tree_dir)};
+    cleanup_leveldb();
+
+    LogInfo(m_log, "   Successfully migrated the leveldb block tree db to new block tree store.");
+
+    return block_tree_store;
 }
 
 BlockManager::BlockManager(util::log::Logger& logger, const util::SignalInterrupt& interrupt, Options opts)
