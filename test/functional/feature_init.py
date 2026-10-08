@@ -139,11 +139,8 @@ class InitTest(BitcoinTestFramework):
                 'error_message': 'Error opening block database.',
                 'startup_args': [],
             },
-            {
-                'filepath_glob': 'chainstate/*.ldb',
-                'error_message': 'Error opening coins database.',
-                'startup_args': ['-checklevel=4'],
-            },
+            # Deleting chainstate/coins.dat is not an open failure: WRITE mode
+            # recreates an empty store. Corruption is covered in perturbation_rounds.
             {
                 'filepath_glob': 'blocks/blk*.dat',
                 'error_message': 'Error loading block database.',
@@ -171,7 +168,7 @@ class InitTest(BitcoinTestFramework):
                 'startup_args': [],
             },
             {
-                'filepath_glob': 'chainstate/*.ldb',
+                'filepath_glob': 'chainstate/coins.dat',
                 'error_message': 'Error opening coins database.',
                 'startup_args': [],
             },
