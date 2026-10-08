@@ -570,7 +570,9 @@ private:
 
     BlockfileType BlockfileTypeForHeight(int height);
 
-    std::unique_ptr<kernel::BlockTreeStore> CreateAndMigrateBlockTree();
+    //! Open BlockTreeStore. Wipe may delete leftover LevelDB files. Does not
+    //! parse LevelDB; bitcoind migrates via MaybeMigrateLegacyBlockTree first.
+    std::unique_ptr<kernel::BlockTreeStore> OpenBlockTree();
 
     const kernel::BlockManagerOpts m_opts;
 

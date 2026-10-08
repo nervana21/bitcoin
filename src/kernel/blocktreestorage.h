@@ -104,7 +104,7 @@ public:
     uint64_t nTimeLast{};    //!< latest time of block in file
 
     // Note: The SERIALIZE_METHODS here use VARINT encoding for compatibility with
-    // the legacy leveldb block tree db, used during migration in CreateAndMigrateBlockTree.
+    // the legacy leveldb block tree db (node-side migration into BlockTreeStore).
     // BlockFileInfoWrapper uses fixed-width encoding for the new flat file storage.
     SERIALIZE_METHODS(CBlockFileInfo, obj)
     {
