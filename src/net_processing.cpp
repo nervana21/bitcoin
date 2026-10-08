@@ -871,7 +871,9 @@ private:
      * - A txhash (txid or wtxid) in m_txrequest is not also in m_lazy_recent_confirmed_transactions.
      * - Each data structure's limits hold (m_orphanage max size, m_txrequest per-peer limits, etc).
      */
-    Mutex m_tx_download_mutex ACQUIRED_BEFORE(m_mempool.cs);
+    // Lock order: cs_main -> m_tx_download_mutex -> m_mempool.cs
+    // (ActiveTipChange takes this under cs_main). Never take cs_main while holding this.
+    Mutex m_tx_download_mutex ACQUIRED_AFTER(::cs_main) ACQUIRED_BEFORE(m_mempool.cs);
     node::TxDownloadManager m_txdownloadman GUARDED_BY(m_tx_download_mutex);
 
     std::unique_ptr<TxReconciliationTracker> m_txreconciliation;
@@ -2185,8 +2187,9 @@ void PeerManagerImpl::StartScheduledTasks(CScheduler& scheduler)
 
 void PeerManagerImpl::ActiveTipChange(const CBlockIndex& new_tip, bool is_ibd)
 {
-    // Ensure mempool mutex was released, otherwise deadlock may occur if another thread holding
-    // m_tx_download_mutex waits on the mempool mutex.
+    // Called under cs_main. Taking m_tx_download_mutex here establishes
+    // cs_main -> m_tx_download_mutex. Mempool must not be held: another thread
+    // with m_tx_download_mutex may wait on the mempool mutex.
     AssertLockNotHeld(m_mempool.cs);
     AssertLockNotHeld(m_tx_download_mutex);
 
@@ -3499,35 +3502,40 @@ void PeerManagerImpl::ProcessPackageResult(const node::PackageToValidate& packag
 bool PeerManagerImpl::ProcessOrphanTx(Peer& peer)
 {
     AssertLockHeld(g_msgproc_mutex);
-    LOCK(m_tx_download_mutex);
+    AssertLockNotHeld(m_tx_download_mutex);
 
-    if (CTransactionRef porphanTx = m_txdownloadman.GetTxToReconsider(peer.m_id)) {
-        auto [result, flush_result]{node::ProcessTransaction(porphanTx, m_chainman.ActiveChainstate(), m_mempool)};
-        const TxValidationState& state = result.m_state;
-        const Txid& orphanHash = porphanTx->GetHash();
-        const Wtxid& orphan_wtxid = porphanTx->GetWitnessHash();
-
-        if (result.m_result_type == MempoolAcceptResult::ResultType::VALID) {
-            LogDebug(BCLog::TXPACKAGES, "   accepted orphan tx %s (wtxid=%s)\n", orphanHash.ToString(), orphan_wtxid.ToString());
-            ProcessValidTx(peer.m_id, porphanTx, result.m_replaced_transactions);
-        } else if (state.GetResult() != TxValidationResult::TX_MISSING_INPUTS) {
-            LogDebug(BCLog::TXPACKAGES, "   invalid orphan tx %s (wtxid=%s) from peer=%d. %s\n",
-                orphanHash.ToString(),
-                orphan_wtxid.ToString(),
-                peer.m_id,
-                state.ToString());
-
-            if (Assume(state.IsInvalid() &&
-                       state.GetResult() != TxValidationResult::TX_UNKNOWN &&
-                       state.GetResult() != TxValidationResult::TX_NO_MEMPOOL &&
-                       state.GetResult() != TxValidationResult::TX_RESULT_UNSET)) {
-                ProcessInvalidTx(peer.m_id, porphanTx, state, /*first_time_failure=*/false);
-            }
-        }
-        return true;
+    CTransactionRef porphanTx;
+    {
+        LOCK(m_tx_download_mutex);
+        porphanTx = m_txdownloadman.GetTxToReconsider(peer.m_id);
     }
+    if (!porphanTx) return false;
 
-    return false;
+    // ProcessTransaction takes cs_main; must not hold m_tx_download_mutex (see mutex lock order).
+    auto [result, flush_result]{node::ProcessTransaction(porphanTx, m_chainman.ActiveChainstate(), m_mempool)};
+    const TxValidationState& state = result.m_state;
+    const Txid& orphanHash = porphanTx->GetHash();
+    const Wtxid& orphan_wtxid = porphanTx->GetWitnessHash();
+
+    LOCK(m_tx_download_mutex);
+    if (result.m_result_type == MempoolAcceptResult::ResultType::VALID) {
+        LogDebug(BCLog::TXPACKAGES, "   accepted orphan tx %s (wtxid=%s)\n", orphanHash.ToString(), orphan_wtxid.ToString());
+        ProcessValidTx(peer.m_id, porphanTx, result.m_replaced_transactions);
+    } else if (state.GetResult() != TxValidationResult::TX_MISSING_INPUTS) {
+        LogDebug(BCLog::TXPACKAGES, "   invalid orphan tx %s (wtxid=%s) from peer=%d. %s\n",
+            orphanHash.ToString(),
+            orphan_wtxid.ToString(),
+            peer.m_id,
+            state.ToString());
+
+        if (Assume(state.IsInvalid() &&
+                   state.GetResult() != TxValidationResult::TX_UNKNOWN &&
+                   state.GetResult() != TxValidationResult::TX_NO_MEMPOOL &&
+                   state.GetResult() != TxValidationResult::TX_RESULT_UNSET)) {
+            ProcessInvalidTx(peer.m_id, porphanTx, state, /*first_time_failure=*/false);
+        }
+    }
+    return true;
 }
 
 bool PeerManagerImpl::PrepareBlockFilterRequest(CNode& node, Peer& peer,
@@ -4766,9 +4774,15 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
                      txid.ToString(), pfrom.LogPeer());
         }
 
-        LOCK(m_tx_download_mutex);
+        // ReceivedTx needs m_tx_download_mutex. ProcessTransaction / ProcessNewPackage
+        // take cs_main; release the download mutex first (cs_main -> m_tx_download_mutex).
+        bool should_validate{false};
+        std::optional<node::PackageToValidate> package_to_validate;
+        {
+            LOCK(m_tx_download_mutex);
+            std::tie(should_validate, package_to_validate) = m_txdownloadman.ReceivedTx(pfrom.GetId(), ptx);
+        }
 
-        const auto& [should_validate, package_to_validate] = m_txdownloadman.ReceivedTx(pfrom.GetId(), ptx);
         if (!should_validate) {
             if (pfrom.HasPermission(NetPermissionFlags::ForceRelay)) {
                 // Always relay transactions received from peers with forcerelay
@@ -4788,6 +4802,7 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
                 auto [package_result, process_result]{ProcessNewPackage(m_chainman.ActiveChainstate(), m_mempool, package_to_validate->m_txns, /*test_accept=*/false, /*client_maxfeerate=*/std::nullopt)};
                 LogDebug(BCLog::TXPACKAGES, "package evaluation for %s: %s\n", package_to_validate->ToString(),
                          package_result.m_state.IsValid() ? "package accepted" : "package rejected");
+                LOCK(m_tx_download_mutex);
                 ProcessPackageResult(package_to_validate.value(), package_result);
             }
             return;
@@ -4800,15 +4815,22 @@ void PeerManagerImpl::ProcessMessage(Peer& peer, CNode& pfrom, const std::string
         const TxValidationState& state = result.m_state;
 
         if (result.m_result_type == MempoolAcceptResult::ResultType::VALID) {
+            LOCK(m_tx_download_mutex);
             ProcessValidTx(pfrom.GetId(), ptx, result.m_replaced_transactions);
             pfrom.m_last_tx_time = GetTime<std::chrono::seconds>();
         }
         if (state.IsInvalid()) {
-            if (auto package_to_validate{ProcessInvalidTx(pfrom.GetId(), ptx, state, /*first_time_failure=*/true)}) {
-                auto [package_result, process_result]{ProcessNewPackage(m_chainman.ActiveChainstate(), m_mempool, package_to_validate->m_txns, /*test_accept=*/false, /*client_maxfeerate=*/std::nullopt)};
-                LogDebug(BCLog::TXPACKAGES, "package evaluation for %s: %s\n", package_to_validate->ToString(),
+            std::optional<node::PackageToValidate> invalid_package;
+            {
+                LOCK(m_tx_download_mutex);
+                invalid_package = ProcessInvalidTx(pfrom.GetId(), ptx, state, /*first_time_failure=*/true);
+            }
+            if (invalid_package) {
+                auto [package_result, process_result]{ProcessNewPackage(m_chainman.ActiveChainstate(), m_mempool, invalid_package->m_txns, /*test_accept=*/false, /*client_maxfeerate=*/std::nullopt)};
+                LogDebug(BCLog::TXPACKAGES, "package evaluation for %s: %s\n", invalid_package->ToString(),
                          package_result.m_state.IsValid() ? "package accepted" : "package rejected");
-                ProcessPackageResult(package_to_validate.value(), package_result);
+                LOCK(m_tx_download_mutex);
+                ProcessPackageResult(invalid_package.value(), package_result);
             }
         }
 
