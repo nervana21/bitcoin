@@ -161,6 +161,7 @@ struct Handle {
 } // namespace
 
 struct btck_BlockTreeEntry: Handle<btck_BlockTreeEntry, CBlockIndex> {};
+struct btck_LogEntry : Handle<btck_LogEntry, util::log::Entry> {};
 struct btck_Block : Handle<btck_Block, std::shared_ptr<const CBlock>> {};
 struct btck_BlockValidationState : Handle<btck_BlockValidationState, BlockValidationState> {};
 struct btck_TxValidationState : Handle<btck_TxValidationState, TxValidationState> {};
@@ -294,6 +295,11 @@ constexpr btck_LogLevel to_btck(util::log::Level level)
     }
     } // no default case, so the compiler can warn about missing cases
     assert(false);
+}
+
+constexpr btck_StringView to_btck(std::string_view str)
+{
+    return {.data = str.data(), .len = str.size()};
 }
 
 constexpr btck_LogCategory to_btck(BCLog::LogFlags flag)
@@ -631,31 +637,9 @@ void LogConnection::Log(const util::log::Entry& entry) const
 {
     if (!ShouldLog(entry.level)) return;
 
-    // Some log statements are manually suffixed with a newline.
-    std::string_view message{util::RemoveSuffixView(entry.message, "\n")};
-    std::string_view thread_name{entry.thread_name};
-    std::string_view file_name{entry.source_loc.file_name()};
-    std::string_view function_name{entry.source_loc.function_name_short()};
-
-    btck_LogEntry btck_entry{
-        .message = message.data(),
-        .message_len = message.size(),
-        .thread_name = thread_name.data(),
-        .thread_name_len = thread_name.size(),
-        .timestamp_ns = TicksSinceEpoch<std::chrono::nanoseconds>(entry.timestamp),
-        .mocktime_s = entry.mocktime.count(),
-        .file_name = file_name.data(),
-        .file_name_len = file_name.size(),
-        .function_name = function_name.data(),
-        .function_name_len = function_name.size(),
-        .line = entry.source_loc.line(),
-        .level = to_btck(entry.level),
-        .category = to_btck(static_cast<BCLog::LogFlags>(entry.category)),
-    };
-
     STDLOCK(m_mutex);
     try {
-        m_fn(m_user_data.get(), &btck_entry);
+        m_fn(m_user_data.get(), btck_LogEntry::ref(&entry));
     } catch (...) {
     }
 }
@@ -1085,6 +1069,52 @@ btck_LoggingConnection* btck_logging_connection_create(btck_LogCallback callback
 void btck_logging_connection_destroy(btck_LoggingConnection* connection)
 {
     delete connection;
+}
+
+btck_StringView btck_log_entry_get_message(const btck_LogEntry* entry)
+{
+    // Some log statements are manually suffixed with a newline.
+    return to_btck(util::RemoveSuffixView(btck_LogEntry::get(entry).message, "\n"));
+}
+
+btck_StringView btck_log_entry_get_thread_name(const btck_LogEntry* entry)
+{
+    return to_btck(btck_LogEntry::get(entry).thread_name);
+}
+
+int64_t btck_log_entry_get_timestamp_ns(const btck_LogEntry* entry)
+{
+    return TicksSinceEpoch<std::chrono::nanoseconds>(btck_LogEntry::get(entry).timestamp);
+}
+
+int64_t btck_log_entry_get_mocktime_s(const btck_LogEntry* entry)
+{
+    return btck_LogEntry::get(entry).mocktime.count();
+}
+
+btck_StringView btck_log_entry_get_file_name(const btck_LogEntry* entry)
+{
+    return to_btck(btck_LogEntry::get(entry).source_loc.file_name());
+}
+
+btck_StringView btck_log_entry_get_function_name(const btck_LogEntry* entry)
+{
+    return to_btck(btck_LogEntry::get(entry).source_loc.function_name_short());
+}
+
+uint32_t btck_log_entry_get_line(const btck_LogEntry* entry)
+{
+    return btck_LogEntry::get(entry).source_loc.line();
+}
+
+btck_LogLevel btck_log_entry_get_level(const btck_LogEntry* entry)
+{
+    return to_btck(btck_LogEntry::get(entry).level);
+}
+
+btck_LogCategory btck_log_entry_get_category(const btck_LogEntry* entry)
+{
+    return to_btck(static_cast<BCLog::LogFlags>(btck_LogEntry::get(entry).category));
 }
 
 btck_ChainParameters* btck_chain_parameters_create(const btck_ChainType chain_type)
