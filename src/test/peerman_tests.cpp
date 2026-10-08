@@ -5,15 +5,19 @@
 #include <chain.h>
 #include <chainparams.h>
 #include <consensus/params.h>
+#include <net.h>
 #include <net_processing.h>
 #include <node/block_template_manager.h>
 #include <node/miner.h>
 #include <pow.h>
 #include <primitives/block.h>
 #include <protocol.h>
+#include <script/script.h>
 #include <sync.h>
+#include <test/util/net.h>
 #include <test/util/setup_common.h>
 #include <test/util/time.h>
+#include <test/util/validation.h>
 #include <util/check.h>
 #include <validation.h>
 #include <validationinterface.h>
@@ -22,10 +26,18 @@
 
 #include <cstdint>
 #include <memory>
+#include <string>
+#include <vector>
 
 using kernel::AbortFailure;
 using kernel::FlushResult;
 
+static CService TestPeerIp(uint32_t i)
+{
+    struct in_addr s;
+    s.s_addr = i;
+    return CService(CNetAddr(s), Params().GetDefaultPort());
+}
 
 BOOST_FIXTURE_TEST_SUITE(peerman_tests, RegTestingSetup)
 
@@ -93,6 +105,107 @@ BOOST_AUTO_TEST_CASE(connections_desirable_service_flags)
     // Lastly, verify the stale tip checks can disallow limited peers connections after not receiving blocks for a prolonged period.
     clock += std::chrono::seconds{consensus.nPowTargetSpacing * NODE_NETWORK_LIMITED_ALLOW_CONN_BLOCKS + 1};
     BOOST_CHECK(peerman->GetDesirableServiceFlags(peer_flags) == ServiceFlags(NODE_NETWORK | NODE_WITNESS));
+}
+
+BOOST_AUTO_TEST_SUITE_END()
+
+BOOST_FIXTURE_TEST_SUITE(peerman_getdata_tests, TestChain100Setup)
+
+static bool OutboundHasBlock(CNode& peer)
+{
+    LOCK(peer.cs_vSend);
+    for (const auto& msg : peer.vSendMsg) {
+        if (msg.m_type == NetMsgType::BLOCK) return true;
+    }
+    const auto& [to_send, _more, msg_type]{peer.m_transport->GetBytesToSend(false)};
+    return !to_send.empty() && msg_type == NetMsgType::BLOCK;
+}
+
+static void RequestBlock(ConnmanTestMsg& connman, CNode& peer, const uint256& hash)
+    EXCLUSIVE_LOCKS_REQUIRED(NetEventsInterface::g_msgproc_mutex)
+{
+    std::vector<CInv> inv;
+    inv.emplace_back(MSG_WITNESS_BLOCK, hash);
+    BOOST_REQUIRE(connman.ReceiveMsgFrom(peer, NetMsg::Make(NetMsgType::GETDATA, inv)));
+    peer.fPauseSend = false;
+    (void)connman.ProcessMessagesOnce(peer);
+}
+
+// NewPoWValidBlock publishes m_most_recent_block before BLOCK_HAVE_DATA.
+// ProcessGetBlockData must still serve tip getdata from that cache.
+BOOST_AUTO_TEST_CASE(getdata_serves_recent_block_without_have_data)
+{
+    ConnmanTestMsg& connman{static_cast<ConnmanTestMsg&>(*m_node.connman)};
+    PeerManager& peerman{*m_node.peerman};
+    auto& chainman{static_cast<TestChainstateManager&>(*m_node.chainman)};
+    if (chainman.IsInitialBlockDownload()) {
+        chainman.JumpOutOfIbd();
+    }
+
+    m_node.validation_signals->RegisterValidationInterface(&peerman);
+
+    CScript script_pub_key{CScript() << ToByteVector(coinbaseKey.GetPubKey()) << OP_CHECKSIG};
+    // Two tips so NewPoWValidBlock must advance m_highest_fast_announce and
+    // refresh m_most_recent_block for the final tip.
+    (void)CreateAndProcessBlock({}, script_pub_key);
+    std::shared_ptr<const CBlock> tip_block{
+        std::make_shared<const CBlock>(CreateAndProcessBlock({}, script_pub_key))};
+
+    CBlockIndex* tip{WITH_LOCK(::cs_main, return m_node.chainman->ActiveChain().Tip())};
+    BOOST_REQUIRE(tip);
+    BOOST_REQUIRE(tip->GetBlockHash() == tip_block->GetHash());
+    CBlockIndex* parent{tip->pprev};
+    BOOST_REQUIRE(parent);
+    const uint256 tip_hash{tip->GetBlockHash()};
+    const uint256 parent_hash{parent->GetBlockHash()};
+
+    CAddress addr{TestPeerIp(0xa0b0c001), NODE_NONE};
+    NodeId id{0};
+    CNode peer{id++,
+               /*sock=*/nullptr,
+               addr,
+               /*nKeyedNetGroupIn=*/0,
+               /*nLocalHostNonceIn=*/0,
+               CAddress(),
+               /*addrNameIn=*/"",
+               ConnectionType::INBOUND,
+               /*inbound_onion=*/false,
+               /*network_key=*/0};
+
+    LOCK(NetEventsInterface::g_msgproc_mutex);
+    connman.Handshake(
+        /*node=*/peer,
+        /*successfully_connected=*/true,
+        /*remote_services=*/ServiceFlags(NODE_NETWORK | NODE_WITNESS),
+        /*local_services=*/ServiceFlags(NODE_NETWORK | NODE_WITNESS),
+        /*version=*/PROTOCOL_VERSION,
+        /*relay_txs=*/true);
+    connman.FlushSendBuffer(peer);
+
+    // Harness control. Disk serve must work while HAVE_DATA is still set.
+    RequestBlock(connman, peer, tip_hash);
+    BOOST_REQUIRE(OutboundHasBlock(peer));
+    connman.FlushSendBuffer(peer);
+
+    {
+        LOCK(::cs_main);
+        BOOST_REQUIRE(tip->nStatus & BLOCK_HAVE_DATA);
+        BOOST_REQUIRE(parent->nStatus & BLOCK_HAVE_DATA);
+        tip->nStatus &= ~BLOCK_HAVE_DATA;
+        parent->nStatus &= ~BLOCK_HAVE_DATA;
+    }
+
+    // Tip must still be served from m_most_recent_block.
+    RequestBlock(connman, peer, tip_hash);
+    BOOST_CHECK(OutboundHasBlock(peer));
+    connman.FlushSendBuffer(peer);
+
+    // Parent is not the recent cache entry.
+    RequestBlock(connman, peer, parent_hash);
+    BOOST_CHECK(!OutboundHasBlock(peer));
+
+    peerman.FinalizeNode(peer);
+    m_node.validation_signals->UnregisterValidationInterface(&peerman);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
