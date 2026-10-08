@@ -2657,11 +2657,18 @@ void PeerManagerImpl::ProcessGetBlockData(CNode& pfrom, Peer& peer, const CInv& 
         }
         // Pruned nodes may have deleted the block, so check whether
         // it's available before trying to send.
-        if (!(pindex->nStatus & BLOCK_HAVE_DATA)) {
+        // NewPoWValidBlock publishes m_most_recent_block before
+        // BLOCK_HAVE_DATA is set. Without cs_main around this path,
+        // getdata can race AcceptBlock. Serve the recent tip from
+        // memory instead of silently dropping the request.
+        const bool have_recent_block{a_recent_block && a_recent_block->GetHash() == inv.hash};
+        if (!(pindex->nStatus & BLOCK_HAVE_DATA) && !have_recent_block) {
             return;
         }
         can_direct_fetch = CanDirectFetch();
-        block_pos = pindex->GetBlockPos();
+        if (pindex->nStatus & BLOCK_HAVE_DATA) {
+            block_pos = pindex->GetBlockPos();
+        }
     }
 
     std::shared_ptr<const CBlock> pblock;
