@@ -5,7 +5,6 @@
 #ifndef BITCOIN_KERNEL_BLOCKMANAGER_OPTS_H
 #define BITCOIN_KERNEL_BLOCKMANAGER_OPTS_H
 
-#include <dbwrapper.h>
 #include <kernel/notifications_interface.h>
 #include <util/fs.h>
 
