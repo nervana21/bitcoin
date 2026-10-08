@@ -2961,13 +2961,8 @@ bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock,
     {
         LOCK(map_mutex);
         processing_cv.wait(map_mutex, [&]() {
-            bool available = !blocks_being_processed.contains(block_hash);
-            if (!available) {
-                LogInfo(m_log, "Thread %p: Block %s still being processed, waiting...", std::this_thread::get_id(), block_hash.ToString());
-            }
-            return available;
+            return !blocks_being_processed.contains(block_hash);
         });
-        LogInfo(m_log, "Thread %p: Block %s available, marking as being processed", std::this_thread::get_id(), block_hash.ToString());
         blocks_being_processed.insert(block_hash);
     }
     WAIT_LOCK(cs_main, lock);
@@ -3033,7 +3028,6 @@ bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock,
         FlatFilePos blockPos{};
         auto pre_pos{pindex->GetBlockPos()};
         assert(pre_pos.IsNull());
-        LogInfo(m_log, "Thread %p: About to REVERSE_LOCK for block %s, pindex=%p\n", std::this_thread::get_id(), block.GetHash().ToString(), pindex);
         {
             REVERSE_LOCK(lock, cs_main);
             if (dbp) {
@@ -3051,7 +3045,6 @@ bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock,
             }
         }
         auto post_pos{pindex->GetBlockPos()};
-        LogInfo(m_log, "Thread %p: After REVERSE_LOCK for block %s, pindex=%p, pos=%s, but expected pos=%s\n", std::this_thread::get_id(), block.GetHash().ToString(), pindex, pindex->GetBlockPos().ToString(), blockPos.ToString());
         assert(post_pos.IsNull());
         ReceivedBlockTransactions(block, pindex, blockPos);
     } catch (const std::runtime_error& e) {
