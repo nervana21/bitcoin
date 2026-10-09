@@ -109,7 +109,7 @@ BOOST_AUTO_TEST_CASE(connections_desirable_service_flags)
 
 BOOST_AUTO_TEST_SUITE_END()
 
-BOOST_FIXTURE_TEST_SUITE(peerman_getdata_tests, TestChain100Setup)
+BOOST_FIXTURE_TEST_SUITE(peerman_tests_getdata, TestChain100Setup)
 
 static bool OutboundHasBlock(CNode& peer)
 {
