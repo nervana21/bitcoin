@@ -1293,7 +1293,7 @@ FlushResult<> kernel::Chainstate::DisconnectTip(BlockValidationState& state)
     }
 
     // Write the chain state to disk, if necessary.
-    if (!(FlushStateToDisk(state, FlushStateMode::IF_NEEDED) >> result)) {
+    if (!(m_chainman.MaybeFlushChainstateIfNeeded(*this, state) >> result)) {
         result.update(util::Error{});
         return result;
     }
@@ -1387,7 +1387,7 @@ FlushResult<void, AbortFailure> kernel::Chainstate::ConnectTip(
              Ticks<SecondsDouble>(m_chain_stats.time_flush),
              Ticks<MillisecondsDouble>(m_chain_stats.time_flush) / m_chain_stats.num_blocks_total);
     // Write the chain state to disk, if necessary.
-    if (!(FlushStateToDisk(state, FlushStateMode::IF_NEEDED) >> result)) {
+    if (!(m_chainman.MaybeFlushChainstateIfNeeded(*this, state) >> result)) {
         result.update(util::Error{});
         return result;
     }
@@ -2449,6 +2449,12 @@ void kernel::ChainstateManager::MaybePruneBlockFilesAfterAccept(FlushResult<void
     ActiveChainstate().FlushStateToDisk(flush_state_ignore, FlushStateMode::NONE) >> result;
 }
 
+FlushResult<void, AbortFailure> kernel::ChainstateManager::MaybeFlushChainstateIfNeeded(
+    Chainstate& chainstate, BlockValidationState& state)
+{
+    return chainstate.FlushStateToDisk(state, FlushStateMode::IF_NEEDED);
+}
+
 bool kernel::ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlock>& block, bool force_processing, bool min_pow_checked, bool* new_block, FlushResult<void, AbortFailure>& result)
 {
     AssertLockNotHeld(cs_main);
@@ -3401,7 +3407,7 @@ FlushResult<void, AbortFailure> kernel::Chainstate::ResizeCoinsCaches(size_t coi
 
     if (coinstip_size > old_coinstip_size) {
         // Likely no need to flush if cache sizes have grown.
-        return FlushStateToDisk(state, FlushStateMode::IF_NEEDED);
+        return m_chainman.MaybeFlushChainstateIfNeeded(*this, state);
     } else {
         // Otherwise, flush state to disk and deallocate the in-memory coins map.
         return FlushStateToDisk(state, FlushStateMode::FORCE_FLUSH);
