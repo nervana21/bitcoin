@@ -1463,24 +1463,10 @@ FlushResult<kernel::InterruptResult, ChainstateLoadError> InitAndLoadChainstate(
         return {util::Error{_("Error opening block database")}, ChainstateLoadError::FAILURE};
     }
 
-    // Creating the chainstate manager internally creates a BlockManager, opens
-    // the blocks tree db, and wipes existing block files in case of a reindex.
-    // The coinsdb is opened at a later point on LoadChainstate.
-    try {
-        node.chainman = std::make_unique<ChainstateManager>(LogInstance(), *Assert(node.shutdown_signal), chainman_opts, blockman_opts);
-    } catch (kernel::BlockTreeStoreError& e) {
-        LogError("%s", e.what());
-        return {util::Error{_("Error opening block database")}, ChainstateLoadError::FAILURE};
-    } catch (std::exception& e) {
-        return {util::Error{Untranslated(strprintf("Failed to initialize ChainstateManager: %s", e.what()))}, ChainstateLoadError::FAILURE_FATAL};
-    }
-    ChainstateManager& chainman = *node.chainman;
-    if (chainman.m_interrupt) return kernel::Interrupted{};
-
-    // This is defined and set here instead of inline in validation.h to avoid a hard
-    // dependency between validation and index/base, since the latter is not in
-    // libbitcoinkernel.
-    chainman.m_target_block_reached = [&node]() {
+    // Node-only assumeutxo hook: restart indexes / services when the historical
+    // chainstate hits the snapshot target. Kept on Options so kernel never
+    // depends on index/base; empty for pure kernel consumers.
+    chainman_opts.target_block_reached = [&node]() {
         if (!node.chainman->m_blockman.IsPruneMode()) {
             LogInfo("[snapshot] re-enabling NODE_NETWORK services");
             node.connman->AddLocalServices(NODE_NETWORK);
@@ -1497,6 +1483,20 @@ FlushResult<kernel::InterruptResult, ChainstateLoadError> InitAndLoadChainstate(
             }
         }
     };
+
+    // Creating the chainstate manager internally creates a BlockManager, opens
+    // the blocks tree db, and wipes existing block files in case of a reindex.
+    // The coinsdb is opened at a later point on LoadChainstate.
+    try {
+        node.chainman = std::make_unique<ChainstateManager>(LogInstance(), *Assert(node.shutdown_signal), chainman_opts, blockman_opts);
+    } catch (kernel::BlockTreeStoreError& e) {
+        LogError("%s", e.what());
+        return {util::Error{_("Error opening block database")}, ChainstateLoadError::FAILURE};
+    } catch (std::exception& e) {
+        return {util::Error{Untranslated(strprintf("Failed to initialize ChainstateManager: %s", e.what()))}, ChainstateLoadError::FAILURE_FATAL};
+    }
+    ChainstateManager& chainman = *node.chainman;
+    if (chainman.m_interrupt) return kernel::Interrupted{};
     node::ChainstateLoadOptions options;
     options.mempool = Assert(node.mempool.get());
     options.wipe_chainstate_db = do_reindex || do_reindex_chainstate;

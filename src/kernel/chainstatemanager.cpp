@@ -1754,13 +1754,13 @@ FlushResult<> kernel::Chainstate::ActivateBestChain(BlockValidationState& state,
         if (reached_target) {
             // Chainstate has reached the target block, so exit.
             //
-            // Restart indexes so indexes can resync and index new blocks after
-            // the target block.
+            // Options::target_block_reached lets the node restart indexes /
+            // adjust services without those types living in libbitcoinkernel.
             //
             // This cannot be done while holding cs_main (within
             // MaybeValidateSnapshot) or a cs_main deadlock will occur.
-            if (m_target_block_reached) {
-                m_target_block_reached();
+            if (m_chainman.m_options.target_block_reached) {
+                m_chainman.m_options.target_block_reached();
             }
             break;
         }
@@ -4026,7 +4026,6 @@ Chainstate& kernel::ChainstateManager::AddChainstate(std::unique_ptr<Chainstate>
     // Set target block for historical chainstate to snapshot block.
     assert(!prev_chainstate.TargetBlockHash());
     prev_chainstate.SetTargetBlockHash(*Assert(chainstate->m_from_snapshot_blockhash));
-    prev_chainstate.m_target_block_reached = m_target_block_reached;
     m_chainstates.push_back(std::move(chainstate));
     Chainstate& curr_chainstate{CurrentChainstate()};
     assert(&curr_chainstate == m_chainstates.back().get());
