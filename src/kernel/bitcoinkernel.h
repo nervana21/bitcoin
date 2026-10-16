@@ -65,15 +65,29 @@ extern "C" {
 #endif // __cplusplus
 
 /**
+ * Public API version for libbitcoinkernel. Increment MAJOR for breaking ABI
+ * changes, MINOR for compatible additions, PATCH for fixes. Not yet a
+ * stability guarantee — breaking changes may still land before release.
+ */
+#define BITCOINKERNEL_API_VERSION_MAJOR 0
+#define BITCOINKERNEL_API_VERSION_MINOR 1
+#define BITCOINKERNEL_API_VERSION_PATCH 0
+#define BITCOINKERNEL_API_VERSION \
+    ((BITCOINKERNEL_API_VERSION_MAJOR * 10000) + \
+     (BITCOINKERNEL_API_VERSION_MINOR * 100) + \
+     (BITCOINKERNEL_API_VERSION_PATCH))
+
+/**
  * @page remarks Remarks
  *
  * @section purpose Purpose
  *
  * This header currently exposes an API for interacting with parts of Bitcoin
  * Core's consensus code. Users can validate blocks, iterate the block index,
- * read block and undo data from disk, and validate scripts. The header is
- * unversioned and not stable yet. Users should expect breaking changes. It is
- * also not yet included in releases of Bitcoin Core.
+ * read block and undo data from disk, and validate scripts. Version macros
+ * (`BITCOINKERNEL_API_VERSION_*`) track the C surface; the API is not yet
+ * stable for production. Breaking changes may still land. Not yet included in
+ * releases of Bitcoin Core.
  *
  * @section context Context
  *
@@ -223,7 +237,8 @@ typedef struct btck_ChainstateManagerOptions btck_ChainstateManagerOptions;
  * well as retrieving data from the chain. Internally it is a complex data
  * structure with diverse functionality.
  *
- * Its functionality will be more and more exposed in the future.
+ * More ChainstateManager surface is added as engine jobs are needed by
+ * external apps (not policy). See @ref btck_chainstate_manager_get_block_index_size.
  */
 typedef struct btck_ChainstateManager btck_ChainstateManager;
 
@@ -1440,6 +1455,15 @@ BITCOINKERNEL_API btck_ChainstateManager* BITCOINKERNEL_WARN_UNUSED_RESULT btck_
  * @return                       The btck_BlockTreeEntry, or null if no block headers have been loaded.
  */
 BITCOINKERNEL_API const btck_BlockTreeEntry* btck_chainstate_manager_get_best_entry(
+    const btck_ChainstateManager* chainstate_manager) BITCOINKERNEL_ARG_NONNULL(1);
+
+/**
+ * @brief Number of block-index entries currently held by the chainstate manager.
+ *
+ * @param[in] chainstate_manager Non-null.
+ * @return                       Count of in-memory block tree entries.
+ */
+BITCOINKERNEL_API size_t btck_chainstate_manager_get_block_index_size(
     const btck_ChainstateManager* chainstate_manager) BITCOINKERNEL_ARG_NONNULL(1);
 
 /**
