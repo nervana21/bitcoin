@@ -2,14 +2,14 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <node/chainstate.h>
+#include <kernel/chainstate.h>
 
 #include <arith_uint256.h>
 #include <chain.h>
 #include <coins.h>
 #include <consensus/params.h>
 #include <kernel/caches.h>
-#include <node/blockstorage.h>
+#include <kernel/blockstorage.h>
 #include <sync.h>
 #include <tinyformat.h>
 #include <txdb.h>
@@ -34,7 +34,7 @@ using kernel::FlushResult;
 using kernel::Interrupted;
 using kernel::InterruptResult;
 
-namespace node {
+namespace kernel {
 // Complete initialization of chainstates after the initial call has been made
 // to ChainstateManager::InitializeChainstate().
 static FlushResult<InterruptResult, ChainstateLoadError> CompleteChainstateInitialization(
@@ -323,4 +323,4 @@ FlushResult<InterruptResult, ChainstateLoadError> VerifyLoadedChainstate(Chainst
 
     return result;
 }
-} // namespace node
+} // namespace kernel

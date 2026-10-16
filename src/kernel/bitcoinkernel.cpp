@@ -22,7 +22,7 @@
 #include <kernel/result.h>
 #include <kernel/warning.h>
 #include <node/blockstorage.h>
-#include <node/chainstate.h>
+#include <kernel/chainstate.h>
 #include <primitives/block.h>
 #include <primitives/transaction.h>
 #include <script/interpreter.h>
@@ -597,7 +597,7 @@ struct ChainstateManagerOptions {
     ChainstateManager::Options m_chainman_options GUARDED_BY(m_mutex);
     kernel::BlockManager::Options m_blockman_options GUARDED_BY(m_mutex);
     std::shared_ptr<const Context> m_context;
-    node::ChainstateLoadOptions m_chainstate_load_options GUARDED_BY(m_mutex);
+    kernel::ChainstateLoadOptions m_chainstate_load_options GUARDED_BY(m_mutex);
     uint64_t m_db_cache_bytes GUARDED_BY(m_mutex){DEFAULT_KERNEL_CACHE};
 
     ChainstateManagerOptions(const std::shared_ptr<const Context>& context, const fs::path& data_dir, const fs::path& blocks_dir)
@@ -614,7 +614,7 @@ struct ChainstateManagerOptions {
               .notifications = *context->m_notifications,
           }},
           m_context{context},
-          m_chainstate_load_options{node::ChainstateLoadOptions{}}
+          m_chainstate_load_options{kernel::ChainstateLoadOptions{}}
     {
     }
 };
@@ -1411,12 +1411,12 @@ btck_ChainstateManager* btck_chainstate_manager_create(
         const auto chainstate_load_opts{WITH_LOCK(opts.m_mutex, return opts.m_chainstate_load_options)};
 
         const kernel::CacheSizes cache_sizes{WITH_LOCK(opts.m_mutex, return opts.m_db_cache_bytes)};
-        auto load_result{node::LoadChainstate(*chainman, cache_sizes, chainstate_load_opts)};
+        auto load_result{kernel::LoadChainstate(*chainman, cache_sizes, chainstate_load_opts)};
         if (!load_result || IsInterrupted(*load_result)) {
             LogError(opts.m_context->m_log, "Failed to load chain state from your data directory: %s", util::ErrorString(load_result).original);
             return nullptr;
         }
-        auto verify_result{node::VerifyLoadedChainstate(*chainman, chainstate_load_opts)};
+        auto verify_result{kernel::VerifyLoadedChainstate(*chainman, chainstate_load_opts)};
         if (!verify_result || IsInterrupted(*verify_result)) {
             LogError(opts.m_context->m_log, "Failed to verify loaded chain state from your datadir: %s", util::ErrorString(load_result).original);
             return nullptr;
