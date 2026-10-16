@@ -1677,6 +1677,11 @@ public:
         return btck_chainstate_manager_get_best_entry(get());
     }
 
+    size_t GetBlockIndexSize() const
+    {
+        return btck_chainstate_manager_get_block_index_size(get());
+    }
+
     std::optional<Block> ReadBlock(const BlockTreeEntry& entry) const
     {
         auto block{btck_block_read(get(), entry.get())};
