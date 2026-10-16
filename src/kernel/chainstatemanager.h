@@ -294,6 +294,12 @@ protected:
         const std::set<int>& set_files_to_prune,
         bool flush_for_prune) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
+    //! Flush or sync the coins tip (disk-space check included).
+    //! @returns whether a coins write ran (best block non-null).
+    [[nodiscard]] kernel::FlushResult<bool, kernel::AbortFailure> FlushCoinsForWrite(
+        BlockValidationState& state,
+        bool empty_cache) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
 public:
     const util::log::Context m_log;
     //! Reference to a BlockManager instance which itself is shared across all
