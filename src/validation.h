@@ -61,9 +61,9 @@ struct AssumeutxoData;
 namespace kernel {
 struct ChainstateRole;
 } // namespace kernel
-namespace node {
+namespace kernel {
 class SnapshotMetadata;
-} // namespace node
+} // namespace kernel
 namespace Consensus {
 struct Params;
 } // namespace Consensus
@@ -843,7 +843,7 @@ private:
     [[nodiscard]] util::Result<void> PopulateAndValidateSnapshot(
         Chainstate& snapshot_chainstate,
         AutoFile& coins_file,
-        const node::SnapshotMetadata& metadata);
+        const kernel::SnapshotMetadata& metadata);
 
     /**
      * If a block header hasn't already been seen, call CheckBlockHeader on it, ensure
@@ -1018,7 +1018,7 @@ public:
     //! - "Fast forward" the tip of the new chainstate to the base of the snapshot.
     //! - Construct the new Chainstate and add it to m_chainstates.
     [[nodiscard]] kernel::FlushResult<CBlockIndex*, kernel::AbortFailure> ActivateSnapshot(
-        AutoFile& coins_file, const node::SnapshotMetadata& metadata, bool in_memory);
+        AutoFile& coins_file, const kernel::SnapshotMetadata& metadata, bool in_memory);
 
     //! Try to validate an assumeutxo snapshot by using a validated historical
     //! chainstate targeted at the snapshot block. When the target block is
