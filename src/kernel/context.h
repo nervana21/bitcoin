@@ -6,13 +6,13 @@
 #define BITCOIN_KERNEL_CONTEXT_H
 
 namespace kernel {
-//! Context struct holding the kernel library's logically global state, and
-//! passed to external libbitcoin_kernel functions which need access to this
-//! state. The kernel library API is a work in progress, so state organization
-//! and member list will evolve over time.
+//! Thin C++ context for internal bitcoin_kernel / node wiring (sha256 self-check
+//! and related init). Opaque handle state for external consumers lives in the
+//! C API's `btck_Context` (see bitcoinkernel.h / bitcoinkernel.cpp). Keep this
+//! struct simple; complex state belongs on unique_ptr members or on btck_Context.
 //!
-//! State stored directly in this struct should be simple. More complex state
-//! should be stored to std::unique_ptr members pointing to opaque types.
+//! Layers are intentional: `kernel::Context` = in-process C++ link; `btck_Context`
+//! = stable-ish FFI boundary. Do not merge them without a versioned plan.
 struct Context {
     Context();
 };
