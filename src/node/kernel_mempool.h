@@ -14,7 +14,10 @@
 #include <memory>
 
 class CBlock;
+namespace kernel {
 class Chainstate;
+} // namespace kernel
+using kernel::Chainstate;
 class CCoinsViewCache;
 class CTransaction;
 class CTxMemPool;

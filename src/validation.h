@@ -52,7 +52,6 @@
 #include <utility>
 #include <vector>
 
-class Chainstate;
 class ChainstateManager;
 struct ChainTxData;
 struct PrecomputedTransactionData;
@@ -60,9 +59,8 @@ struct LockPoints;
 struct AssumeutxoData;
 namespace kernel {
 struct ChainstateRole;
-} // namespace kernel
-namespace kernel {
 class SnapshotMetadata;
+class Chainstate;
 } // namespace kernel
 namespace Consensus {
 struct Params;
@@ -436,6 +434,7 @@ using kernel::LargeCoinsCacheThreshold;
 using kernel::Assumeutxo;
 using kernel::ChainStats;
 
+namespace kernel {
 /**
  * Chainstate stores and provides an API to update our local knowledge of the
  * current best chain.
@@ -811,6 +810,10 @@ protected:
 
     friend ChainstateManager;
 };
+} // namespace kernel
+
+using kernel::Chainstate;
+
 
 enum class SnapshotCompletionResult {
     SUCCESS,

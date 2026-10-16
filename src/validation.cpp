@@ -128,7 +128,7 @@ static bool ShouldCompactChainstate(bool in_ibd)
 TRACEPOINT_SEMAPHORE(validation, block_connected);
 TRACEPOINT_SEMAPHORE(utxocache, flush);
 
-const CBlockIndex* Chainstate::FindForkInGlobalIndex(const CBlockLocator& locator) const
+const CBlockIndex* kernel::Chainstate::FindForkInGlobalIndex(const CBlockLocator& locator) const
 {
     // Find the latest block common to locator and chain - we expect that
     // locator.vHave is sorted descending by height.
@@ -296,7 +296,7 @@ void kernel::CoinsViews::InitCache(int32_t prevoutfetch_threads)
     m_connect_block_view = std::make_unique<CoinsViewOverlay>(*Assert(m_log.logger), &*m_cacheview, std::move(thread_pool));
 }
 
-Chainstate::Chainstate(
+kernel::Chainstate::Chainstate(
     BlockManager& blockman,
     ChainstateManager& chainman,
     std::optional<uint256> from_snapshot_blockhash)
@@ -317,7 +317,7 @@ Chainstate::Chainstate(
       m_assumeutxo(from_snapshot_blockhash ? Assumeutxo::UNVALIDATED : Assumeutxo::VALIDATED),
       m_from_snapshot_blockhash(from_snapshot_blockhash) {}
 
-fs::path Chainstate::StoragePath() const
+fs::path kernel::Chainstate::StoragePath() const
 {
     fs::path path{m_datadir / "chainstate"};
     if (m_from_snapshot_blockhash) {
@@ -326,7 +326,7 @@ fs::path Chainstate::StoragePath() const
     return path;
 }
 
-const CBlockIndex* Chainstate::SnapshotBase() const
+const CBlockIndex* kernel::Chainstate::SnapshotBase() const
 {
     if (!m_from_snapshot_blockhash) return nullptr;
     if (const CBlockIndex* cached{m_cached_snapshot_base.load(std::memory_order_acquire)}) return cached;
@@ -335,7 +335,7 @@ const CBlockIndex* Chainstate::SnapshotBase() const
     return found;
 }
 
-const CBlockIndex* Chainstate::TargetBlock() const
+const CBlockIndex* kernel::Chainstate::TargetBlock() const
 {
     AssertLockHeld(::cs_main);
     if (const CBlockIndex* cached{m_cached_target_block.load(std::memory_order_acquire)}) return cached;
@@ -345,7 +345,7 @@ const CBlockIndex* Chainstate::TargetBlock() const
     return found;
 }
 
-void Chainstate::SetTargetBlock(CBlockIndex* block)
+void kernel::Chainstate::SetTargetBlock(CBlockIndex* block)
 {
     AssertLockHeld(::cs_main);
     if (block) {
@@ -356,14 +356,14 @@ void Chainstate::SetTargetBlock(CBlockIndex* block)
     m_cached_target_block.store(block, std::memory_order_release);
 }
 
-void Chainstate::SetTargetBlockHash(uint256 block_hash)
+void kernel::Chainstate::SetTargetBlockHash(uint256 block_hash)
 {
     AssertLockHeld(::cs_main);
     m_target_blockhash = block_hash;
     m_cached_target_block.store(nullptr, std::memory_order_release);
 }
 
-void Chainstate::InitCoinsDB(
+void kernel::Chainstate::InitCoinsDB(
     size_t cache_size_bytes,
     bool in_memory,
     bool should_wipe,
@@ -385,7 +385,7 @@ void Chainstate::InitCoinsDB(
     m_coinsdb_cache_size_bytes = cache_size_bytes;
 }
 
-void Chainstate::InitCoinsCache(size_t cache_size_bytes)
+void kernel::Chainstate::InitCoinsCache(size_t cache_size_bytes)
 {
     AssertLockHeld(::cs_main);
     assert(m_coins_views != nullptr);
@@ -399,7 +399,7 @@ bool ChainstateManager::IsInitialBlockDownload() const noexcept
     return m_cached_is_ibd.load(std::memory_order_relaxed);
 }
 
-void Chainstate::CheckForkWarningConditions()
+void kernel::Chainstate::CheckForkWarningConditions()
 {
     AssertLockHeld(cs_main);
 
@@ -418,7 +418,7 @@ void Chainstate::CheckForkWarningConditions()
 }
 
 // Called both upon regular invalid block discovery *and* InvalidateBlock
-void Chainstate::InvalidChainFound(CBlockIndex* pindexNew)
+void kernel::Chainstate::InvalidChainFound(CBlockIndex* pindexNew)
 {
     AssertLockHeld(cs_main);
     if (!m_blockman.m_best_invalid || pindexNew->nChainWork > m_blockman.m_best_invalid->nChainWork) {
@@ -443,7 +443,7 @@ void Chainstate::InvalidChainFound(CBlockIndex* pindexNew)
 
 // Same as InvalidChainFound, above, except not called directly from InvalidateBlock,
 // which does its own setBlockIndexCandidates management.
-void Chainstate::InvalidBlockFound(CBlockIndex* pindex, const BlockValidationState& state)
+void kernel::Chainstate::InvalidBlockFound(CBlockIndex* pindex, const BlockValidationState& state)
 {
     AssertLockHeld(cs_main);
     if (state.GetResult() != BlockValidationResult::BLOCK_MUTATED) {
@@ -665,7 +665,7 @@ int ApplyTxInUndo(Coin&& undo, CCoinsViewCache& view, const COutPoint& out)
 
 /** Undo the effects of this block (with given index) on the UTXO set represented by coins.
  *  When FAILED is returned, view is left in an indeterminate state. */
-DisconnectResult Chainstate::DisconnectBlock(const CBlock& block, const CBlockIndex* pindex, CCoinsViewCache& view)
+DisconnectResult kernel::Chainstate::DisconnectBlock(const CBlock& block, const CBlockIndex* pindex, CCoinsViewCache& view)
 {
     AssertLockHeld(::cs_main);
     bool fClean = true;
@@ -861,7 +861,7 @@ script_verify_flags GetBlockScriptFlags(const CBlockIndex& block_index, const Co
 /** Apply the effects of this block (with given index) on the UTXO set represented by coins.
  *  Validity checks that depend on the UTXO set are also done; ConnectBlock()
  *  can fail if those validity checks fail (among other reasons). */
-FlushResult<void, AbortFailure> Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, CBlockIndex* pindex,
+FlushResult<void, AbortFailure> kernel::Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, CBlockIndex* pindex,
                                CCoinsViewCache& view, bool fJustCheck)
 {
     AssertLockHeld(cs_main);
@@ -893,7 +893,7 @@ FlushResult<void, AbortFailure> Chainstate::ConnectBlock(const CBlock& block, Bl
             // We don't write down blocks to disk if they may have been
             // corrupted, so this should be impossible unless we're having hardware
             // problems.
-            FatalError(m_notifications, state, kernel::CorruptBlockFound{});
+            ::FatalError(m_notifications, state, kernel::CorruptBlockFound{});
             result.update({util::Error{Untranslated(FatalErrorString(kernel::CorruptBlockFound{}))}, AbortFailure{.fatal = true}});
             return result;
         }
@@ -1249,7 +1249,7 @@ FlushResult<void, AbortFailure> Chainstate::ConnectBlock(const CBlock& block, Bl
     return result;
 }
 
-CoinsCacheSizeState Chainstate::GetCoinsCacheSizeState()
+CoinsCacheSizeState kernel::Chainstate::GetCoinsCacheSizeState()
 {
     AssertLockHeld(::cs_main);
     return this->GetCoinsCacheSizeState(
@@ -1257,7 +1257,7 @@ CoinsCacheSizeState Chainstate::GetCoinsCacheSizeState()
         !GetRole().historical ? m_chainman.GetMempool().maxSizeBytes() : 0);
 }
 
-CoinsCacheSizeState Chainstate::GetCoinsCacheSizeState(
+CoinsCacheSizeState kernel::Chainstate::GetCoinsCacheSizeState(
     size_t max_coins_cache_size_bytes,
     size_t max_mempool_size_bytes)
 {
@@ -1276,7 +1276,7 @@ CoinsCacheSizeState Chainstate::GetCoinsCacheSizeState(
     return CoinsCacheSizeState::OK;
 }
 
-FlushResult<void, AbortFailure> Chainstate::FlushStateToDisk(
+FlushResult<void, AbortFailure> kernel::Chainstate::FlushStateToDisk(
     BlockValidationState &state,
     FlushStateMode mode,
     int nManualPruneHeight)
@@ -1355,7 +1355,7 @@ FlushResult<void, AbortFailure> Chainstate::FlushStateToDisk(
 
             // Ensure we can write block index
             if (!CheckDiskSpace(m_blockman.m_opts.blocks_dir)) {
-                FatalError(m_notifications, state, kernel::DiskSpaceTooLow{});
+                ::FatalError(m_notifications, state, kernel::DiskSpaceTooLow{});
                 result.update({util::Error{Untranslated(FatalErrorString(kernel::DiskSpaceTooLow{}))}, AbortFailure{.fatal = true}});
                 return result;
             }
@@ -1392,7 +1392,7 @@ FlushResult<void, AbortFailure> Chainstate::FlushStateToDisk(
                 // an overestimation, as most will delete an existing entry or
                 // overwrite one. Still, use a conservative safety factor of 2.
                 if (!CheckDiskSpace(m_datadir, 48 * 2 * 2 * CoinsTip().GetDirtyCount())) {
-                    FatalError(m_notifications, state, kernel::DiskSpaceTooLow{});
+                    ::FatalError(m_notifications, state, kernel::DiskSpaceTooLow{});
                     result.update({util::Error{Untranslated(FatalErrorString(kernel::DiskSpaceTooLow{}))}, AbortFailure{.fatal = true}});
                     return result;
                 }
@@ -1428,14 +1428,14 @@ FlushResult<void, AbortFailure> Chainstate::FlushStateToDisk(
         }
     }
     } catch (const std::runtime_error& e) {
-        FatalError(m_notifications, state, kernel::SystemErrorWhileFlushing{e.what()});
+        ::FatalError(m_notifications, state, kernel::SystemErrorWhileFlushing{e.what()});
         result.update({util::Error{Untranslated(FatalErrorString(kernel::SystemErrorWhileFlushing{e.what()}))}, AbortFailure{.fatal = true}});
         return result;
     }
     return result;
 }
 
-FlushResult<> Chainstate::ForceFlushStateToDisk(bool wipe_cache)
+FlushResult<> kernel::Chainstate::ForceFlushStateToDisk(bool wipe_cache)
 {
     FlushResult<> result;
     BlockValidationState state;
@@ -1447,7 +1447,7 @@ FlushResult<> Chainstate::ForceFlushStateToDisk(bool wipe_cache)
     return result;
 }
 
-FlushResult<> Chainstate::PruneAndFlush()
+FlushResult<> kernel::Chainstate::PruneAndFlush()
 {
     FlushResult<> result;
     BlockValidationState state;
@@ -1485,7 +1485,7 @@ static void UpdateTipLog(
                    !warning_messages.empty() ? strprintf(" warning='%s'", warning_messages) : "");
 }
 
-void Chainstate::UpdateTip(const CBlockIndex* pindexNew)
+void kernel::Chainstate::UpdateTip(const CBlockIndex* pindexNew)
 {
     AssertLockHeld(::cs_main);
     const auto& coins_tip = this->CoinsTip();
@@ -1528,7 +1528,7 @@ void Chainstate::UpdateTip(const CBlockIndex* pindexNew)
   * Make the mempool consistent again by calling MaybeUpdateMempoolForReorg
   * with cs_main held. A chainstate with no plugged-in pool saves nothing.
   */
-FlushResult<> Chainstate::DisconnectTip(BlockValidationState& state)
+FlushResult<> kernel::Chainstate::DisconnectTip(BlockValidationState& state)
 {
     AssertLockHeld(cs_main);
 
@@ -1611,7 +1611,7 @@ struct ConnectedBlock {
  *
  * The block is added to connected_blocks if connection succeeds.
  */
-FlushResult<void, AbortFailure> Chainstate::ConnectTip(
+FlushResult<void, AbortFailure> kernel::Chainstate::ConnectTip(
     BlockValidationState& state,
     CBlockIndex* pindexNew,
     std::shared_ptr<const CBlock> block_to_connect,
@@ -1627,7 +1627,7 @@ FlushResult<void, AbortFailure> Chainstate::ConnectTip(
     if (!block_to_connect) {
         std::shared_ptr<CBlock> pblockNew = std::make_shared<CBlock>();
         if (!m_blockman.ReadBlock(*pblockNew, *pindexNew)) {
-            FatalError(m_notifications, state, kernel::BlockReadFailed{});
+            ::FatalError(m_notifications, state, kernel::BlockReadFailed{});
             result.update({util::Error{Untranslated(FatalErrorString(kernel::BlockReadFailed{}))}, AbortFailure{.fatal = true}});
             return result;
         }
@@ -1734,7 +1734,7 @@ FlushResult<void, AbortFailure> Chainstate::ConnectTip(
  * Return the tip of the chain with the most work in it, that isn't
  * known to be invalid (it's however far from certain to be valid).
  */
-CBlockIndex* Chainstate::FindMostWorkChain()
+CBlockIndex* kernel::Chainstate::FindMostWorkChain()
 {
     AssertLockHeld(::cs_main);
     do {
@@ -1790,7 +1790,7 @@ CBlockIndex* Chainstate::FindMostWorkChain()
 }
 
 /** Delete all entries in setBlockIndexCandidates that are worse than the current tip. */
-void Chainstate::PruneBlockIndexCandidates() {
+void kernel::Chainstate::PruneBlockIndexCandidates() {
     // Note that we can't delete the current block itself, as we may need to return to it later in case a
     // reorganization to a better block fails.
     std::set<CBlockIndex*, CBlockIndexWorkComparator>::iterator it = setBlockIndexCandidates.begin();
@@ -1807,7 +1807,7 @@ void Chainstate::PruneBlockIndexCandidates() {
  *
  * @returns true unless a system error occurred
  */
-FlushResult<void, AbortFailure> Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex& index_most_work, const std::shared_ptr<const CBlock>& pblock, bool& fInvalidFound, std::vector<ConnectedBlock>& connected_blocks)
+FlushResult<void, AbortFailure> kernel::Chainstate::ActivateBestChainStep(BlockValidationState& state, CBlockIndex& index_most_work, const std::shared_ptr<const CBlock>& pblock, bool& fInvalidFound, std::vector<ConnectedBlock>& connected_blocks)
 {
     AssertLockHeld(cs_main);
 
@@ -1827,7 +1827,7 @@ FlushResult<void, AbortFailure> Chainstate::ActivateBestChainStep(BlockValidatio
             // If we're unable to disconnect a block during normal operation,
             // then that is a failure of our local system -- we should abort
             // rather than stay on a less work chain.
-            FatalError(m_notifications, state, kernel::BlockDisconnectFailed{});
+            ::FatalError(m_notifications, state, kernel::BlockDisconnectFailed{});
             result.update({util::Error{Untranslated(FatalErrorString(kernel::BlockDisconnectFailed{}))}, AbortFailure{.fatal = true}});
             return result;
         }
@@ -1957,7 +1957,7 @@ struct ChainstateUpdateGuard {
     ChainstateUpdateGuard& operator=(const ChainstateUpdateGuard&) = delete;
 };
 
-FlushResult<> Chainstate::ActivateBestChain(BlockValidationState& state, std::shared_ptr<const CBlock> pblock)
+FlushResult<> kernel::Chainstate::ActivateBestChain(BlockValidationState& state, std::shared_ptr<const CBlock> pblock)
 {
     AssertLockNotHeld(m_chainstate_mutex);
 
@@ -2166,7 +2166,7 @@ FlushResult<> ChainstateManager::PreciousBlock(BlockValidationState& state, CBlo
     return chainstate.ActivateBestChain(state, std::shared_ptr<const CBlock>());
 }
 
-FlushResult<> Chainstate::InvalidateBlock(BlockValidationState& state, CBlockIndex* const pindex)
+FlushResult<> kernel::Chainstate::InvalidateBlock(BlockValidationState& state, CBlockIndex* const pindex)
 {
     AssertLockNotHeld(m_chainstate_mutex);
     AssertLockNotHeld(::cs_main);
@@ -2357,7 +2357,7 @@ FlushResult<> Chainstate::InvalidateBlock(BlockValidationState& state, CBlockInd
     return result;
 }
 
-void Chainstate::SetBlockFailureFlags(CBlockIndex* invalid_block)
+void kernel::Chainstate::SetBlockFailureFlags(CBlockIndex* invalid_block)
 {
     AssertLockHeld(cs_main);
     LOCK(m_blockman.m_index_mutex);
@@ -2370,7 +2370,7 @@ void Chainstate::SetBlockFailureFlags(CBlockIndex* invalid_block)
     }
 }
 
-void Chainstate::ResetBlockFailureFlags(CBlockIndex *pindex) {
+void kernel::Chainstate::ResetBlockFailureFlags(CBlockIndex *pindex) {
     AssertLockHeld(cs_main);
     LOCK(m_blockman.m_index_mutex);
 
@@ -2392,7 +2392,7 @@ void Chainstate::ResetBlockFailureFlags(CBlockIndex *pindex) {
     }
 }
 
-void Chainstate::TryAddBlockIndexCandidate(CBlockIndex* pindex)
+void kernel::Chainstate::TryAddBlockIndexCandidate(CBlockIndex* pindex)
 {
     AssertLockHeld(cs_main);
 
@@ -3072,7 +3072,7 @@ bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock,
         assert(post_pos.IsNull());
         ReceivedBlockTransactions(block, pindex, blockPos);
     } catch (const std::runtime_error& e) {
-        FatalError(GetNotifications(), state, kernel::SystemErrorWhileSavingBlock{e.what()});
+        ::FatalError(GetNotifications(), state, kernel::SystemErrorWhileSavingBlock{e.what()});
         result.update({util::Error{Untranslated(FatalErrorString(kernel::SystemErrorWhileSavingBlock{e.what()}))}, AbortFailure{.fatal = true}});
         return false;
     }
@@ -3313,7 +3313,7 @@ FlushResult<void, AbortFailure> PruneBlockFilesManual(Chainstate& active_chainst
     return result;
 }
 
-bool Chainstate::LoadChainTip()
+bool kernel::Chainstate::LoadChainTip()
 {
     AssertLockHeld(cs_main);
     const CCoinsViewCache& coins_cache = CoinsTip();
@@ -3543,7 +3543,7 @@ FlushResult<VerifyDBResult> CVerifyDB::VerifyDB(
 }
 
 /** Apply the effects of a block on the utxo cache, ignoring that it may already have been applied. */
-bool Chainstate::RollforwardBlock(const CBlockIndex* pindex, CCoinsViewCache& inputs)
+bool kernel::Chainstate::RollforwardBlock(const CBlockIndex* pindex, CCoinsViewCache& inputs)
 {
     AssertLockHeld(cs_main);
     // TODO: merge with ConnectBlock
@@ -3565,7 +3565,7 @@ bool Chainstate::RollforwardBlock(const CBlockIndex* pindex, CCoinsViewCache& in
     return true;
 }
 
-bool Chainstate::ReplayBlocks()
+bool kernel::Chainstate::ReplayBlocks()
 {
     LOCK(cs_main);
 
@@ -3652,7 +3652,7 @@ bool Chainstate::ReplayBlocks()
     return true;
 }
 
-bool Chainstate::NeedsRedownload() const
+bool kernel::Chainstate::NeedsRedownload() const
 {
     AssertLockHeld(cs_main);
 
@@ -3670,13 +3670,13 @@ bool Chainstate::NeedsRedownload() const
     return false;
 }
 
-void Chainstate::ClearBlockIndexCandidates()
+void kernel::Chainstate::ClearBlockIndexCandidates()
 {
     AssertLockHeld(::cs_main);
     setBlockIndexCandidates.clear();
 }
 
-void Chainstate::PopulateBlockIndexCandidates()
+void kernel::Chainstate::PopulateBlockIndexCandidates()
 {
     AssertLockHeld(::cs_main);
 
@@ -4279,7 +4279,7 @@ void ChainstateManager::CheckBlockIndex() const
     assert(nNodes == forward.size() + best_hdr_chain.Height() + 1);
 }
 
-std::string Chainstate::ToString()
+std::string kernel::Chainstate::ToString()
 {
     AssertLockHeld(::cs_main);
     CBlockIndex* tip = m_chain.Tip();
@@ -4288,7 +4288,7 @@ std::string Chainstate::ToString()
                      tip ? tip->nHeight : -1, tip ? tip->GetBlockHash().ToString() : "null");
 }
 
-FlushResult<void, AbortFailure> Chainstate::ResizeCoinsCaches(size_t coinstip_size, size_t coinsdb_size)
+FlushResult<void, AbortFailure> kernel::Chainstate::ResizeCoinsCaches(size_t coinstip_size, size_t coinsdb_size)
 {
     AssertLockHeld(::cs_main);
     if (coinstip_size == m_coinstip_cache_size_bytes &&
@@ -4326,7 +4326,7 @@ double ChainstateManager::GuessVerificationProgress(const CBlockIndex* pindex) c
 
 //! Guess how far we are in the verification process at the given block index
 //! require cs_main if pindex has not been validated yet (because m_chain_tx_count might be unset)
-double Chainstate::GuessVerificationProgress(const CBlockIndex* pindex) const
+double kernel::Chainstate::GuessVerificationProgress(const CBlockIndex* pindex) const
 {
     AssertLockHeld(::cs_main);
     const ChainTxData& data{m_chainparams.TxData()};
@@ -4789,7 +4789,7 @@ util::Result<void> ChainstateManager::PopulateAndValidateSnapshot(
     for (int i = AFTER_GENESIS_START; i <= snapshot_chainstate.m_chain.Height(); ++i) {
         index = snapshot_chainstate.m_chain[i];
 
-        // Fake BLOCK_OPT_WITNESS so that Chainstate::NeedsRedownload()
+        // Fake BLOCK_OPT_WITNESS so that kernel::Chainstate::NeedsRedownload()
         // won't ask for -reindex on startup.
         if (DeploymentActiveAt(*index, GetConsensus(), m_versionbitscache, Consensus::DEPLOYMENT_SEGWIT)) {
             index->nStatus |= BLOCK_OPT_WITNESS;
@@ -5079,7 +5079,7 @@ bool IsBIP30Unspendable(const uint256& block_hash, int block_height)
            (block_height==91812 && block_hash == uint256{"00000000000af0aed4792b1acee3d966af36cf5def14935db8de83d6f9306f2f"});
 }
 
-std::optional<kernel::CoinsDbRenameFailed> Chainstate::InvalidateCoinsDBOnDisk()
+std::optional<kernel::CoinsDbRenameFailed> kernel::Chainstate::InvalidateCoinsDBOnDisk()
 {
     // Should never be called on a non-snapshot chainstate.
     assert(m_from_snapshot_blockhash);
@@ -5120,12 +5120,12 @@ bool ChainstateManager::DeleteChainstate(Chainstate& chainstate)
     return true;
 }
 
-ChainstateRole Chainstate::GetRole() const
+ChainstateRole kernel::Chainstate::GetRole() const
 {
     return ChainstateRole{.validated = m_assumeutxo == Assumeutxo::VALIDATED, .historical = bool{m_target_blockhash}};
 }
 
-void Chainstate::RecalculateBestHeader()
+void kernel::Chainstate::RecalculateBestHeader()
 {
     AssertLockHeld(cs_main);
     LOCK(m_blockman.m_index_mutex);
@@ -5217,7 +5217,7 @@ util::Result<void, AbortFailure> ChainstateManager::ValidatedSnapshotCleanup(Cha
     return result;
 }
 
-std::pair<int, int> Chainstate::GetPruneRange(int last_height_can_prune) const
+std::pair<int, int> kernel::Chainstate::GetPruneRange(int last_height_can_prune) const
 {
     if (m_chain.Height() <= 0) {
         return {0, 0};

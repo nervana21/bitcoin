@@ -9,7 +9,10 @@
 #include <kernel/result.h>
 #include <util/fs.h>
 
+namespace kernel {
 class Chainstate;
+} // namespace kernel
+using kernel::Chainstate;
 class CTxMemPool;
 
 namespace node {

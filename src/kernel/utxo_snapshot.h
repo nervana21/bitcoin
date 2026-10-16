@@ -27,7 +27,9 @@
 // UTXO set snapshot magic bytes
 inline constexpr std::array<uint8_t, 5> SNAPSHOT_MAGIC_BYTES = {'u', 't', 'x', 'o', 0xff};
 
+namespace kernel {
 class Chainstate;
+} // namespace kernel
 namespace util::log {
 class Logger;
 } // namespace util::log

@@ -24,7 +24,10 @@
 
 class CBlock;
 class CBlockIndex;
+namespace kernel {
 class Chainstate;
+} // namespace kernel
+using kernel::Chainstate;
 
 struct CBlockLocator;
 struct IndexSummary {
