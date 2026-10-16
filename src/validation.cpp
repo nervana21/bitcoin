@@ -2885,7 +2885,7 @@ public:
 };
 
 /** Store block on disk. If dbp is non-nullptr, the file is known to already reside on disk */
-bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, BlockValidationState& state, FlushResult<void, AbortFailure>& result, CBlockIndex** ppindex, bool fRequested, const FlatFilePos* dbp, bool* fNewBlock, bool min_pow_checked) LOCKS_EXCLUDED(cs_main)
+bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, BlockValidationState& state, FlushResult<void, AbortFailure>& result, CBlockIndex** ppindex, BlockProcessRequest process_request, const FlatFilePos* dbp, bool* fNewBlock, bool min_pow_checked) LOCKS_EXCLUDED(cs_main)
 {
     const CBlock& block = *pblock;
     if (fNewBlock) *fNewBlock = false;
@@ -2931,16 +2931,14 @@ bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock,
     // not process unrequested blocks.
     bool fTooFarAhead{pindex->nHeight > ActiveHeight() + int(MIN_BLOCKS_TO_KEEP)};
 
-    // TODO: Decouple this function from the block download logic by removing fRequested
-    // This requires some new chain data structure to efficiently look up if a
-    // block is in a chain leading to a candidate for best tip, despite not
-    // being such a candidate itself.
-    // Note that this would break the getblockfrompeer RPC
+    // TODO: Decouple AcceptBlock from download by replacing BlockProcessRequest
+    // with a tip-candidate chain query. That needs a new index structure and
+    // would change getblockfrompeer behavior.
 
     // TODO: deal better with return value and error conditions for duplicate
-    // and unrequested blocks.
+    // and opportunistic blocks.
     if (fAlreadyHave) return true;
-    if (!fRequested) {  // If we didn't ask for it:
+    if (process_request == BlockProcessRequest::Opportunistic) {
         if (pindex->nTx != 0) return true;    // This is a previously-processed block that was pruned
         if (!fHasMoreOrSameWork) return true; // Don't process less-work chains
         if (fTooFarAhead) return true;        // Block height is too high
@@ -3002,26 +3000,17 @@ bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock,
         return false;
     }
 
-    // TODO: FlushStateToDisk() handles flushing of both block and chainstate
-    // data, so we should move this to ChainstateManager so that we can be more
-    // intelligent about how we flush.
-    // For now, since FlushStateMode::NONE is used, all that can happen is that
-    // the block files may be pruned, so we can just call this on one
-    // chainstate (particularly if we haven't implemented pruning with
-    // background validation yet).
-    //
-    // Ignore failure value, do not treat flush error as failure.
-    // Flush errors (e.g. low disk space during pruning) are ignored, so that
-    // callers can't mistreat a flush failure as a block validation failure.
-    // The fatal error notification inside FlushStateToDisk still fires,
-    // so the node will shut down on unrecoverable flush errors regardless.
-    // For state a dummy value is used, and the return value is ignored.
-    BlockValidationState flush_state_ignore;
-    ActiveChainstate().FlushStateToDisk(flush_state_ignore, FlushStateMode::NONE) >> result;
-
     CheckBlockIndex();
 
     return true;
+}
+
+void ChainstateManager::MaybePruneBlockFilesAfterAccept(FlushResult<void, AbortFailure>& result)
+{
+    // FlushStateMode::NONE only allows prune of block files on one chainstate.
+    // Flush errors are ignored as accept failures; fatal notification still fires.
+    BlockValidationState flush_state_ignore;
+    ActiveChainstate().FlushStateToDisk(flush_state_ignore, FlushStateMode::NONE) >> result;
 }
 
 bool ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlock>& block, bool force_processing, bool min_pow_checked, bool* new_block, FlushResult<void, AbortFailure>& result)
@@ -3044,7 +3033,8 @@ bool ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlock>& blo
         bool ret = WITH_LOCK(cs_main, return CheckBlock(*block, state, GetConsensus()));
         if (ret) {
             // Store to disk
-            ret = AcceptBlock(block, state, result, &pindex, force_processing, nullptr, new_block, min_pow_checked);
+            const auto process_request{force_processing ? BlockProcessRequest::Forced : BlockProcessRequest::Opportunistic};
+            ret = AcceptBlock(block, state, result, &pindex, process_request, nullptr, new_block, min_pow_checked);
         }
         if (!ret) {
             LOCK(cs_main);
@@ -3054,6 +3044,7 @@ bool ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlock>& blo
             LogError(m_log, "%s: AcceptBlock FAILED (%s)\n", __func__, state.ToString());
             return false;
         }
+        MaybePruneBlockFilesAfterAccept(result);
     }
 
     NotifyHeaderTip();
@@ -3783,15 +3774,16 @@ FlushResult<InterruptResult, AbortFailure> ChainstateManager::LoadExternalBlockF
                         FlushResult<void, AbortFailure> accept_result;
                         REVERSE_LOCK(lock, cs_main);
                         BlockValidationState state;
-                        if (AcceptBlock(pblock, state, accept_result, nullptr, true, dbp, nullptr, true)) {
+                        if (AcceptBlock(pblock, state, accept_result, nullptr, BlockProcessRequest::Forced, dbp, nullptr, true)) {
                             nLoaded++;
+                            MaybePruneBlockFilesAfterAccept(accept_result);
                         }
-                        // Propagate flush messages but not flush success/failure (AcceptBlock
-                        // intentionally succeeds even when its internal flush fails). Note:
-                        // AcceptBlock may set `state` to an error as a flush side effect even
-                        // when it returns true, so state.IsError() below can trigger from flush
-                        // failures as well as block validation failures — preserving pre-existing
-                        // behavior. See AcceptBlock comment and:
+                        // Propagate flush messages but not flush success/failure (prune flush
+                        // intentionally does not fail AcceptBlock). Note: prune may set
+                        // `state` to an error as a flush side effect even when AcceptBlock
+                        // returned true, so state.IsError() below can trigger from flush
+                        // failures as well as block validation failures — preserving
+                        // pre-existing behavior. See:
                         // https://github.com/bitcoin/bitcoin/pull/35570#issuecomment-4758227624
                         accept_result >> result;
                         if (state.IsError()) {
@@ -3850,11 +3842,12 @@ FlushResult<InterruptResult, AbortFailure> ChainstateManager::LoadExternalBlockF
                             LogDebug(log_reindex, "%s: Processing out of order child %s of %s", __func__, block_hash.ToString(), head.ToString());
                             FlushResult<void, AbortFailure> accept_result;
                             BlockValidationState dummy;
-                            if (AcceptBlock(pblockrecursive, dummy, accept_result, nullptr, true, &it->second, nullptr, true)) {
+                            if (AcceptBlock(pblockrecursive, dummy, accept_result, nullptr, BlockProcessRequest::Forced, &it->second, nullptr, true)) {
                                 nLoaded++;
+                                MaybePruneBlockFilesAfterAccept(accept_result);
                                 queue.push_back(block_hash);
                             }
-                            // Propagate flush messages but not flush success/failure (see AcceptBlock comment).
+                            // Propagate flush messages but not flush success/failure (see prune note above).
                             accept_result >> result;
                         }
                         range.first++;

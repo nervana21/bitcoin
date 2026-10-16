@@ -1190,34 +1190,25 @@ public:
     bool ProcessNewBlockHeaders(std::span<const CBlockHeader> headers, bool min_pow_checked, BlockValidationState& state, const CBlockIndex** ppindex = nullptr) LOCKS_EXCLUDED(cs_main);
 
     /**
-     * Sufficiently validate a block for disk storage (and store on disk).
-     *
-     * @param[in]   pblock          The block we want to process.
-     * @param[in]   fRequested      Whether we requested this block from a
-     *                              peer.
-     * @param[in]   dbp             The location on disk, if we are importing
-     *                              this block from prior storage.
-     * @param[in]   min_pow_checked True if proof-of-work anti-DoS checks have
-     *                              been done by caller for headers chain
-     *
-     * @param[out]  state       The state of the block validation. Note: if an
-     *                          internal flush fails inside this function, state
-     *                          may also be set to an error as a side effect even
-     *                          when the function returns true. See implementation
-     *                          comment for details.
-     * @param[out]  result      Flush messages and errors from saving or flushing
-     *                          the block. Flush success/failure does not affect
-     *                          the return value, but messages are propagated here.
-     * @param[out]  ppindex     Optional return parameter to get the
-     *                          CBlockIndex pointer for this block.
-     * @param[out]  fNewBlock   Optional return parameter to indicate if the
-     *                          block is new to our storage.
-     *
-     * @returns   False if the block or block header is invalid; true otherwise.
-     *            Errors from saving or flushing to disk are reported in `result`
-     *            and do not affect the return value.
+     * How AcceptBlock treats an incoming block relative to download policy.
+     * Forced = caller asked for the block (getdata, import, force_processing).
+     * Opportunistic = unsolicited; anti-DoS height/work gates apply.
+     * Full download decoupling still needs a tip-candidate chain index (TODO).
      */
-    [[nodiscard]] bool AcceptBlock(const std::shared_ptr<const CBlock>& pblock, BlockValidationState& state, kernel::FlushResult<void, kernel::AbortFailure>& result, CBlockIndex** ppindex, bool fRequested, const FlatFilePos* dbp, bool* fNewBlock, bool min_pow_checked) LOCKS_EXCLUDED(cs_main);
+    enum class BlockProcessRequest {
+        Forced,
+        Opportunistic,
+    };
+
+    /**
+     * Sufficiently validate a block for disk storage (and store on disk).
+     * Does not flush or prune; callers use MaybePruneBlockFilesAfterAccept.
+     */
+    [[nodiscard]] bool AcceptBlock(const std::shared_ptr<const CBlock>& pblock, BlockValidationState& state, kernel::FlushResult<void, kernel::AbortFailure>& result, CBlockIndex** ppindex, BlockProcessRequest process_request, const FlatFilePos* dbp, bool* fNewBlock, bool min_pow_checked) LOCKS_EXCLUDED(cs_main);
+
+    //! Prune-oriented flush after AcceptBlock. Kept on ChainstateManager so
+    //! AcceptBlock does not flush block + chainstate together.
+    void MaybePruneBlockFilesAfterAccept(kernel::FlushResult<void, kernel::AbortFailure>& result) LOCKS_EXCLUDED(cs_main);
 
     void ReceivedBlockTransactions(const CBlock& block, CBlockIndex* pindexNew, const FlatFilePos& pos) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
