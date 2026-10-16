@@ -17,7 +17,10 @@
 #include <memory>
 
 class CFeeRate;
+namespace kernel {
 class ChainstateManager;
+} // namespace kernel
+using kernel::ChainstateManager;
 class CTxMemPool;
 class MemPoolFeeRateEstimator;
 
