@@ -13,7 +13,10 @@ class CBlockIndex;
 class FeeRateEstimatorManager;
 class CConnman;
 class CTxMemPool;
+namespace kernel {
 class ChainstateManager;
+} // namespace kernel
+using kernel::ChainstateManager;
 class PeerManager;
 class BanMan;
 namespace Consensus {

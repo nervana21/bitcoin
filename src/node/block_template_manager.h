@@ -13,7 +13,10 @@
 #include <string>
 
 class CBlock;
+namespace kernel {
 class ChainstateManager;
+} // namespace kernel
+using kernel::ChainstateManager;
 class CTxMemPool;
 class uint256;
 

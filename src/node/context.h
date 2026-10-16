@@ -21,7 +21,10 @@ class FeeRateEstimatorManager;
 class ValidationSignals;
 class CScheduler;
 class CTxMemPool;
+namespace kernel {
 class ChainstateManager;
+} // namespace kernel
+using kernel::ChainstateManager;
 class ECC_Context;
 class NetGroupManager;
 class PeerManager;
