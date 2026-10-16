@@ -46,7 +46,10 @@
 #include <vector>
 
 class CChain;
+namespace kernel {
 class Chainstate;
+} // namespace kernel
+using kernel::Chainstate;
 class ValidationSignals;
 class DisconnectedBlockTransactions;
 

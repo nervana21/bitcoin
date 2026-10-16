@@ -13,7 +13,9 @@
 #include <vector>
 
 class CBlock;
+namespace kernel {
 class Chainstate;
+} // namespace kernel
 class CCoinsViewCache;
 class CTransaction;
 
