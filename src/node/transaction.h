@@ -22,8 +22,10 @@ namespace Consensus {
 struct Params;
 }
 
-namespace node {
+namespace kernel {
 class BlockManager;
+}
+namespace node {
 struct NodeContext;
 
 /** Maximum fee rate for sendrawtransaction and testmempoolaccept RPC calls.
@@ -94,7 +96,7 @@ inline constexpr CAmount DEFAULT_MAX_BURN_AMOUNT{0};
  * @param[out] hashBlock       The block hash, if the tx was found via -txindex or block_index
  * @returns                    The tx if found, otherwise nullptr
  */
-CTransactionRef GetTransaction(const CBlockIndex* block_index, const CTxMemPool* mempool, const Txid& hash, const BlockManager& blockman, uint256& hashBlock);
+CTransactionRef GetTransaction(const CBlockIndex* block_index, const CTxMemPool* mempool, const Txid& hash, const kernel::BlockManager& blockman, uint256& hashBlock);
 } // namespace node
 
 #endif // BITCOIN_NODE_TRANSACTION_H
