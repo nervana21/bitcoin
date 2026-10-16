@@ -161,6 +161,7 @@ std::optional<LockPoints> CalculateLockPointsAtTip(
 bool CheckSequenceLocksAtTip(CBlockIndex* tip,
                              const LockPoints& lock_points);
 
+namespace kernel {
 /**
  * Closure representing one script verification
  * Note that this stores references to the spending transaction
@@ -192,6 +193,10 @@ public:
 static_assert(std::is_nothrow_move_assignable_v<CScriptCheck>);
 static_assert(std::is_nothrow_move_constructible_v<CScriptCheck>);
 static_assert(std::is_nothrow_destructible_v<CScriptCheck>);
+
+} // namespace kernel
+
+using kernel::CScriptCheck;
 
 /**
  * Convenience class for initializing and passing the script execution cache
