@@ -16,11 +16,10 @@
 //!
 //! Ideally, low level functions would not trigger flushes and shutdowns at all,
 //! but would just return information so higher level code can determine when to
-//! flush and shut down. However, implementing this would require significant
-//! restructuring of code and probably change external behavior. In the
-//! meantime, FlushStatus and AbortFailure result types below can be used to
-//! provide a consistent indication to callers of when shutdowns and flushes are
-//! triggered, and which functions can and cannot trigger them.
+//! flush and shut down. Progress toward that: AcceptBlock no longer flushes;
+//! callers use ChainstateManager::MaybePruneBlockFilesAfterAccept. Full removal
+//! of deep flush/shutdown still needs broader restructuring. Meantime,
+//! FlushStatus and AbortFailure mark which calls can flush or abort.
 
 namespace kernel {
 //! Result type for functions that might trigger flushes, indicating whether
