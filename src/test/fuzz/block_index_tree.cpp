@@ -147,7 +147,7 @@ FUZZ_TARGET(block_index_tree, .init = initialize_block_index_tree)
                             break;
                         }
                     }
-                } while (node::CBlockIndexWorkComparator()(chain.Tip(), old_tip));
+                } while (kernel::CBlockIndexWorkComparator()(chain.Tip(), old_tip));
                 assert(chain.Tip()->nChainWork >= old_tip->nChainWork);
             },
             [&] {

@@ -35,7 +35,7 @@
 
 using kernel::AbortFailure;
 using kernel::FlushResult;
-using node::BlockManager;
+using kernel::BlockManager;
 
 BOOST_AUTO_TEST_SUITE(blockfilter_index_tests)
 

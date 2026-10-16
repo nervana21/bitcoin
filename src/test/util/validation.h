@@ -17,7 +17,6 @@
 #include <vector>
 
 namespace node {
-class BlockManager;
 struct NodeContext;
 }
 class BaseIndex;
@@ -34,7 +33,7 @@ public:
     size_t size() override { return 0; }
 };
 
-struct TestBlockManager : public node::BlockManager {
+struct TestBlockManager : public kernel::BlockManager {
     /** Test-only method to clear internal state for fuzzing */
     void CleanupForFuzzing() NO_THREAD_SAFETY_ANALYSIS;
 };

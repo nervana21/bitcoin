@@ -10,7 +10,7 @@
 #include <undo.h>
 #include <validation.h>
 
-using node::BlockManager;
+using kernel::BlockManager;
 
 bool ComputeFilter(BlockFilterType filter_type, const CBlockIndex& block_index, BlockFilter& filter, const BlockManager& blockman)
 {

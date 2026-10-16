@@ -595,7 +595,7 @@ public:
 struct ChainstateManagerOptions {
     mutable Mutex m_mutex;
     ChainstateManager::Options m_chainman_options GUARDED_BY(m_mutex);
-    node::BlockManager::Options m_blockman_options GUARDED_BY(m_mutex);
+    kernel::BlockManager::Options m_blockman_options GUARDED_BY(m_mutex);
     std::shared_ptr<const Context> m_context;
     node::ChainstateLoadOptions m_chainstate_load_options GUARDED_BY(m_mutex);
     uint64_t m_db_cache_bytes GUARDED_BY(m_mutex){DEFAULT_KERNEL_CACHE};
@@ -607,7 +607,7 @@ struct ChainstateManagerOptions {
               .mempool_interface = *context->m_mempool,
               .notifications = *context->m_notifications,
               .signals = context->m_signals.get()}},
-          m_blockman_options{node::BlockManager::Options{
+          m_blockman_options{kernel::BlockManager::Options{
               .chainparams = *context->m_chainparams,
               .blocks_dir = blocks_dir,
               .block_tree_dir = data_dir / "blocks" / "index",
@@ -1514,7 +1514,7 @@ int btck_chainstate_manager_import_blocks(btck_ChainstateManager* chainman, cons
             }
         }
         auto& chainman_ref{*btck_ChainstateManager::get(chainman).m_chainman};
-        auto result{node::ImportBlocks(chainman_ref, import_files)};
+        auto result{kernel::ImportBlocks(chainman_ref, import_files)};
         if (!result) LogError(btck_ChainstateManager::get(chainman).m_context->m_log, "%s", util::ErrorString(result).original);
         WITH_LOCK(::cs_main, chainman_ref.UpdateIBDStatus());
     } catch (const std::exception& e) {

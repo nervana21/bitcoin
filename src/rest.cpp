@@ -459,8 +459,8 @@ static bool rest_block(const std::any& context,
     const auto block_data{chainman.m_blockman.ReadRawBlock(pos, block_part)};
     if (!block_data) {
         switch (block_data.error()) {
-        case node::ReadRawError::IO: return RESTERR(req, HTTP_INTERNAL_SERVER_ERROR, "I/O error reading " + hashStr);
-        case node::ReadRawError::BadPartRange:
+        case kernel::ReadRawError::IO: return RESTERR(req, HTTP_INTERNAL_SERVER_ERROR, "I/O error reading " + hashStr);
+        case kernel::ReadRawError::BadPartRange:
             assert(block_part);
             return RESTERR(req, HTTP_BAD_REQUEST, strprintf("Bad block part offset/size %d/%d for %s", block_part->first, block_part->second, hashStr));
         } // no default case, so the compiler can warn about missing cases
