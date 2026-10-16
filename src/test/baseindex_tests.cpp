@@ -140,7 +140,7 @@ BOOST_FIXTURE_TEST_CASE(index_unclean_shutdown, TestChain100Setup)
                     BOOST_CHECK(CheckBlock(block, state, params.GetConsensus()));
                 }
                 FlushResult<void, AbortFailure> accept_result;
-                BOOST_CHECK(m_node.chainman->AcceptBlock(new_block, state, accept_result, &new_block_index, true, nullptr, nullptr, true));
+                BOOST_CHECK(m_node.chainman->AcceptBlock(new_block, state, accept_result, &new_block_index, ChainstateManager::BlockProcessRequest::Forced, nullptr, nullptr, true));
                 BOOST_CHECK(accept_result);
                 {
                     LOCK(cs_main);

@@ -165,7 +165,7 @@ BOOST_FIXTURE_TEST_CASE(chainstate_update_tip, TestChain100Setup)
         BOOST_CHECK(checked);
         FlushResult<void, AbortFailure> accept_result;
         bool accepted = chainman.AcceptBlock(
-            pblockone, state, accept_result, &pindex, true, nullptr, &newblock, true);
+            pblockone, state, accept_result, &pindex, ChainstateManager::BlockProcessRequest::Forced, nullptr, &newblock, true);
         BOOST_CHECK(accepted);
         BOOST_CHECK(accept_result);
     }
