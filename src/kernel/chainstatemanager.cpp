@@ -1000,6 +1000,31 @@ FlushResult<void, AbortFailure> kernel::Chainstate::FlushBlockStorageForWrite(
     return result;
 }
 
+FlushResult<bool, AbortFailure> kernel::Chainstate::FlushCoinsForWrite(
+    BlockValidationState& state,
+    bool empty_cache)
+{
+    AssertLockHeld(::cs_main);
+    FlushResult<bool, AbortFailure> result{false};
+
+    if (CoinsTip().GetBestBlock().IsNull()) {
+        return result;
+    }
+    // Typical Coin structures on disk are around 48 bytes in size.
+    // Pushing a new one to the database can cause it to be written
+    // twice (once in the log, and once in the tables). This is already
+    // an overestimation, as most will delete an existing entry or
+    // overwrite one. Still, use a conservative safety factor of 2.
+    if (!CheckDiskSpace(m_datadir, 48 * 2 * 2 * CoinsTip().GetDirtyCount())) {
+        ::FatalError(m_notifications, state, kernel::DiskSpaceTooLow{});
+        result.update({util::Error{Untranslated(FatalErrorString(kernel::DiskSpaceTooLow{}))}, AbortFailure{.fatal = true}});
+        return result;
+    }
+    // Flush the chainstate (which may refer to block index entries).
+    empty_cache ? CoinsTip().Flush() : CoinsTip().Sync();
+    return FlushResult<bool, AbortFailure>{true};
+}
+
 FlushResult<void, AbortFailure> kernel::Chainstate::FlushStateToDisk(
     BlockValidationState &state,
     FlushStateMode mode,
@@ -1087,19 +1112,12 @@ FlushResult<void, AbortFailure> kernel::Chainstate::FlushStateToDisk(
                 }
             }
 
-            if (!CoinsTip().GetBestBlock().IsNull()) {
-                // Typical Coin structures on disk are around 48 bytes in size.
-                // Pushing a new one to the database can cause it to be written
-                // twice (once in the log, and once in the tables). This is already
-                // an overestimation, as most will delete an existing entry or
-                // overwrite one. Still, use a conservative safety factor of 2.
-                if (!CheckDiskSpace(m_datadir, 48 * 2 * 2 * CoinsTip().GetDirtyCount())) {
-                    ::FatalError(m_notifications, state, kernel::DiskSpaceTooLow{});
-                    result.update({util::Error{Untranslated(FatalErrorString(kernel::DiskSpaceTooLow{}))}, AbortFailure{.fatal = true}});
-                    return result;
-                }
-                // Flush the chainstate (which may refer to block index entries).
-                empty_cache ? CoinsTip().Flush() : CoinsTip().Sync();
+            auto coins_flush{FlushCoinsForWrite(state, empty_cache)};
+            coins_flush >> result;
+            if (!coins_flush) {
+                return result;
+            }
+            if (*coins_flush) {
                 m_last_flushed_block = m_blockman.LookupBlockIndex(CoinsTip().GetBestBlock());
                 full_flush_completed = true;
                 TRACEPOINT(utxocache, flush,
