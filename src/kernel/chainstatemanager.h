@@ -1040,6 +1040,11 @@ public:
     [[nodiscard]] kernel::FlushResult<void, kernel::AbortFailure> MaybeFlushChainstateIfNeeded(
         Chainstate& chainstate, BlockValidationState& state);
 
+    //! Periodic schedule flush (PERIODIC). Decision lives on ChainstateManager so
+    //! ActivateBestChain does not own FlushStateMode policy.
+    [[nodiscard]] kernel::FlushResult<void, kernel::AbortFailure> MaybeFlushChainstatePeriodic(
+        Chainstate& chainstate, BlockValidationState& state);
+
     void ReceivedBlockTransactions(const CBlock& block, CBlockIndex* pindexNew, const FlatFilePos& pos) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     /**

@@ -1781,7 +1781,7 @@ FlushResult<> kernel::Chainstate::ActivateBestChain(BlockValidationState& state,
             }
 
             // Write changes periodically to disk, after relay.
-            if (!(FlushStateToDisk(state, FlushStateMode::PERIODIC) >> result)) {
+            if (!(m_chainman.MaybeFlushChainstatePeriodic(*this, state) >> result)) {
                 result.update(util::Error{});
                 return result;
             }
@@ -2446,6 +2446,12 @@ FlushResult<void, AbortFailure> kernel::ChainstateManager::MaybeFlushChainstateI
     Chainstate& chainstate, BlockValidationState& state)
 {
     return chainstate.FlushStateToDisk(state, FlushStateMode::IF_NEEDED);
+}
+
+FlushResult<void, AbortFailure> kernel::ChainstateManager::MaybeFlushChainstatePeriodic(
+    Chainstate& chainstate, BlockValidationState& state)
+{
+    return chainstate.FlushStateToDisk(state, FlushStateMode::PERIODIC);
 }
 
 bool kernel::ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlock>& block, bool force_processing, bool min_pow_checked, bool* new_block, FlushResult<void, AbortFailure>& result)
