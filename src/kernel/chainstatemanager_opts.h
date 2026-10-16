@@ -5,13 +5,13 @@
 #ifndef BITCOIN_KERNEL_CHAINSTATEMANAGER_OPTS_H
 #define BITCOIN_KERNEL_CHAINSTATEMANAGER_OPTS_H
 
+#include <kernel/coins_view_opts.h>
+#include <kernel/db_options.h>
 #include <kernel/mempool_interface.h>
 #include <kernel/notifications_interface.h>
 
 #include <arith_uint256.h>
-#include <dbwrapper.h>
 #include <script/sigcache.h>
-#include <txdb.h>
 #include <uint256.h>
 #include <util/time.h>
 
