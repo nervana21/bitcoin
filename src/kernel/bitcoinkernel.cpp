@@ -1452,6 +1452,12 @@ const btck_BlockTreeEntry* btck_chainstate_manager_get_best_entry(const btck_Cha
     return btck_BlockTreeEntry::ref(chainman.m_blockman.BestHeader());
 }
 
+size_t btck_chainstate_manager_get_block_index_size(const btck_ChainstateManager* chainstate_manager)
+{
+    auto& chainman = *btck_ChainstateManager::get(chainstate_manager).m_chainman;
+    return chainman.m_blockman.BlockIndexSize();
+}
+
 int btck_chainstate_manager_flush(btck_ChainstateManager* chainman)
 {
     auto& manager{*btck_ChainstateManager::get(chainman).m_chainman};
