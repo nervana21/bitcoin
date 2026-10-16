@@ -287,6 +287,13 @@ protected:
 
     arith_uint256 m_minimum_chain_work;
 
+    //! Flush block/undo files, write the block index, and unlink pruned files.
+    //! Called from FlushStateToDisk when a write is required.
+    [[nodiscard]] kernel::FlushResult<void, kernel::AbortFailure> FlushBlockStorageForWrite(
+        BlockValidationState& state,
+        const std::set<int>& set_files_to_prune,
+        bool flush_for_prune) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
 public:
     const util::log::Context m_log;
     //! Reference to a BlockManager instance which itself is shared across all
