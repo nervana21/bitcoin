@@ -53,6 +53,10 @@ struct ChainstateManagerOpts {
     int32_t prevoutfetch_threads_num{DEFAULT_PREVOUTFETCH_THREADS};
     size_t script_execution_cache_bytes{DEFAULT_SCRIPT_EXECUTION_CACHE_BYTES};
     size_t signature_cache_bytes{DEFAULT_SIGNATURE_CACHE_BYTES};
+    //! Invoked when a historical chainstate reaches its target block (assumeutxo).
+    //! Node sets this to restart indexes / adjust services without linking those
+    //! into libbitcoinkernel. Empty = no-op (kernel / external apps).
+    std::function<void()> target_block_reached{};
 };
 
 } // namespace kernel
