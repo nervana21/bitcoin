@@ -198,6 +198,7 @@ static_assert(std::is_nothrow_destructible_v<CScriptCheck>);
 
 using kernel::CScriptCheck;
 
+namespace kernel {
 /**
  * Convenience class for initializing and passing the script execution cache
  * and signature cache.
@@ -220,6 +221,10 @@ public:
     //! Return a copy of the pre-initialized hasher.
     CSHA256 ScriptExecutionCacheHasher() const { return m_script_execution_cache_hasher; }
 };
+
+} // namespace kernel
+
+using kernel::ValidationCache;
 
 /** Functions for validating blocks and updating the block tree */
 
