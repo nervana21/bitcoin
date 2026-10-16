@@ -17,7 +17,10 @@
 
 class CBlockIndex;
 class CTxMemPool;
+namespace kernel {
 class Chainstate;
+} // namespace kernel
+using kernel::Chainstate;
 namespace Consensus {
 struct Params;
 }

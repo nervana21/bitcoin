@@ -21,7 +21,10 @@
 
 class CBlockIndex;
 class CChainParams;
+namespace kernel {
 class Chainstate;
+} // namespace kernel
+using kernel::Chainstate;
 class ChainstateManager;
 
 namespace Consensus {
