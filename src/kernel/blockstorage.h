@@ -48,7 +48,9 @@
 
 class BlockValidationState;
 class CBlockUndo;
+namespace kernel {
 class Chainstate;
+} // namespace kernel
 class ChainstateManager;
 namespace Consensus {
 struct Params;
