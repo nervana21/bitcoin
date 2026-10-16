@@ -105,6 +105,7 @@ add_library(bitcoin_kernel STATIC EXCLUDE_FROM_ALL
   kernel/blockstorage.cpp
   kernel/chainstate.cpp
   kernel/utxo_snapshot.cpp
+  kernel/chainstatemanager.cpp
   pow.cpp
   script/solver.cpp
   script/sigcache.cpp
