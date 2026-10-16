@@ -6,6 +6,7 @@
 #define BITCOIN_DBWRAPPER_H
 
 #include <attributes.h>
+#include <kernel/db_options.h>
 #include <serialize.h>
 #include <span.h>
 #include <streams.h>
@@ -33,12 +34,6 @@ class Env;
 inline constexpr size_t DBWRAPPER_PREALLOC_KEY_SIZE = 64;
 inline constexpr size_t DBWRAPPER_PREALLOC_VALUE_SIZE = 1024;
 inline constexpr size_t DBWRAPPER_MAX_FILE_SIZE{32_MiB};
-
-//! User-controlled performance and debug options.
-struct DBOptions {
-    //! Compact database on startup.
-    bool force_compact = false;
-};
 
 //! Application-specific storage settings.
 struct DBParams {
