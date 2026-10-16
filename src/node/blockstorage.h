@@ -21,6 +21,7 @@ using kernel::BlockfileCursor;
 using kernel::CBlockIndexWorkComparator;
 using kernel::CBlockIndexHeightOnlyComparator;
 using kernel::PruneLockInfo;
+using kernel::ReadRawError;
 using kernel::BlockManager;
 using kernel::ImportBlocks;
 } // namespace node
