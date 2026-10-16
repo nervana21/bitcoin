@@ -5,8 +5,12 @@
 #ifndef BITCOIN_KERNEL_RESULT_H
 #define BITCOIN_KERNEL_RESULT_H
 
+#include <kernel/error.h>
+
 #include <util/messages.h>
 #include <util/result.h>
+
+#include <optional>
 
 //! @file Kernel result types for use with util::Result.
 //!
@@ -29,9 +33,11 @@ namespace kernel {
 enum class FlushStatus { SKIPPED, SUCCESS, FAILURE };
 
 //! Result type for functions that might trigger fatal errors and need to abort
-//! the node, indicating whether a fatal error did occur.
+//! the node. `error` carries the typed fatal so callers can NotifyFatalAbort
+//! without the deep layer calling Notifications::fatalError itself.
 struct AbortFailure {
     bool fatal{false};
+    std::optional<FatalError> error{};
 };
 
 template <typename SuccessType = void, typename FailureType = void>
@@ -61,6 +67,7 @@ struct ResultTraits<kernel::AbortFailure>
     static void update(kernel::AbortFailure& dst, kernel::AbortFailure&& src)
     {
         dst.fatal |= src.fatal;
+        if (src.error) dst.error = std::move(src.error);
     }
 };
 } // namespace util
