@@ -2701,6 +2701,7 @@ std::tuple<MempoolAcceptResult, kernel::FlushResult<void, kernel::AbortFailure>>
     // After we've (potentially) uncached entries, ensure our coins cache is still within its size limits
     BlockValidationState state_dummy;
     auto flush_result{active_chainstate.FlushStateToDisk(state_dummy, FlushStateMode::PERIODIC)};
+    NotifyFatalAbort(active_chainstate.m_chainman.GetNotifications(), flush_result);
     return {std::move(result), std::move(flush_result)};
 }
 
@@ -2733,6 +2734,7 @@ std::tuple<PackageMempoolAcceptResult, kernel::FlushResult<void, kernel::AbortFa
     // Ensure the coins cache is still within limits.
     BlockValidationState state_dummy;
     auto flush_result{active_chainstate.FlushStateToDisk(state_dummy, FlushStateMode::PERIODIC)};
+    NotifyFatalAbort(active_chainstate.m_chainman.GetNotifications(), flush_result);
     return {std::move(result), std::move(flush_result)};
 }
 

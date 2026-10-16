@@ -843,6 +843,7 @@ FlushResult<void, AbortFailure> PruneBlockFilesManual(Chainstate& active_chainst
     BlockValidationState state;
     FlushResult<void, AbortFailure> result{active_chainstate.FlushStateToDisk(
             state, FlushStateMode::NONE, nManualPruneHeight)};
+    NotifyFatalAbort(active_chainstate.m_chainman.GetNotifications(), result);
     if (!result) {
         auto error{Untranslated(strprintf("Failed to flush state after manual prune (%s)", state.ToString()))};
         LogWarning(log, "%s", error.original);

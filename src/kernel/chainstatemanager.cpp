@@ -968,8 +968,7 @@ FlushResult<void, AbortFailure> kernel::Chainstate::FlushBlockStorageForWrite(
 
     // Ensure we can write block index
     if (!CheckDiskSpace(m_blockman.m_opts.blocks_dir)) {
-        ::FatalError(m_notifications, state, kernel::DiskSpaceTooLow{});
-        result.update({util::Error{Untranslated(FatalErrorString(kernel::DiskSpaceTooLow{}))}, AbortFailure{.fatal = true}});
+        RecordFatalAbort(state, result, kernel::DiskSpaceTooLow{});
         return result;
     }
     {
@@ -1016,8 +1015,7 @@ FlushResult<bool, AbortFailure> kernel::Chainstate::FlushCoinsForWrite(
     // an overestimation, as most will delete an existing entry or
     // overwrite one. Still, use a conservative safety factor of 2.
     if (!CheckDiskSpace(m_datadir, 48 * 2 * 2 * CoinsTip().GetDirtyCount())) {
-        ::FatalError(m_notifications, state, kernel::DiskSpaceTooLow{});
-        result.update({util::Error{Untranslated(FatalErrorString(kernel::DiskSpaceTooLow{}))}, AbortFailure{.fatal = true}});
+        RecordFatalAbort(state, result, kernel::DiskSpaceTooLow{});
         return result;
     }
     // Flush the chainstate (which may refer to block index entries).
@@ -1148,8 +1146,7 @@ FlushResult<void, AbortFailure> kernel::Chainstate::FlushStateToDisk(
         }
     }
     } catch (const std::runtime_error& e) {
-        ::FatalError(m_notifications, state, kernel::SystemErrorWhileFlushing{e.what()});
-        result.update({util::Error{Untranslated(FatalErrorString(kernel::SystemErrorWhileFlushing{e.what()}))}, AbortFailure{.fatal = true}});
+        RecordFatalAbort(state, result, kernel::SystemErrorWhileFlushing{e.what()});
         return result;
     }
     return result;
@@ -1159,7 +1156,9 @@ FlushResult<> kernel::Chainstate::ForceFlushStateToDisk(bool wipe_cache)
 {
     FlushResult<> result;
     BlockValidationState state;
-    if (!(this->FlushStateToDisk(state, wipe_cache ? FlushStateMode::FORCE_FLUSH : FlushStateMode::FORCE_SYNC) >> result)) {
+    auto flush{this->FlushStateToDisk(state, wipe_cache ? FlushStateMode::FORCE_FLUSH : FlushStateMode::FORCE_SYNC)};
+    NotifyFatalAbort(m_notifications, flush);
+    if (!(flush >> result)) {
         auto error{Untranslated(strprintf("Failed to force flush state (%s)", state.ToString()))};
         LogWarning(m_log, "%s", error.original);
         result.update(util::Error{std::move(error)});
@@ -1172,7 +1171,9 @@ FlushResult<> kernel::Chainstate::PruneAndFlush()
     FlushResult<> result;
     BlockValidationState state;
     m_blockman.m_check_for_pruning = true;
-    if (!(this->FlushStateToDisk(state, FlushStateMode::NONE) >> result)) {
+    auto flush{this->FlushStateToDisk(state, FlushStateMode::NONE)};
+    NotifyFatalAbort(m_notifications, flush);
+    if (!(flush >> result)) {
         auto error{Untranslated(strprintf("Failed to flush state (%s)", state.ToString()))};
         LogWarning(m_log, "%s", error.original);
         result.update(util::Error{std::move(error)});
@@ -2439,19 +2440,25 @@ void kernel::ChainstateManager::MaybePruneBlockFilesAfterAccept(FlushResult<void
     // FlushStateMode::NONE only allows prune of block files on one chainstate.
     // Flush errors are ignored as accept failures; fatal notification still fires.
     BlockValidationState flush_state_ignore;
-    ActiveChainstate().FlushStateToDisk(flush_state_ignore, FlushStateMode::NONE) >> result;
+    auto flush{ActiveChainstate().FlushStateToDisk(flush_state_ignore, FlushStateMode::NONE)};
+    NotifyFatalAbort(GetNotifications(), flush);
+    flush >> result;
 }
 
 FlushResult<void, AbortFailure> kernel::ChainstateManager::MaybeFlushChainstateIfNeeded(
     Chainstate& chainstate, BlockValidationState& state)
 {
-    return chainstate.FlushStateToDisk(state, FlushStateMode::IF_NEEDED);
+    auto result{chainstate.FlushStateToDisk(state, FlushStateMode::IF_NEEDED)};
+    NotifyFatalAbort(GetNotifications(), result);
+    return result;
 }
 
 FlushResult<void, AbortFailure> kernel::ChainstateManager::MaybeFlushChainstatePeriodic(
     Chainstate& chainstate, BlockValidationState& state)
 {
-    return chainstate.FlushStateToDisk(state, FlushStateMode::PERIODIC);
+    auto result{chainstate.FlushStateToDisk(state, FlushStateMode::PERIODIC)};
+    NotifyFatalAbort(GetNotifications(), result);
+    return result;
 }
 
 bool kernel::ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlock>& block, bool force_processing, bool min_pow_checked, bool* new_block, FlushResult<void, AbortFailure>& result)
