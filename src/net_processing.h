@@ -26,7 +26,10 @@
 
 class AddrMan;
 class CTxMemPool;
+namespace kernel {
 class ChainstateManager;
+} // namespace kernel
+using kernel::ChainstateManager;
 class BanMan;
 class CBlockIndex;
 class CScheduler;

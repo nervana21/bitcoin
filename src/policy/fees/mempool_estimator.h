@@ -23,7 +23,10 @@
 
 class CBlock;
 class AutoFile;
+namespace kernel {
 class ChainstateManager;
+} // namespace kernel
+using kernel::ChainstateManager;
 class CTxMemPool;
 
 struct RemovedMempoolTransactionInfo;

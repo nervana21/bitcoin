@@ -395,7 +395,7 @@ void kernel::Chainstate::InitCoinsCache(size_t cache_size_bytes)
 }
 
 // Lock-free: depends on `m_cached_is_ibd`, which is latched by `UpdateIBDStatus()`.
-bool ChainstateManager::IsInitialBlockDownload() const noexcept
+bool kernel::ChainstateManager::IsInitialBlockDownload() const noexcept
 {
     return m_cached_is_ibd.load(std::memory_order_relaxed);
 }
@@ -1904,7 +1904,7 @@ static SynchronizationState GetSynchronizationState(bool init, bool blockfiles_i
     return SynchronizationState::INIT_DOWNLOAD;
 }
 
-void ChainstateManager::UpdateIBDStatus()
+void kernel::ChainstateManager::UpdateIBDStatus()
 {
     AssertLockHeld(cs_main);
     if (!m_cached_is_ibd.load(std::memory_order_relaxed)) return;
@@ -1914,7 +1914,7 @@ void ChainstateManager::UpdateIBDStatus()
     m_cached_is_ibd.store(false, std::memory_order_relaxed);
 }
 
-bool ChainstateManager::NotifyHeaderTip()
+bool kernel::ChainstateManager::NotifyHeaderTip()
 {
     bool fNotify = false;
     bool fInitialBlockDownload = false;
@@ -2136,7 +2136,7 @@ FlushResult<> kernel::Chainstate::ActivateBestChain(BlockValidationState& state,
     return result;
 }
 
-FlushResult<> ChainstateManager::PreciousBlock(BlockValidationState& state, CBlockIndex* pindex)
+FlushResult<> kernel::ChainstateManager::PreciousBlock(BlockValidationState& state, CBlockIndex* pindex)
 {
     AssertLockNotHeld(::cs_main);
     auto& chainstate{ActiveChainstate()};
@@ -2430,7 +2430,7 @@ void kernel::Chainstate::TryAddBlockIndexCandidate(CBlockIndex* pindex)
 }
 
 /** Mark a block as having its data received and checked (up to BLOCK_VALID_TRANSACTIONS). */
-void ChainstateManager::ReceivedBlockTransactions(const CBlock& block, CBlockIndex* pindexNew, const FlatFilePos& pos)
+void kernel::ChainstateManager::ReceivedBlockTransactions(const CBlock& block, CBlockIndex* pindexNew, const FlatFilePos& pos)
 {
     AssertLockHeld(cs_main);
     pindexNew->nTx = block.vtx.size();
@@ -2650,7 +2650,7 @@ bool CheckBlock(const CBlock& block, BlockValidationState& state, const Consensu
     return true;
 }
 
-void ChainstateManager::UpdateUncommittedBlockStructures(CBlock& block, const CBlockIndex* pindexPrev) const
+void kernel::ChainstateManager::UpdateUncommittedBlockStructures(CBlock& block, const CBlockIndex* pindexPrev) const
 {
     int commitpos = GetWitnessCommitmentIndex(block);
     static const std::vector<unsigned char> nonce(32, 0x00);
@@ -2662,7 +2662,7 @@ void ChainstateManager::UpdateUncommittedBlockStructures(CBlock& block, const CB
     }
 }
 
-void ChainstateManager::GenerateCoinbaseCommitment(CBlock& block, const CBlockIndex* pindexPrev) const
+void kernel::ChainstateManager::GenerateCoinbaseCommitment(CBlock& block, const CBlockIndex* pindexPrev) const
 {
     int commitpos = GetWitnessCommitmentIndex(block);
     std::vector<unsigned char> ret(32, 0x00);
@@ -2838,7 +2838,7 @@ bool ContextualCheckBlock(const CBlock& block, BlockValidationState& state, cons
     return true;
 }
 
-bool ChainstateManager::AcceptBlockHeader(const CBlockHeader& block, BlockValidationState& state, CBlockIndex** ppindex, bool min_pow_checked)
+bool kernel::ChainstateManager::AcceptBlockHeader(const CBlockHeader& block, BlockValidationState& state, CBlockIndex** ppindex, bool min_pow_checked)
 {
     AssertLockHeld(cs_main);
 
@@ -2890,7 +2890,7 @@ bool ChainstateManager::AcceptBlockHeader(const CBlockHeader& block, BlockValida
 }
 
 // Exposed wrapper for AcceptBlockHeader
-bool ChainstateManager::ProcessNewBlockHeaders(std::span<const CBlockHeader> headers, bool min_pow_checked, BlockValidationState& state, const CBlockIndex** ppindex)
+bool kernel::ChainstateManager::ProcessNewBlockHeaders(std::span<const CBlockHeader> headers, bool min_pow_checked, BlockValidationState& state, const CBlockIndex** ppindex)
 {
     AssertLockNotHeld(cs_main);
     {
@@ -2920,7 +2920,7 @@ bool ChainstateManager::ProcessNewBlockHeaders(std::span<const CBlockHeader> hea
     return true;
 }
 
-void ChainstateManager::ReportHeadersPresync(int64_t height, int64_t timestamp)
+void kernel::ChainstateManager::ReportHeadersPresync(int64_t height, int64_t timestamp)
 {
     AssertLockNotHeld(GetMutex());
     {
@@ -2967,7 +2967,7 @@ public:
 };
 
 /** Store block on disk. If dbp is non-nullptr, the file is known to already reside on disk */
-bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, BlockValidationState& state, FlushResult<void, AbortFailure>& result, CBlockIndex** ppindex, BlockProcessRequest process_request, const FlatFilePos* dbp, bool* fNewBlock, bool min_pow_checked) LOCKS_EXCLUDED(cs_main)
+bool kernel::ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, BlockValidationState& state, FlushResult<void, AbortFailure>& result, CBlockIndex** ppindex, BlockProcessRequest process_request, const FlatFilePos* dbp, bool* fNewBlock, bool min_pow_checked) LOCKS_EXCLUDED(cs_main)
 {
     const CBlock& block = *pblock;
     if (fNewBlock) *fNewBlock = false;
@@ -3087,7 +3087,7 @@ bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock,
     return true;
 }
 
-void ChainstateManager::MaybePruneBlockFilesAfterAccept(FlushResult<void, AbortFailure>& result)
+void kernel::ChainstateManager::MaybePruneBlockFilesAfterAccept(FlushResult<void, AbortFailure>& result)
 {
     // FlushStateMode::NONE only allows prune of block files on one chainstate.
     // Flush errors are ignored as accept failures; fatal notification still fires.
@@ -3095,7 +3095,7 @@ void ChainstateManager::MaybePruneBlockFilesAfterAccept(FlushResult<void, AbortF
     ActiveChainstate().FlushStateToDisk(flush_state_ignore, FlushStateMode::NONE) >> result;
 }
 
-bool ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlock>& block, bool force_processing, bool min_pow_checked, bool* new_block, FlushResult<void, AbortFailure>& result)
+bool kernel::ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlock>& block, bool force_processing, bool min_pow_checked, bool* new_block, FlushResult<void, AbortFailure>& result)
 {
     AssertLockNotHeld(cs_main);
 
@@ -3147,7 +3147,7 @@ bool ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlock>& blo
     return true;
 }
 
-bool ChainstateManager::CheckTxAgainstTip(const CTransaction& tx, TxValidationState& state)
+bool kernel::ChainstateManager::CheckTxAgainstTip(const CTransaction& tx, TxValidationState& state)
 {
     AssertLockHeld(cs_main);
     state = TxValidationState{};
@@ -3190,7 +3190,7 @@ bool ChainstateManager::CheckTxAgainstTip(const CTransaction& tx, TxValidationSt
     return CheckInputScripts(tx, state, view, flags, CheckInputScriptsFor::Block, /*cacheSigStore=*/false, /*cacheFullScriptStore=*/false, txdata, m_validation_cache);
 }
 
-BlockValidationState ChainstateManager::ValidateBlock(
+BlockValidationState kernel::ChainstateManager::ValidateBlock(
     const CBlock& block,
     const CBlockIndex& index,
     CCoinsViewCache& coins)
@@ -3698,7 +3698,7 @@ void kernel::Chainstate::PopulateBlockIndexCandidates()
     }
 }
 
-util::Result<InterruptResult, AbortFailure> ChainstateManager::LoadBlockIndex()
+util::Result<InterruptResult, AbortFailure> kernel::ChainstateManager::LoadBlockIndex()
 {
     AssertLockHeld(cs_main);
     util::Result<InterruptResult, AbortFailure> result;
@@ -3727,7 +3727,7 @@ util::Result<InterruptResult, AbortFailure> ChainstateManager::LoadBlockIndex()
     return result;
 }
 
-FlushResult<> ChainstateManager::LoadGenesisBlock()
+FlushResult<> kernel::ChainstateManager::LoadGenesisBlock()
 {
     LOCK(cs_main);
 
@@ -3769,7 +3769,7 @@ FlushResult<> ChainstateManager::LoadGenesisBlock()
     return result;
 }
 
-FlushResult<InterruptResult, AbortFailure> ChainstateManager::LoadExternalBlockFile(
+FlushResult<InterruptResult, AbortFailure> kernel::ChainstateManager::LoadExternalBlockFile(
     AutoFile& file_in,
     FlatFilePos* dbp,
     std::multimap<uint256, FlatFilePos>* blocks_with_unknown_parent)
@@ -3960,7 +3960,7 @@ FlushResult<InterruptResult, AbortFailure> ChainstateManager::LoadExternalBlockF
     return result;
 }
 
-bool ChainstateManager::ShouldCheckBlockIndex() const
+bool kernel::ChainstateManager::ShouldCheckBlockIndex() const
 {
     // Assert to verify Flatten() has been called.
     if (!*Assert(m_options.check_block_index)) return false;
@@ -3968,7 +3968,7 @@ bool ChainstateManager::ShouldCheckBlockIndex() const
     return true;
 }
 
-void ChainstateManager::CheckBlockIndex() const
+void kernel::ChainstateManager::CheckBlockIndex() const
 {
     if (!ShouldCheckBlockIndex()) {
         return;
@@ -4323,7 +4323,7 @@ FlushResult<void, AbortFailure> kernel::Chainstate::ResizeCoinsCaches(size_t coi
     }
 }
 
-double ChainstateManager::GuessVerificationProgress(const CBlockIndex* pindex) const
+double kernel::ChainstateManager::GuessVerificationProgress(const CBlockIndex* pindex) const
 {
     AssertLockHeld(GetMutex());
     return ActiveChainstate().GuessVerificationProgress(pindex);
@@ -4370,7 +4370,7 @@ double kernel::Chainstate::GuessVerificationProgress(const CBlockIndex* pindex) 
     return std::min<double>(pindex->m_chain_tx_count / fTxTotal, 1.0);
 }
 
-double ChainstateManager::GetBackgroundVerificationProgress(const CBlockIndex& pindex) const
+double kernel::ChainstateManager::GetBackgroundVerificationProgress(const CBlockIndex& pindex) const
 {
     AssertLockHeld(GetMutex());
     Assert(HistoricalChainstate());
@@ -4383,7 +4383,7 @@ double ChainstateManager::GetBackgroundVerificationProgress(const CBlockIndex& p
     return static_cast<double>(pindex.m_chain_tx_count) / static_cast<double>(target_block->m_chain_tx_count);
 }
 
-Chainstate& ChainstateManager::InitializeChainstate()
+Chainstate& kernel::ChainstateManager::InitializeChainstate()
 {
     AssertLockHeld(::cs_main);
     assert(m_chainstates.empty());
@@ -4437,7 +4437,7 @@ Chainstate& ChainstateManager::InitializeChainstate()
     return !fs::exists(db_path);
 }
 
-FlushResult<CBlockIndex*, AbortFailure> ChainstateManager::ActivateSnapshot(
+FlushResult<CBlockIndex*, AbortFailure> kernel::ChainstateManager::ActivateSnapshot(
         AutoFile& coins_file,
         const SnapshotMetadata& metadata,
         bool in_memory)
@@ -4616,7 +4616,7 @@ static void SnapshotUTXOHashBreakpoint(const util::SignalInterrupt& interrupt)
     if (interrupt) throw StopHashingException();
 }
 
-util::Result<void> ChainstateManager::PopulateAndValidateSnapshot(
+util::Result<void> kernel::ChainstateManager::PopulateAndValidateSnapshot(
     Chainstate& snapshot_chainstate,
     AutoFile& coins_file,
     const SnapshotMetadata& metadata)
@@ -4829,7 +4829,7 @@ util::Result<void> ChainstateManager::PopulateAndValidateSnapshot(
 // ActivateBestChain, on a separate thread that should not require cs_main to
 // hash, because the UTXO set is only hashed after the historical chainstate
 // reaches its target block and is no longer changing.
-SnapshotCompletionResult ChainstateManager::MaybeValidateSnapshot(Chainstate& validated_cs, Chainstate& unvalidated_cs, FlushResult<void, AbortFailure>& result)
+SnapshotCompletionResult kernel::ChainstateManager::MaybeValidateSnapshot(Chainstate& validated_cs, Chainstate& unvalidated_cs, FlushResult<void, AbortFailure>& result)
 {
     AssertLockHeld(cs_main);
 
@@ -4933,7 +4933,7 @@ SnapshotCompletionResult ChainstateManager::MaybeValidateSnapshot(Chainstate& va
     return SnapshotCompletionResult::SUCCESS;
 }
 
-void ChainstateManager::PublishActiveChainstate()
+void kernel::ChainstateManager::PublishActiveChainstate()
 {
     AssertLockHeld(::cs_main);
     if (m_chainstates.empty()) {
@@ -4955,14 +4955,14 @@ void ChainstateManager::PublishActiveChainstate()
     m_historical_chainstate.store(historical, std::memory_order_release);
 }
 
-Chainstate& ChainstateManager::ActiveChainstate() const
+Chainstate& kernel::ChainstateManager::ActiveChainstate() const
 {
     if (Chainstate* active{m_active_chainstate.load(std::memory_order_acquire)}) return *active;
     LOCK(::cs_main);
     return CurrentChainstate();
 }
 
-FlushResult<> ChainstateManager::MaybeRebalanceCaches()
+FlushResult<> kernel::ChainstateManager::MaybeRebalanceCaches()
 {
     AssertLockHeld(::cs_main);
     FlushResult<> result;
@@ -5002,7 +5002,7 @@ FlushResult<> ChainstateManager::MaybeRebalanceCaches()
     return result;
 }
 
-void ChainstateManager::ResetChainstates()
+void kernel::ChainstateManager::ResetChainstates()
 {
     m_chainstates.clear();
     PublishActiveChainstate();
@@ -5013,7 +5013,7 @@ void ChainstateManager::ResetChainstates()
  * This helps to avoid coding errors around the accidental use of the compare
  * operators that accept nullopt, thus ignoring the intended default value.
  */
-static ChainstateManager::Options&& Flatten(ChainstateManager::Options&& opts)
+static kernel::ChainstateManager::Options&& Flatten(kernel::ChainstateManager::Options&& opts)
 {
     if (!opts.check_block_index.has_value()) opts.check_block_index = opts.chainparams.DefaultConsistencyChecks();
     if (!opts.minimum_chain_work.has_value()) opts.minimum_chain_work = UintToArith256(opts.chainparams.GetConsensus().nMinimumChainWork);
@@ -5021,7 +5021,7 @@ static ChainstateManager::Options&& Flatten(ChainstateManager::Options&& opts)
     return std::move(opts);
 }
 
-ChainstateManager::ChainstateManager(util::log::Logger& logger, const util::SignalInterrupt& interrupt, Options options, kernel::BlockManager::Options blockman_options)
+kernel::ChainstateManager::ChainstateManager(util::log::Logger& logger, const util::SignalInterrupt& interrupt, Options options, kernel::BlockManager::Options blockman_options)
     : m_script_check_queue{/*batch_size=*/128, std::clamp(options.worker_threads_num, 0, MAX_SCRIPTCHECK_THREADS)},
       m_log{BCLog::VALIDATION, &logger},
       m_interrupt{interrupt},
@@ -5033,14 +5033,14 @@ ChainstateManager::ChainstateManager(util::log::Logger& logger, const util::Sign
     LogInfo(m_log, "Script verification uses %d additional threads", std::clamp(m_options.worker_threads_num, 0, MAX_SCRIPTCHECK_THREADS));
 }
 
-ChainstateManager::~ChainstateManager()
+kernel::ChainstateManager::~ChainstateManager()
 {
     LOCK(::cs_main);
 
     m_versionbitscache.Clear();
 }
 
-Chainstate* ChainstateManager::LoadAssumeutxoChainstate()
+Chainstate* kernel::ChainstateManager::LoadAssumeutxoChainstate()
 {
     assert(!CurrentChainstate().m_from_snapshot_blockhash);
     std::optional<fs::path> path = kernel::FindAssumeutxoChainstateDir(m_options.datadir);
@@ -5059,7 +5059,7 @@ Chainstate* ChainstateManager::LoadAssumeutxoChainstate()
     return &this->AddChainstate(std::move(snapshot_chainstate));
 }
 
-Chainstate& ChainstateManager::AddChainstate(std::unique_ptr<Chainstate> chainstate)
+Chainstate& kernel::ChainstateManager::AddChainstate(std::unique_ptr<Chainstate> chainstate)
 {
     Chainstate& prev_chainstate{CurrentChainstate()};
     assert(prev_chainstate.m_assumeutxo == Assumeutxo::VALIDATED);
@@ -5113,7 +5113,7 @@ std::optional<kernel::CoinsDbRenameFailed> kernel::Chainstate::InvalidateCoinsDB
     return std::nullopt;
 }
 
-bool ChainstateManager::DeleteChainstate(Chainstate& chainstate)
+bool kernel::ChainstateManager::DeleteChainstate(Chainstate& chainstate)
 {
     AssertLockHeld(::cs_main);
     assert(!chainstate.m_coins_views);
@@ -5144,7 +5144,7 @@ void kernel::Chainstate::RecalculateBestHeader()
     }
 }
 
-std::optional<int> ChainstateManager::BlocksAheadOfTip() const
+std::optional<int> kernel::ChainstateManager::BlocksAheadOfTip() const
 {
     LOCK(::cs_main);
     const CBlockIndex* best_header{m_blockman.BestHeader()};
@@ -5157,7 +5157,7 @@ std::optional<int> ChainstateManager::BlocksAheadOfTip() const
     return std::nullopt;
 }
 
-util::Result<void, AbortFailure> ChainstateManager::ValidatedSnapshotCleanup(Chainstate& validated_cs, Chainstate& unvalidated_cs)
+util::Result<void, AbortFailure> kernel::ChainstateManager::ValidatedSnapshotCleanup(Chainstate& validated_cs, Chainstate& unvalidated_cs)
 {
     AssertLockHeld(::cs_main);
     util::Result<void, AbortFailure> result;
@@ -5252,7 +5252,7 @@ std::pair<int, int> kernel::Chainstate::GetPruneRange(int last_height_can_prune)
     return {prune_start, prune_end};
 }
 
-std::optional<std::pair<const CBlockIndex*, const CBlockIndex*>> ChainstateManager::GetHistoricalBlockRange() const
+std::optional<std::pair<const CBlockIndex*, const CBlockIndex*>> kernel::ChainstateManager::GetHistoricalBlockRange() const
 {
     const Chainstate* chainstate{m_historical_chainstate.load(std::memory_order_acquire)};
     if (!chainstate) return {};
@@ -5261,7 +5261,7 @@ std::optional<std::pair<const CBlockIndex*, const CBlockIndex*>> ChainstateManag
     return std::make_pair(chainstate->m_chain.Tip(), target);
 }
 
-util::Result<void> ChainstateManager::ActivateBestChains()
+util::Result<void> kernel::ChainstateManager::ActivateBestChains()
 {
     // We can't hold cs_main during ActivateBestChain even though we're accessing
     // the chainman unique_ptrs since ABC requires us not to be holding cs_main, so retrieve
