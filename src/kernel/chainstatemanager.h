@@ -1035,6 +1035,11 @@ public:
     //! AcceptBlock does not flush block + chainstate together.
     void MaybePruneBlockFilesAfterAccept(kernel::FlushResult<void, kernel::AbortFailure>& result) LOCKS_EXCLUDED(cs_main);
 
+    //! Cache-pressure flush (IF_NEEDED). Decision lives on ChainstateManager so
+    //! ConnectTip / DisconnectTip do not own FlushStateMode policy.
+    [[nodiscard]] kernel::FlushResult<void, kernel::AbortFailure> MaybeFlushChainstateIfNeeded(
+        Chainstate& chainstate, BlockValidationState& state);
+
     void ReceivedBlockTransactions(const CBlock& block, CBlockIndex* pindexNew, const FlatFilePos& pos) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     /**
