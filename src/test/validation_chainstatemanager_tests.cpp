@@ -34,7 +34,7 @@
 
 using kernel::AbortFailure;
 using kernel::FlushResult;
-using node::BlockManager;
+using kernel::BlockManager;
 using node::KernelMempool;
 using node::KernelNotifications;
 using node::SnapshotMetadata;
