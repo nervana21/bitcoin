@@ -386,6 +386,13 @@ bool FatalError(Notifications& notifications, BlockValidationState& state, const
     return state.Error(FatalErrorString(error));
 }
 
+void NotifyFatalAbort(Notifications& notifications, const kernel::AbortFailure& abort)
+{
+    if (abort.fatal && abort.error) {
+        notifications.fatalError(*abort.error);
+    }
+}
+
 /**
  * Restore the UTXO in a Coin at a given COutPoint
  * @param undo The Coin to be restored.

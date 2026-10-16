@@ -134,6 +134,23 @@ std::string FatalErrorString(const kernel::FatalError& error);
 
 bool FatalError(kernel::Notifications& notifications, BlockValidationState& state, const kernel::FatalError& error);
 
+//! Record a fatal on state + FlushResult without calling Notifications::fatalError.
+//! Callers at an API boundary use NotifyFatalAbort.
+template <typename SuccessType>
+void RecordFatalAbort(BlockValidationState& state, kernel::FlushResult<SuccessType, kernel::AbortFailure>& result, const kernel::FatalError& error)
+{
+    state.Error(FatalErrorString(error));
+    result.update({util::Error{Untranslated(FatalErrorString(error))}, kernel::AbortFailure{.fatal = true, .error = error}});
+}
+
+//! Notify if AbortFailure carries a typed fatal. No-op when not fatal or no payload.
+void NotifyFatalAbort(kernel::Notifications& notifications, const kernel::AbortFailure& abort);
+template <typename SuccessType>
+void NotifyFatalAbort(kernel::Notifications& notifications, const kernel::FlushResult<SuccessType, kernel::AbortFailure>& result)
+{
+    if (!result) NotifyFatalAbort(notifications, result.error());
+}
+
 /** Prune block files up to a given height */
 [[nodiscard]] kernel::FlushResult<void, kernel::AbortFailure> PruneBlockFilesManual(Chainstate& active_chainstate, int nManualPruneHeight);
 
