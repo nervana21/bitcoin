@@ -2,7 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <node/utxo_snapshot.h>
+#include <kernel/utxo_snapshot.h>
 
 #include <streams.h>
 #include <sync.h>
@@ -17,7 +17,7 @@
 #include <optional>
 #include <string>
 
-namespace node {
+namespace kernel {
 
 bool WriteSnapshotBaseBlockhash(Chainstate& snapshot_chainstate)
 {
@@ -26,7 +26,7 @@ bool WriteSnapshotBaseBlockhash(Chainstate& snapshot_chainstate)
 
     const std::optional<fs::path> chaindir = snapshot_chainstate.StoragePath();
     assert(chaindir); // Sanity check that chainstate isn't in-memory.
-    const fs::path write_to = *chaindir / node::SNAPSHOT_BLOCKHASH_FILENAME;
+    const fs::path write_to = *chaindir / SNAPSHOT_BLOCKHASH_FILENAME;
 
     FILE* file{fsbridge::fopen(write_to, "wb")};
     AutoFile afile{file};
@@ -53,7 +53,7 @@ std::optional<uint256> ReadSnapshotBaseBlockhash(util::log::Logger* logger, fs::
             "exists at path %s", fs::PathToString(chaindir));
         return std::nullopt;
     }
-    const fs::path read_from = chaindir / node::SNAPSHOT_BLOCKHASH_FILENAME;
+    const fs::path read_from = chaindir / SNAPSHOT_BLOCKHASH_FILENAME;
     const std::string read_from_str = fs::PathToString(read_from);
 
     if (!fs::exists(read_from)) {
@@ -92,4 +92,4 @@ std::optional<fs::path> FindAssumeutxoChainstateDir(const fs::path& data_dir)
     return std::nullopt;
 }
 
-} // namespace node
+} // namespace kernel

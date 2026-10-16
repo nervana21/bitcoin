@@ -33,7 +33,7 @@
 #include <kernel/warning.h>
 #include <logging/timer.h>
 #include <node/blockstorage.h>
-#include <node/utxo_snapshot.h>
+#include <kernel/utxo_snapshot.h>
 #include <policy/policy.h>
 #include <policy/settings.h>
 #include <pow.h>
@@ -95,7 +95,7 @@ using kernel::BlockManager;
 using kernel::BlockMap;
 using kernel::CBlockIndexHeightOnlyComparator;
 using kernel::CBlockIndexWorkComparator;
-using node::SnapshotMetadata;
+using kernel::SnapshotMetadata;
 
 /** Time window to wait between writing blocks/block index and chainstate to disk.
  *  Randomize writing time inside the window to prevent a situation where the
@@ -322,7 +322,7 @@ fs::path Chainstate::StoragePath() const
 {
     fs::path path{m_datadir / "chainstate"};
     if (m_from_snapshot_blockhash) {
-        path += node::SNAPSHOT_CHAINSTATE_SUFFIX;
+        path += kernel::SNAPSHOT_CHAINSTATE_SUFFIX;
     }
     return path;
 }
@@ -4316,13 +4316,13 @@ Chainstate& ChainstateManager::InitializeChainstate()
     AssertLockHeld(::cs_main);
 
     if (is_snapshot) {
-        fs::path base_blockhash_path = db_path / node::SNAPSHOT_BLOCKHASH_FILENAME;
+        fs::path base_blockhash_path = db_path / kernel::SNAPSHOT_BLOCKHASH_FILENAME;
 
         try {
             bool existed = fs::remove(base_blockhash_path);
             if (!existed) {
                 LogWarning(log, "[snapshot] snapshot chainstate dir being removed lacks %s file",
-                          fs::PathToString(node::SNAPSHOT_BLOCKHASH_FILENAME));
+                          fs::PathToString(kernel::SNAPSHOT_BLOCKHASH_FILENAME));
             }
         } catch (const fs::filesystem_error& e) {
             LogWarning(log, "[snapshot] failed to remove file %s: %s\n",
@@ -4458,7 +4458,7 @@ FlushResult<CBlockIndex*, AbortFailure> ChainstateManager::ActivateSnapshot(
 
         // PopulateAndValidateSnapshot can return (in error) before the coins directory
         // has been created, so only attempt removal if we got that far.
-        if (auto snapshot_datadir = node::FindAssumeutxoChainstateDir(m_options.datadir)) {
+        if (auto snapshot_datadir = kernel::FindAssumeutxoChainstateDir(m_options.datadir)) {
             // Destruct the chainstate before removing its coins directory so no writer
             // still holds the store. Resetting the chainstate resets the coins view.
             snapshot_chainstate.reset();
@@ -4489,7 +4489,7 @@ FlushResult<CBlockIndex*, AbortFailure> ChainstateManager::ActivateSnapshot(
     // If not in-memory, persist the base blockhash for use during subsequent
     // initialization.
     if (!in_memory) {
-        if (!node::WriteSnapshotBaseBlockhash(*snapshot_chainstate)) {
+        if (!kernel::WriteSnapshotBaseBlockhash(*snapshot_chainstate)) {
             cleanup_bad_snapshot(Untranslated("could not write base blockhash"));
             return result;
         }
@@ -4960,11 +4960,11 @@ ChainstateManager::~ChainstateManager()
 Chainstate* ChainstateManager::LoadAssumeutxoChainstate()
 {
     assert(!CurrentChainstate().m_from_snapshot_blockhash);
-    std::optional<fs::path> path = node::FindAssumeutxoChainstateDir(m_options.datadir);
+    std::optional<fs::path> path = kernel::FindAssumeutxoChainstateDir(m_options.datadir);
     if (!path) {
         return nullptr;
     }
-    std::optional<uint256> base_blockhash = node::ReadSnapshotBaseBlockhash(m_log.logger, *path);
+    std::optional<uint256> base_blockhash = kernel::ReadSnapshotBaseBlockhash(m_log.logger, *path);
     if (!base_blockhash) {
         return nullptr;
     }
