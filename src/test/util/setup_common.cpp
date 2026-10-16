@@ -102,7 +102,7 @@ using namespace util::hex_literals;
 using kernel::AbortFailure;
 using kernel::FlushResult;
 using node::ApplyArgsManOptions;
-using node::BlockManager;
+using kernel::BlockManager;
 using node::KernelMempool;
 using node::KernelNotifications;
 using node::LoadChainstate;

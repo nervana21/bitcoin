@@ -20,7 +20,7 @@
 
 using kernel::CBlockFileInfo;
 using node::STORAGE_HEADER_BYTES;
-using node::BlockManager;
+using kernel::BlockManager;
 using node::KernelNotifications;
 using node::MAX_BLOCKFILE_SIZE;
 
@@ -194,7 +194,7 @@ BOOST_FIXTURE_TEST_CASE(blockmanager_block_data_part_error, TestChain100Setup)
     const auto expect_part_error{[&](size_t offset, size_t size) {
         auto res{blockman.ReadRawBlock(tip_block_pos, std::pair{offset, size})};
         BOOST_CHECK(!res);
-        BOOST_CHECK_EQUAL(res.error(), node::ReadRawError::BadPartRange);
+        BOOST_CHECK_EQUAL(res.error(), kernel::ReadRawError::BadPartRange);
     }};
 
     expect_part_error(0, 0);
@@ -232,7 +232,7 @@ BOOST_FIXTURE_TEST_CASE(blockmanager_readblock_hash_mismatch, TestingSetup)
 BOOST_AUTO_TEST_CASE(blockmanager_flush_block_file)
 {
     KernelNotifications notifications{Assert(m_node.shutdown_request), m_node.exit_status, *Assert(m_node.warnings)};
-    node::BlockManager::Options blockman_opts{
+    kernel::BlockManager::Options blockman_opts{
         .chainparams = Params(),
         .blocks_dir = m_args.GetBlocksDirPath(),
         .block_tree_dir = m_args.GetDataDirNet() / "blocks" / "index",

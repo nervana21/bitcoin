@@ -80,7 +80,7 @@ BOOST_AUTO_TEST_CASE(get_difficulty_for_very_high_target)
 
 //! Prune chain from height down to genesis block and check that
 //! GetPruneHeight returns the correct value
-static void CheckGetPruneHeight(const node::BlockManager& blockman, const CChain& chain, int height) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
+static void CheckGetPruneHeight(const kernel::BlockManager& blockman, const CChain& chain, int height) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
 {
     AssertLockHeld(::cs_main);
 

@@ -21,7 +21,7 @@
 #include <kernel/cs_main.h> // IWYU pragma: export
 #include <kernel/error.h>
 #include <kernel/result.h>
-#include <node/blockstorage.h>
+#include <kernel/blockstorage.h>
 #include <script/script_error.h>
 #include <script/sigcache.h>
 #include <script/verify_flags.h>
@@ -475,7 +475,7 @@ public:
     const util::log::Context m_log;
     //! Reference to a BlockManager instance which itself is shared across all
     //! Chainstate instances.
-    node::BlockManager& m_blockman;
+    kernel::BlockManager& m_blockman;
 
     //! The chainstate manager that owns this chainstate. The reference is
     //! necessary so that this instance can check whether it is the active
@@ -491,7 +491,7 @@ public:
     VersionBitsCache& m_versionbitscache;
 
     explicit Chainstate(
-        node::BlockManager& blockman,
+        kernel::BlockManager& blockman,
         ChainstateManager& chainman,
         std::optional<uint256> from_snapshot_blockhash = std::nullopt);
 
@@ -601,7 +601,7 @@ public:
      * genesis block or an assumeutxo snapshot block). Entries may be failed,
      * though, and pruning nodes may be missing the data for the block.
      */
-    std::set<CBlockIndex*, node::CBlockIndexWorkComparator> setBlockIndexCandidates;
+    std::set<CBlockIndex*, kernel::CBlockIndexWorkComparator> setBlockIndexCandidates;
 
     //! @returns A reference to the in-memory cache of the UTXO set.
     CCoinsViewCache& CoinsTip() EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
@@ -872,7 +872,7 @@ private:
 public:
     using Options = kernel::ChainstateManagerOpts;
 
-    explicit ChainstateManager(util::log::Logger& logger, const util::SignalInterrupt& interrupt, Options options, node::BlockManager::Options blockman_options);
+    explicit ChainstateManager(util::log::Logger& logger, const util::SignalInterrupt& interrupt, Options options, kernel::BlockManager::Options blockman_options);
 
     //! Function to restart active indexes; set dynamically to avoid a circular
     //! dependency on `base/index.cpp`.
@@ -946,7 +946,7 @@ public:
     const Options m_options;
     //! A single BlockManager instance is shared across each constructed
     //! chainstate to avoid duplicating block metadata.
-    node::BlockManager m_blockman;
+    kernel::BlockManager m_blockman;
 
     ValidationCache m_validation_cache;
 
@@ -1094,7 +1094,7 @@ public:
      */
     void UpdateIBDStatus() EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
-    node::BlockMap& BlockIndex() EXCLUSIVE_LOCKS_REQUIRED(m_blockman.m_index_mutex)
+    kernel::BlockMap& BlockIndex() EXCLUSIVE_LOCKS_REQUIRED(m_blockman.m_index_mutex)
     {
         AssertLockHeld(m_blockman.m_index_mutex);
         return m_blockman.m_block_index;

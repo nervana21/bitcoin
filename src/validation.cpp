@@ -91,10 +91,10 @@ using kernel::IsInterrupted;
 using kernel::Notifications;
 
 using fsbridge::FopenFn;
-using node::BlockManager;
-using node::BlockMap;
-using node::CBlockIndexHeightOnlyComparator;
-using node::CBlockIndexWorkComparator;
+using kernel::BlockManager;
+using kernel::BlockMap;
+using kernel::CBlockIndexHeightOnlyComparator;
+using kernel::CBlockIndexWorkComparator;
 using node::SnapshotMetadata;
 
 /** Time window to wait between writing blocks/block index and chainstate to disk.
@@ -4946,7 +4946,7 @@ static ChainstateManager::Options&& Flatten(ChainstateManager::Options&& opts)
     return std::move(opts);
 }
 
-ChainstateManager::ChainstateManager(util::log::Logger& logger, const util::SignalInterrupt& interrupt, Options options, node::BlockManager::Options blockman_options)
+ChainstateManager::ChainstateManager(util::log::Logger& logger, const util::SignalInterrupt& interrupt, Options options, kernel::BlockManager::Options blockman_options)
     : m_script_check_queue{/*batch_size=*/128, std::clamp(options.worker_threads_num, 0, MAX_SCRIPTCHECK_THREADS)},
       m_log{BCLog::VALIDATION, &logger},
       m_interrupt{interrupt},

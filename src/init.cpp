@@ -156,7 +156,7 @@ using common::ResolveErrMsg;
 using kernel::FlushResult;
 using kernel::InterruptResult;
 using node::ApplyArgsManOptions;
-using node::BlockManager;
+using kernel::BlockManager;
 using node::CalculateCacheSizes;
 using node::ChainstateLoadError;
 using node::DEFAULT_PERSIST_MEMPOOL;

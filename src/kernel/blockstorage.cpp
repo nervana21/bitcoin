@@ -2,7 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <node/blockstorage.h>
+#include <kernel/blockstorage.h>
 
 #include <arith_uint256.h>
 #include <chain.h>
@@ -64,7 +64,7 @@ using kernel::InterruptResult;
 
 #define LOG_REQUIRE_CONTEXT true
 
-namespace node {
+namespace kernel {
 
 bool CBlockIndexWorkComparator::operator()(const CBlockIndex* pa, const CBlockIndex* pb) const
 {
@@ -918,7 +918,7 @@ util::Result<void, AbortFailure> BlockManager::FindUndoPos(BlockValidationState&
     bool out_of_space;
     size_t bytes_allocated = m_undo_store->Allocate(pos, nAddSize, out_of_space);
     if (out_of_space) {
-        FatalError(m_opts.notifications, state, kernel::DiskSpaceTooLow{});
+        ::FatalError(m_opts.notifications, state, kernel::DiskSpaceTooLow{});
         return {util::Error{Untranslated(FatalErrorString(kernel::DiskSpaceTooLow{}))}, AbortFailure{.fatal = true}};
     }
     if (bytes_allocated != 0 && IsPruneMode()) {
@@ -951,7 +951,7 @@ FlushResult<void, AbortFailure> BlockManager::WriteBlockUndo(const CBlockUndo& b
         auto writer{PolymorphicWriterWrapper{m_undo_store->MakeBlockStorageWriter(pos)}};
         if (!writer.IsValid()) {
             LogError(m_log, "OpenUndoFile failed for %s while writing block undo", pos.ToString());
-            FatalError(m_opts.notifications, state, kernel::UndoDataWriteFailed{});
+            ::FatalError(m_opts.notifications, state, kernel::UndoDataWriteFailed{});
             result.update({util::Error{Untranslated(FatalErrorString(kernel::UndoDataWriteFailed{}))}, AbortFailure{.fatal = true}});
             return result;
         }
@@ -974,7 +974,7 @@ FlushResult<void, AbortFailure> BlockManager::WriteBlockUndo(const CBlockUndo& b
         // Make sure that the file is closed before we call `FlushUndoFile`.
         if (writer.close() != 0) {
             LogError(m_log, "Failed to close block undo file %s: %s", pos.ToString(), SysErrorString(errno));
-            FatalError(m_opts.notifications, state, kernel::UndoFileCloseFailed{});
+            ::FatalError(m_opts.notifications, state, kernel::UndoFileCloseFailed{});
             result.update({util::Error{Untranslated(FatalErrorString(kernel::UndoFileCloseFailed{}))}, AbortFailure{.fatal = true}});
             return result;
         }
@@ -1353,4 +1353,4 @@ std::ostream& operator<<(std::ostream& os, const BlockfileCursor& cursor) {
     os << strprintf("BlockfileCursor(file_num=%d, undo_height=%d)", cursor.file_num, cursor.undo_height);
     return os;
 }
-} // namespace node
+} // namespace kernel
