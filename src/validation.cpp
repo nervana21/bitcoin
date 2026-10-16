@@ -482,7 +482,7 @@ std::optional<std::pair<ScriptError, std::string>> kernel::CScriptCheck::operato
     }
 }
 
-ValidationCache::ValidationCache(util::log::Logger& logger, const size_t script_execution_cache_bytes, const size_t signature_cache_bytes)
+kernel::ValidationCache::ValidationCache(util::log::Logger& logger, const size_t script_execution_cache_bytes, const size_t signature_cache_bytes)
     : m_signature_cache{logger, signature_cache_bytes}
 {
     // Setup the salted hasher
