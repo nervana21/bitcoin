@@ -313,6 +313,7 @@ public:
         int nCheckDepth) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 };
 
+namespace kernel {
 enum DisconnectResult
 {
     DISCONNECT_OK,      // All good.
@@ -423,6 +424,21 @@ struct ChainStats
     SteadyClock::duration GUARDED_BY(::cs_main) time_chainstate{};
     SteadyClock::duration GUARDED_BY(::cs_main) time_post_connect{};
 };
+} // namespace kernel
+
+using kernel::DisconnectResult;
+using kernel::DISCONNECT_OK;
+using kernel::DISCONNECT_UNCLEAN;
+using kernel::DISCONNECT_FAILED;
+using kernel::ConnectedBlock;
+using kernel::FlushStateMode;
+using kernel::FlushStateModeNames;
+using kernel::CoinsViews;
+using kernel::CoinsCacheSizeState;
+using kernel::LargeCoinsCacheThreshold;
+using kernel::Assumeutxo;
+using kernel::ChainStats;
+
 /**
  * Chainstate stores and provides an API to update our local knowledge of the
  * current best chain.

@@ -280,12 +280,12 @@ CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
     return nSubsidy;
 }
 
-CoinsViews::CoinsViews(util::log::Logger& logger, DBParams db_params, CoinsViewOptions options)
+kernel::CoinsViews::CoinsViews(util::log::Logger& logger, DBParams db_params, CoinsViewOptions options)
     : m_log{BCLog::VALIDATION, &logger},
       m_dbview{logger, std::move(db_params), std::move(options)},
       m_catcherview(logger, &m_dbview) {}
 
-void CoinsViews::InitCache(int32_t prevoutfetch_threads)
+void kernel::CoinsViews::InitCache(int32_t prevoutfetch_threads)
 {
     AssertLockHeld(::cs_main);
     m_cacheview = std::make_unique<CCoinsViewCache>(&m_catcherview);
@@ -1519,10 +1519,12 @@ FlushResult<> Chainstate::DisconnectTip(BlockValidationState& state)
     return result;
 }
 
+namespace kernel {
 struct ConnectedBlock {
     const CBlockIndex* pindex;
     std::shared_ptr<const CBlock> pblock;
 };
+} // namespace kernel
 
 /**
  * Connect a new block to m_chain. block_to_connect is either nullptr or a pointer to a CBlock
