@@ -52,7 +52,6 @@
 #include <utility>
 #include <vector>
 
-class ChainstateManager;
 struct ChainTxData;
 struct PrecomputedTransactionData;
 struct LockPoints;
@@ -61,6 +60,7 @@ namespace kernel {
 struct ChainstateRole;
 class SnapshotMetadata;
 class Chainstate;
+class ChainstateManager;
 } // namespace kernel
 namespace Consensus {
 struct Params;
@@ -815,6 +815,7 @@ protected:
 using kernel::Chainstate;
 
 
+namespace kernel {
 enum class SnapshotCompletionResult {
     SUCCESS,
     SKIPPED,
@@ -1332,6 +1333,11 @@ public:
     /** HistoricalChainstate() result. Published under cs_main, read without it. */
     mutable std::atomic<Chainstate*> m_historical_chainstate{nullptr};
 };
+} // namespace kernel
+
+using kernel::SnapshotCompletionResult;
+using kernel::ChainstateManager;
+
 
 /** Deployment* info via ChainstateManager */
 template<typename DEP>
