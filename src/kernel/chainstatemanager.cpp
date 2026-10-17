@@ -4098,13 +4098,15 @@ static kernel::ChainstateManager::Options&& Flatten(kernel::ChainstateManager::O
 }
 
 kernel::ChainstateManager::ChainstateManager(util::log::Logger& logger, const util::SignalInterrupt& interrupt, Options options, kernel::BlockManager::Options blockman_options)
-    : m_script_check_queue{/*batch_size=*/128, std::clamp(options.worker_threads_num, 0, MAX_SCRIPTCHECK_THREADS)},
+    : m_mutex{::cs_main},
+      m_script_check_queue{/*batch_size=*/128, std::clamp(options.worker_threads_num, 0, MAX_SCRIPTCHECK_THREADS)},
       m_log{BCLog::VALIDATION, &logger},
       m_interrupt{interrupt},
       m_options{Flatten(std::move(options))},
       m_blockman{logger, interrupt, std::move(blockman_options)},
       m_validation_cache{logger, m_options.script_execution_cache_bytes, m_options.signature_cache_bytes}
 {
+    kernel::RegisterValidationMutexOwner(this);
     LogInfo(m_log, "Script verification uses %d additional threads", std::clamp(m_options.worker_threads_num, 0, MAX_SCRIPTCHECK_THREADS));
 }
 
