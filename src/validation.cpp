@@ -386,10 +386,11 @@ bool FatalError(Notifications& notifications, BlockValidationState& state, const
     return state.Error(FatalErrorString(error));
 }
 
-void NotifyFatalAbort(Notifications& notifications, const kernel::AbortFailure& abort)
+void NotifyFatalAbort(Notifications& notifications, kernel::AbortFailure& abort)
 {
     if (abort.fatal && abort.error) {
         notifications.fatalError(*abort.error);
+        abort.error.reset();
     }
 }
 

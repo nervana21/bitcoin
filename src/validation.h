@@ -134,19 +134,26 @@ std::string FatalErrorString(const kernel::FatalError& error);
 
 bool FatalError(kernel::Notifications& notifications, BlockValidationState& state, const kernel::FatalError& error);
 
-//! Record a fatal on state + FlushResult without calling Notifications::fatalError.
+//! Record a fatal on state (optional) + Result without calling Notifications::fatalError.
 //! Callers at an API boundary use NotifyFatalAbort.
-template <typename SuccessType>
-void RecordFatalAbort(BlockValidationState& state, kernel::FlushResult<SuccessType, kernel::AbortFailure>& result, const kernel::FatalError& error)
+template <typename SuccessType, typename InfoType = void>
+void RecordFatalAbort(BlockValidationState* state, util::Result<SuccessType, kernel::AbortFailure, InfoType>& result, const kernel::FatalError& error)
 {
-    state.Error(FatalErrorString(error));
+    if (state) state->Error(FatalErrorString(error));
     result.update({util::Error{Untranslated(FatalErrorString(error))}, kernel::AbortFailure{.fatal = true, .error = error}});
 }
 
-//! Notify if AbortFailure carries a typed fatal. No-op when not fatal or no payload.
-void NotifyFatalAbort(kernel::Notifications& notifications, const kernel::AbortFailure& abort);
 template <typename SuccessType>
-void NotifyFatalAbort(kernel::Notifications& notifications, const kernel::FlushResult<SuccessType, kernel::AbortFailure>& result)
+void RecordFatalAbort(BlockValidationState& state, kernel::FlushResult<SuccessType, kernel::AbortFailure>& result, const kernel::FatalError& error)
+{
+    RecordFatalAbort(&state, result, error);
+}
+
+//! Notify if AbortFailure carries a typed fatal, then clear the payload so nested
+//! boundaries do not notify twice. No-op when not fatal or no payload.
+void NotifyFatalAbort(kernel::Notifications& notifications, kernel::AbortFailure& abort);
+template <typename SuccessType, typename InfoType = void>
+void NotifyFatalAbort(kernel::Notifications& notifications, util::Result<SuccessType, kernel::AbortFailure, InfoType>& result)
 {
     if (!result) NotifyFatalAbort(notifications, result.error());
 }
