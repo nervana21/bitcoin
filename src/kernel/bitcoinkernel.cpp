@@ -1458,6 +1458,27 @@ size_t btck_chainstate_manager_get_block_index_size(const btck_ChainstateManager
     return chainman.m_blockman.BlockIndexSize();
 }
 
+int32_t btck_chainstate_manager_get_tip_height(const btck_ChainstateManager* chainstate_manager)
+{
+    auto& chainman = *btck_ChainstateManager::get(chainstate_manager).m_chainman;
+    return WITH_LOCK(chainman.GetMutex(), return chainman.ActiveHeight());
+}
+
+btck_BlockHash* btck_chainstate_manager_get_tip_block_hash(const btck_ChainstateManager* chainstate_manager)
+{
+    auto& chainman = *btck_ChainstateManager::get(chainstate_manager).m_chainman;
+    LOCK(chainman.GetMutex());
+    const CBlockIndex* tip{chainman.ActiveTip()};
+    if (!tip) return nullptr;
+    return btck_BlockHash::create(tip->GetBlockHash());
+}
+
+int btck_chainstate_manager_is_initial_block_download(const btck_ChainstateManager* chainstate_manager)
+{
+    auto& chainman = *btck_ChainstateManager::get(chainstate_manager).m_chainman;
+    return chainman.IsInitialBlockDownload() ? 1 : 0;
+}
+
 int btck_chainstate_manager_flush(btck_ChainstateManager* chainman)
 {
     auto& manager{*btck_ChainstateManager::get(chainman).m_chainman};

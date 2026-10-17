@@ -70,7 +70,7 @@ extern "C" {
  * stability guarantee — breaking changes may still land before release.
  */
 #define BITCOINKERNEL_API_VERSION_MAJOR 0
-#define BITCOINKERNEL_API_VERSION_MINOR 1
+#define BITCOINKERNEL_API_VERSION_MINOR 2
 #define BITCOINKERNEL_API_VERSION_PATCH 0
 #define BITCOINKERNEL_API_VERSION \
     ((BITCOINKERNEL_API_VERSION_MAJOR * 10000) + \
@@ -1464,6 +1464,36 @@ BITCOINKERNEL_API const btck_BlockTreeEntry* btck_chainstate_manager_get_best_en
  * @return                       Count of in-memory block tree entries.
  */
 BITCOINKERNEL_API size_t btck_chainstate_manager_get_block_index_size(
+    const btck_ChainstateManager* chainstate_manager) BITCOINKERNEL_ARG_NONNULL(1);
+
+/**
+ * @brief Height of the active chain tip.
+ *
+ * @param[in] chainstate_manager Non-null.
+ * @return                       Tip height, or -1 if the active chain has no tip.
+ */
+BITCOINKERNEL_API int32_t btck_chainstate_manager_get_tip_height(
+    const btck_ChainstateManager* chainstate_manager) BITCOINKERNEL_ARG_NONNULL(1);
+
+/**
+ * @brief Block hash of the active chain tip.
+ *
+ * The returned hash is owned by the caller and must be destroyed with
+ * @ref btck_block_hash_destroy.
+ *
+ * @param[in] chainstate_manager Non-null.
+ * @return                       Owned tip hash, or null if the active chain has no tip.
+ */
+BITCOINKERNEL_API btck_BlockHash* BITCOINKERNEL_WARN_UNUSED_RESULT btck_chainstate_manager_get_tip_block_hash(
+    const btck_ChainstateManager* chainstate_manager) BITCOINKERNEL_ARG_NONNULL(1);
+
+/**
+ * @brief Whether the chainstate manager is in initial block download.
+ *
+ * @param[in] chainstate_manager Non-null.
+ * @return                       Non-zero if IBD is ongoing, zero otherwise.
+ */
+BITCOINKERNEL_API int btck_chainstate_manager_is_initial_block_download(
     const btck_ChainstateManager* chainstate_manager) BITCOINKERNEL_ARG_NONNULL(1);
 
 /**
