@@ -200,7 +200,7 @@ FlushResult<InterruptResult, ChainstateLoadError> LoadChainstate(ChainstateManag
                 chainman.m_blockman.GetPruneTarget() / 1_MiB);
     }
 
-    LOCK(cs_main);
+    WAIT_LOCK(cs_main, lock);
 
     chainman.m_total_coinstip_cache = cache_sizes.coins;
     chainman.m_total_coinsdb_cache = cache_sizes.coins_db;
@@ -236,9 +236,15 @@ FlushResult<InterruptResult, ChainstateLoadError> LoadChainstate(ChainstateManag
     // filesystem operations to move leveldb data directories around, and that seems
     // too risky to do in the middle of normal runtime.
     FlushResult<void, AbortFailure> snapshot_result;
-    auto snapshot_completion{assumeutxo_cs
-                             ? chainman.MaybeValidateSnapshot(validated_cs, *assumeutxo_cs, snapshot_result)
-                             : SnapshotCompletionResult::SKIPPED};
+    SnapshotCompletionResult snapshot_completion;
+    {
+        // MaybeValidateSnapshot must not run while cs_main is held (UTXO hash).
+        REVERSE_LOCK(lock, cs_main);
+        snapshot_completion = assumeutxo_cs
+                                  ? chainman.MaybeValidateSnapshot(validated_cs, *assumeutxo_cs, snapshot_result)
+                                  : SnapshotCompletionResult::SKIPPED;
+    }
+    NotifyFatalAbort(chainman.GetNotifications(), snapshot_result);
     // Ignore failure value, do not treat flush error as failure.
     snapshot_result >> result;
 

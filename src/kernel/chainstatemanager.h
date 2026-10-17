@@ -849,7 +849,9 @@ public:
     //! whether the hash matches. The INVALID case should not happen in practice
     //! because the software should refuse to load unrecognized snapshots, but
     //! if it does happen, it is a fatal error.
-    [[nodiscard]] SnapshotCompletionResult MaybeValidateSnapshot(Chainstate& validated_cs, Chainstate& unvalidated_cs, kernel::FlushResult<void, kernel::AbortFailure>& result) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    //! May release cs_main while hashing the UTXO set (minutes). Callers must
+    //! not hold cs_main. Early checks and completion run under cs_main.
+    [[nodiscard]] SnapshotCompletionResult MaybeValidateSnapshot(Chainstate& validated_cs, Chainstate& unvalidated_cs, kernel::FlushResult<void, kernel::AbortFailure>& result) LOCKS_EXCLUDED(::cs_main);
 
     //! Return current chainstate targeting the most-work, network tip.
     Chainstate& CurrentChainstate() const EXCLUSIVE_LOCKS_REQUIRED(GetMutex())

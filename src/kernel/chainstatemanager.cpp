@@ -1417,21 +1417,9 @@ FlushResult<void, AbortFailure> kernel::Chainstate::ConnectTip(
              Ticks<SecondsDouble>(m_chain_stats.time_total),
              Ticks<MillisecondsDouble>(m_chain_stats.time_total) / m_chain_stats.num_blocks_total);
 
-    // See if this chainstate has reached a target block and can be used to
-    // validate an assumeutxo snapshot. If it can, hashing the UTXO database
-    // will be slow, and cs_main could remain locked here for several minutes.
-    // If the snapshot is validated, the UTXO hash will be saved to
-    // this->m_target_utxohash, causing HistoricalChainstate() to return null
-    // and this chainstate to no longer be used. ActivateBestChain() will also
-    // stop connecting blocks to this chainstate because this->ReachedTarget()
-    // will be true and this->setBlockIndexCandidates will not have additional
-    // blocks.
-    Chainstate& current_cs{m_chainman.CurrentChainstate()};
-    FlushResult<void, AbortFailure> snapshot_result;
-    // Snapshot validation failure does not prevent connecting the block; only flush
-    // messages from the snapshot validation are propagated to the caller via result.
-    (void)m_chainman.MaybeValidateSnapshot(*this, current_cs, snapshot_result);
-    snapshot_result >> result;
+    // Assumeutxo snapshot validation (UTXO hash) runs from ActivateBestChain
+    // after cs_main is released — not here — so ConnectTip does not hold
+    // cs_main for minutes.
 
     connected_blocks.emplace_back(pindexNew, std::move(block_to_connect));
     return result;
@@ -1773,6 +1761,7 @@ FlushResult<> kernel::Chainstate::ActivateBestChain(BlockValidationState& state,
         // When we reach this point, we switched to a new tip (stored in pindexNewTip).
 
         bool reached_target;
+        Chainstate* unvalidated_cs{nullptr};
         {
             LOCK(m_chainman.GetMutex());
             if (exited_ibd) {
@@ -1789,16 +1778,20 @@ FlushResult<> kernel::Chainstate::ActivateBestChain(BlockValidationState& state,
             }
 
             reached_target = ReachedTarget();
+            if (reached_target) {
+                unvalidated_cs = &m_chainman.CurrentChainstate();
+            }
         }
 
         if (reached_target) {
-            // Chainstate has reached the target block, so exit.
-            //
-            // Options::target_block_reached lets the node restart indexes /
-            // adjust services without those types living in libbitcoinkernel.
-            //
-            // This cannot be done while holding cs_main (within
-            // MaybeValidateSnapshot) or a cs_main deadlock will occur.
+            // Hash UTXO set without holding cs_main (can take minutes). Then
+            // restart indexes / services. Must not hold cs_main here or
+            // target_block_reached can deadlock.
+            FlushResult<void, AbortFailure> snapshot_result;
+            (void)m_chainman.MaybeValidateSnapshot(*this, *Assert(unvalidated_cs), snapshot_result);
+            NotifyFatalAbort(m_notifications, snapshot_result);
+            snapshot_result >> result;
+
             if (m_chainman.m_options.target_block_reached) {
                 m_chainman.m_options.target_block_reached();
             }
@@ -3871,23 +3864,71 @@ util::Result<void> kernel::ChainstateManager::PopulateAndValidateSnapshot(
 
 SnapshotCompletionResult kernel::ChainstateManager::MaybeValidateSnapshot(Chainstate& validated_cs, Chainstate& unvalidated_cs, FlushResult<void, AbortFailure>& result)
 {
-    AssertLockHeld(cs_main);
+    AssertLockNotHeld(cs_main);
 
-    // If the snapshot does not need to be validated...
-    if (unvalidated_cs.m_assumeutxo != Assumeutxo::UNVALIDATED ||
-            // Or if either chainstate is unusable...
-            !unvalidated_cs.m_from_snapshot_blockhash ||
-            validated_cs.m_assumeutxo != Assumeutxo::VALIDATED ||
-            !validated_cs.m_chain.Tip() ||
-            // Or the validated chainstate is not targeting the snapshot block...
-            !validated_cs.TargetBlockHash() ||
-            *validated_cs.TargetBlockHash() != *unvalidated_cs.m_from_snapshot_blockhash ||
-            // Or the validated chainstate has not reached the snapshot block yet...
-            !validated_cs.ReachedTarget()) {
-       // Then the snapshot cannot be validated and there is nothing to do.
-       return SnapshotCompletionResult::SKIPPED;
+    const CCoinsViewDB* validated_coins_db{nullptr};
+    std::optional<AssumeutxoData> au_data;
+
+    {
+        LOCK(cs_main);
+
+        // If the snapshot does not need to be validated...
+        if (unvalidated_cs.m_assumeutxo != Assumeutxo::UNVALIDATED ||
+                // Or if either chainstate is unusable...
+                !unvalidated_cs.m_from_snapshot_blockhash ||
+                validated_cs.m_assumeutxo != Assumeutxo::VALIDATED ||
+                !validated_cs.m_chain.Tip() ||
+                // Or the validated chainstate is not targeting the snapshot block...
+                !validated_cs.TargetBlockHash() ||
+                *validated_cs.TargetBlockHash() != *unvalidated_cs.m_from_snapshot_blockhash ||
+                // Or the validated chainstate has not reached the snapshot block yet...
+                !validated_cs.ReachedTarget()) {
+           // Then the snapshot cannot be validated and there is nothing to do.
+           return SnapshotCompletionResult::SKIPPED;
+        }
+        assert(validated_cs.TargetBlock() == validated_cs.m_chain.Tip());
+
+        // Propagate flush messages to result, but do not treat a flush failure as a
+        // snapshot validation failure.
+        validated_cs.ForceFlushStateToDisk() >> result;
+
+        const auto& maybe_au_data = m_options.chainparams.AssumeutxoForHeight(validated_cs.m_chain.Height());
+        if (!maybe_au_data) {
+            LogWarning(m_log, "[snapshot] assumeutxo data not found for height "
+                "(%d) - refusing to validate snapshot", validated_cs.m_chain.Height());
+            kernel::SnapshotValidationFailed error{
+                .height_from = unvalidated_cs.m_chain.Height(),
+                .height_to = validated_cs.m_chain.Height(),
+            };
+            LogError(m_log, "[snapshot] deleting snapshot, reverting to validated chain, and stopping node\n");
+            validated_cs.SetTargetBlock(nullptr);
+            unvalidated_cs.m_assumeutxo = Assumeutxo::INVALID;
+            PublishActiveChainstate();
+            error.rename_error = unvalidated_cs.InvalidateCoinsDBOnDisk();
+            RecordFatalAbort(/*state=*/nullptr, result, error);
+            NotifyFatalAbort(GetNotifications(), result);
+            return SnapshotCompletionResult::MISSING_CHAINPARAMS;
+        }
+
+        au_data = *maybe_au_data;
+        // CoinsDB stays alive for the duration of ActivateBestChain (chainstate mutex).
+        validated_coins_db = &validated_cs.CoinsDB();
+    } // release cs_main for the slow UTXO hash
+
+    std::optional<CCoinsStats> validated_cs_stats;
+    LogInfo(m_log, "[snapshot] computing UTXO stats for background chainstate to validate "
+        "snapshot - this could take a few minutes");
+    try {
+        validated_cs_stats = ComputeUTXOStats(
+            CoinStatsHashType::HASH_SERIALIZED,
+            *Assert(validated_coins_db),
+            m_blockman,
+            [&interrupt = m_interrupt] { SnapshotUTXOHashBreakpoint(interrupt); });
+    } catch (StopHashingException const&) {
+        return SnapshotCompletionResult::STATS_FAILED;
     }
-    assert(validated_cs.TargetBlock() == validated_cs.m_chain.Tip());
+
+    LOCK(cs_main);
 
     auto handle_invalid_snapshot = [&]() EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
         kernel::SnapshotValidationFailed error{
@@ -3909,34 +3950,16 @@ SnapshotCompletionResult kernel::ChainstateManager::MaybeValidateSnapshot(Chains
         NotifyFatalAbort(GetNotifications(), result);
     };
 
-    CCoinsViewDB& validated_coins_db = validated_cs.CoinsDB();
-    // Propagate flush messages to result, but do not treat a flush failure as a
-    // snapshot validation failure.
-    validated_cs.ForceFlushStateToDisk() >> result;
-
-    const auto& maybe_au_data = m_options.chainparams.AssumeutxoForHeight(validated_cs.m_chain.Height());
-    if (!maybe_au_data) {
-        LogWarning(m_log, "[snapshot] assumeutxo data not found for height "
-            "(%d) - refusing to validate snapshot", validated_cs.m_chain.Height());
-        handle_invalid_snapshot();
-        return SnapshotCompletionResult::MISSING_CHAINPARAMS;
+    // State may have changed while hashing without the lock.
+    if (unvalidated_cs.m_assumeutxo != Assumeutxo::UNVALIDATED ||
+            !unvalidated_cs.m_from_snapshot_blockhash ||
+            validated_cs.m_assumeutxo != Assumeutxo::VALIDATED ||
+            !validated_cs.ReachedTarget() ||
+            !validated_cs.TargetBlockHash() ||
+            *validated_cs.TargetBlockHash() != *unvalidated_cs.m_from_snapshot_blockhash) {
+        return SnapshotCompletionResult::SKIPPED;
     }
 
-    const AssumeutxoData& au_data = *maybe_au_data;
-    std::optional<CCoinsStats> validated_cs_stats;
-    LogInfo(m_log, "[snapshot] computing UTXO stats for background chainstate to validate "
-        "snapshot - this could take a few minutes");
-    try {
-        validated_cs_stats = ComputeUTXOStats(
-            CoinStatsHashType::HASH_SERIALIZED,
-            validated_coins_db,
-            m_blockman,
-            [&interrupt = m_interrupt] { SnapshotUTXOHashBreakpoint(interrupt); });
-    } catch (StopHashingException const&) {
-        return SnapshotCompletionResult::STATS_FAILED;
-    }
-
-    // XXX note that this function is slow and will hold cs_main for potentially minutes.
     if (!validated_cs_stats) {
         LogWarning(m_log, "[snapshot] failed to generate stats for validation coins db");
         // While this isn't a problem with the snapshot per se, this condition
@@ -3952,10 +3975,10 @@ SnapshotCompletionResult kernel::ChainstateManager::MaybeValidateSnapshot(Chains
     // TODO: For belt-and-suspenders, we could cache the UTXO set
     // hash for the snapshot when it's loaded in its chainstate's leveldb. We could then
     // reference that here for an additional check.
-    if (AssumeutxoHash{validated_cs_stats->hashSerialized} != au_data.hash_serialized) {
+    if (AssumeutxoHash{validated_cs_stats->hashSerialized} != Assert(au_data)->hash_serialized) {
         LogWarning(m_log, "[snapshot] hash mismatch: actual=%s, expected=%s",
             validated_cs_stats->hashSerialized.ToString(),
-            au_data.hash_serialized.ToString());
+            au_data->hash_serialized.ToString());
         handle_invalid_snapshot();
         return SnapshotCompletionResult::HASH_MISMATCH;
     }

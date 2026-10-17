@@ -831,7 +831,7 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_snapshot_completion, SnapshotTestSetup
         return chainman.ActiveTip()->GetBlockHash());
 
     FlushResult<void, AbortFailure> process_result;
-    res = WITH_LOCK(::cs_main, return chainman.MaybeValidateSnapshot(validated_cs, active_cs, process_result));
+    res = chainman.MaybeValidateSnapshot(validated_cs, active_cs, process_result);
     BOOST_CHECK_EQUAL(res, SnapshotCompletionResult::SUCCESS);
     BOOST_CHECK(process_result);
 
@@ -845,7 +845,7 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_snapshot_completion, SnapshotTestSetup
     BOOST_CHECK(active_cs.m_coinsdb_cache_size_bytes > db_cache_before_complete);
 
     // Trying completion again should return false.
-    res = WITH_LOCK(::cs_main, return chainman.MaybeValidateSnapshot(validated_cs, active_cs, process_result));
+    res = chainman.MaybeValidateSnapshot(validated_cs, active_cs, process_result);
     BOOST_CHECK_EQUAL(res, SnapshotCompletionResult::SKIPPED);
     BOOST_CHECK(process_result);
 
@@ -918,7 +918,7 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_snapshot_completion_hash_mismatch, Sna
     {
         ASSERT_DEBUG_LOG("failed to validate the -assumeutxo snapshot state");
         FlushResult<void, AbortFailure> process_result;
-        res = WITH_LOCK(::cs_main, return chainman.MaybeValidateSnapshot(validation_chainstate, unvalidated_cs, process_result));
+        res = chainman.MaybeValidateSnapshot(validation_chainstate, unvalidated_cs, process_result);
         BOOST_CHECK_EQUAL(res, SnapshotCompletionResult::HASH_MISMATCH);
         BOOST_CHECK(!process_result);
     }
