@@ -50,6 +50,7 @@
 #include <memory>
 #include <optional>
 #include <set>
+#include <unordered_set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -693,6 +694,13 @@ private:
     /** Most recent headers presync progress update, for rate-limiting. */
     MockableSteadyClock::time_point m_last_presync_update GUARDED_BY(GetMutex()){};
 
+    /**
+     * Hashes the caller asked to store even when not tip-candidates (import,
+     * force_processing, getblockfrompeer / FetchBlock). AcceptBlock consumes
+     * the mark when deciding store policy.
+     */
+    std::unordered_set<uint256, SaltedUint256Hasher> m_blocks_marked_for_storage GUARDED_BY(::cs_main);
+
     //! A queue for script verifications that have to be performed by worker threads.
     CCheckQueue<CScriptCheck> m_script_check_queue;
 
@@ -1017,21 +1025,28 @@ public:
     bool ProcessNewBlockHeaders(std::span<const CBlockHeader> headers, bool min_pow_checked, BlockValidationState& state, const CBlockIndex** ppindex = nullptr) LOCKS_EXCLUDED(cs_main);
 
     /**
-     * How AcceptBlock treats an incoming block relative to download policy.
-     * Forced = caller asked for the block (getdata, import, force_processing).
-     * Opportunistic = unsolicited; anti-DoS height/work gates apply.
-     * Full download decoupling still needs a tip-candidate chain index (TODO).
+     * Whether this header is worth storing as a tip-candidate: not already
+     * pruned-processed, at least as much work as the active tip, within
+     * MIN_BLOCKS_TO_KEEP of tip height, and above MinimumChainWork.
+     *
+     * AcceptBlock stores when IsTipCandidate or the hash was marked via
+     * MarkBlockForStorage (import, force_processing, FetchBlock).
      */
-    enum class BlockProcessRequest {
-        Forced,
-        Opportunistic,
-    };
+    [[nodiscard]] bool IsTipCandidate(const CBlockIndex& index) const
+        EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+
+    /**
+     * Ask AcceptBlock to store this hash even if it is not a tip-candidate.
+     * Used for import, ProcessNewBlock(force_processing), and FetchBlock.
+     */
+    void MarkBlockForStorage(const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     /**
      * Sufficiently validate a block for disk storage (and store on disk).
      * Does not flush or prune; callers use MaybePruneBlockFilesAfterAccept.
+     * Store policy: already have data, else IsTipCandidate or marked for storage.
      */
-    [[nodiscard]] bool AcceptBlock(const std::shared_ptr<const CBlock>& pblock, BlockValidationState& state, kernel::FlushResult<void, kernel::AbortFailure>& result, CBlockIndex** ppindex, BlockProcessRequest process_request, const FlatFilePos* dbp, bool* fNewBlock, bool min_pow_checked) LOCKS_EXCLUDED(cs_main);
+    [[nodiscard]] bool AcceptBlock(const std::shared_ptr<const CBlock>& pblock, BlockValidationState& state, kernel::FlushResult<void, kernel::AbortFailure>& result, CBlockIndex** ppindex, const FlatFilePos* dbp, bool* fNewBlock, bool min_pow_checked) LOCKS_EXCLUDED(cs_main);
 
     //! Prune-oriented flush after AcceptBlock. Kept on ChainstateManager so
     //! AcceptBlock does not flush block + chainstate together.

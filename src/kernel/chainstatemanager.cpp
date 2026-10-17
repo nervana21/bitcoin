@@ -2309,7 +2309,38 @@ void kernel::ChainstateManager::ReportHeadersPresync(int64_t height, int64_t tim
     }
 }
 
-bool kernel::ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, BlockValidationState& state, FlushResult<void, AbortFailure>& result, CBlockIndex** ppindex, BlockProcessRequest process_request, const FlatFilePos* dbp, bool* fNewBlock, bool min_pow_checked) LOCKS_EXCLUDED(cs_main)
+bool kernel::ChainstateManager::IsTipCandidate(const CBlockIndex& index) const
+{
+    AssertLockHeld(cs_main);
+
+    // Previously-processed block that was pruned.
+    if (index.nTx != 0) return false;
+
+    // Don't process less-work chains.
+    if (ActiveTip() && index.nChainWork < ActiveTip()->nChainWork) return false;
+
+    // Blocks that are too out-of-order needlessly limit the effectiveness of
+    // pruning, because pruning will not delete block files that contain any
+    // blocks which are too close in height to the tip. Apply this test
+    // regardless of whether pruning is enabled; it should generally be safe to
+    // not process unrequested blocks.
+    if (index.nHeight > ActiveHeight() + int(MIN_BLOCKS_TO_KEEP)) return false;
+
+    // Protect against DoS attacks from low-work chains. If our tip is behind, a
+    // peer could try to send us low-work blocks on a fake chain that we would
+    // never request; don't process these.
+    if (index.nChainWork < MinimumChainWork()) return false;
+
+    return true;
+}
+
+void kernel::ChainstateManager::MarkBlockForStorage(const uint256& hash)
+{
+    AssertLockHeld(cs_main);
+    m_blocks_marked_for_storage.insert(hash);
+}
+
+bool kernel::ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, BlockValidationState& state, FlushResult<void, AbortFailure>& result, CBlockIndex** ppindex, const FlatFilePos* dbp, bool* fNewBlock, bool min_pow_checked) LOCKS_EXCLUDED(cs_main)
 {
     const CBlock& block = *pblock;
     if (fNewBlock) *fNewBlock = false;
@@ -2342,36 +2373,18 @@ bool kernel::ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>&
 
     BlockProcessingGuard guard(block_hash, map_mutex, processing_cv, blocks_being_processed);
 
-    // Check all requested blocks that we do not already have for validity and
-    // save them to disk. Skip processing of unrequested blocks as an anti-DoS
-    // measure, unless the blocks have more work than the active chain tip, and
-    // aren't too far ahead of it, so are likely to be attached soon.
-    bool fAlreadyHave = pindex->nStatus & BLOCK_HAVE_DATA;
-    bool fHasMoreOrSameWork = (ActiveTip() ? pindex->nChainWork >= ActiveTip()->nChainWork : true);
-    // Blocks that are too out-of-order needlessly limit the effectiveness of
-    // pruning, because pruning will not delete block files that contain any
-    // blocks which are too close in height to the tip.  Apply this test
-    // regardless of whether pruning is enabled; it should generally be safe to
-    // not process unrequested blocks.
-    bool fTooFarAhead{pindex->nHeight > ActiveHeight() + int(MIN_BLOCKS_TO_KEEP)};
-
-    // TODO: Decouple AcceptBlock from download by replacing BlockProcessRequest
-    // with a tip-candidate chain query. That needs a new index structure and
-    // would change getblockfrompeer behavior.
-
+    // Store blocks we do not already have when they are tip-candidates or the
+    // caller marked the hash for storage (import, force_processing, FetchBlock).
+    //
     // TODO: deal better with return value and error conditions for duplicate
-    // and opportunistic blocks.
-    if (fAlreadyHave) return true;
-    if (process_request == BlockProcessRequest::Opportunistic) {
-        if (pindex->nTx != 0) return true;    // This is a previously-processed block that was pruned
-        if (!fHasMoreOrSameWork) return true; // Don't process less-work chains
-        if (fTooFarAhead) return true;        // Block height is too high
-
-        // Protect against DoS attacks from low-work chains.
-        // If our tip is behind, a peer could try to send us
-        // low-work blocks on a fake chain that we would never
-        // request; don't process these.
-        if (pindex->nChainWork < MinimumChainWork()) return true;
+    // and unmarked low-work blocks.
+    if (pindex->nStatus & BLOCK_HAVE_DATA) {
+        m_blocks_marked_for_storage.erase(block_hash);
+        return true;
+    }
+    const bool marked_for_storage{m_blocks_marked_for_storage.erase(block_hash) > 0};
+    if (!marked_for_storage && !IsTipCandidate(*pindex)) {
+        return true;
     }
 
     const CChainParams& params{GetParams()};
@@ -2473,9 +2486,12 @@ bool kernel::ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlo
         // not very expensive, the anti-DoS benefits of caching failure (of a definitely-invalid block) are not substantial.
         bool ret = WITH_LOCK(cs_main, return CheckBlock(*block, state, GetConsensus()));
         if (ret) {
-            // Store to disk
-            const auto process_request{force_processing ? BlockProcessRequest::Forced : BlockProcessRequest::Opportunistic};
-            ret = AcceptBlock(block, state, result, &pindex, process_request, nullptr, new_block, min_pow_checked);
+            // Store to disk. force_processing marks the hash so AcceptBlock
+            // stores even when the block is not a tip-candidate.
+            if (force_processing) {
+                WITH_LOCK(cs_main, MarkBlockForStorage(block->GetHash()));
+            }
+            ret = AcceptBlock(block, state, result, &pindex, nullptr, new_block, min_pow_checked);
         }
         if (!ret) {
             NotifyFatalAbort(GetNotifications(), result);
@@ -2951,9 +2967,10 @@ FlushResult<InterruptResult, AbortFailure> kernel::ChainstateManager::LoadExtern
                         nRewind = blkdat.GetPos();
 
                         FlushResult<void, AbortFailure> accept_result;
+                        MarkBlockForStorage(hash);
                         REVERSE_LOCK(lock, cs_main);
                         BlockValidationState state;
-                        if (AcceptBlock(pblock, state, accept_result, nullptr, BlockProcessRequest::Forced, dbp, nullptr, true)) {
+                        if (AcceptBlock(pblock, state, accept_result, nullptr, dbp, nullptr, true)) {
                             nLoaded++;
                             MaybePruneBlockFilesAfterAccept(accept_result);
                         }
@@ -3021,7 +3038,8 @@ FlushResult<InterruptResult, AbortFailure> kernel::ChainstateManager::LoadExtern
                             LogDebug(log_reindex, "%s: Processing out of order child %s of %s", __func__, block_hash.ToString(), head.ToString());
                             FlushResult<void, AbortFailure> accept_result;
                             BlockValidationState dummy;
-                            if (AcceptBlock(pblockrecursive, dummy, accept_result, nullptr, BlockProcessRequest::Forced, &it->second, nullptr, true)) {
+                            WITH_LOCK(cs_main, MarkBlockForStorage(block_hash));
+                            if (AcceptBlock(pblockrecursive, dummy, accept_result, nullptr, &it->second, nullptr, true)) {
                                 nLoaded++;
                                 MaybePruneBlockFilesAfterAccept(accept_result);
                                 queue.push_back(block_hash);

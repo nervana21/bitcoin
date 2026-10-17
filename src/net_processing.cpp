@@ -2127,6 +2127,9 @@ util::Expected<void, std::string> PeerManagerImpl::FetchBlock(NodeId peer_id, co
 
     // Construct message to request the block
     const uint256& hash{block_index.GetBlockHash()};
+    // Store when the block arrives even if it is not a tip-candidate
+    // (getblockfrompeer / historical fetch).
+    WITH_LOCK(cs_main, m_chainman.MarkBlockForStorage(hash));
     std::vector<CInv> invs{CInv(MSG_BLOCK | MSG_WITNESS_FLAG, hash)};
 
     // Send block request message to the peer

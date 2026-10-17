@@ -164,8 +164,9 @@ BOOST_FIXTURE_TEST_CASE(chainstate_update_tip, TestChain100Setup)
         bool checked = WITH_LOCK(cs_main, return CheckBlock(*pblockone, state, chainparams.GetConsensus()));
         BOOST_CHECK(checked);
         FlushResult<void, AbortFailure> accept_result;
+        WITH_LOCK(cs_main, chainman.MarkBlockForStorage(pblockone->GetHash()));
         bool accepted = chainman.AcceptBlock(
-            pblockone, state, accept_result, &pindex, ChainstateManager::BlockProcessRequest::Forced, nullptr, &newblock, true);
+            pblockone, state, accept_result, &pindex, nullptr, &newblock, true);
         BOOST_CHECK(accepted);
         BOOST_CHECK(accept_result);
     }
