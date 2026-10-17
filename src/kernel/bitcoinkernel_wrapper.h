@@ -1664,6 +1664,23 @@ public:
         return btck_chainstate_manager_get_block_index_size(get());
     }
 
+    int32_t GetTipHeight() const
+    {
+        return btck_chainstate_manager_get_tip_height(get());
+    }
+
+    std::optional<BlockHash> GetTipBlockHash() const
+    {
+        auto hash{btck_chainstate_manager_get_tip_block_hash(get())};
+        if (!hash) return std::nullopt;
+        return BlockHash{hash};
+    }
+
+    bool IsInitialBlockDownload() const
+    {
+        return btck_chainstate_manager_is_initial_block_download(get()) != 0;
+    }
+
     std::optional<Block> ReadBlock(const BlockTreeEntry& entry) const
     {
         auto block{btck_block_read(get(), entry.get())};

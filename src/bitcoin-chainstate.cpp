@@ -16,6 +16,7 @@
 #include <cassert>
 #include <charconv>
 #include <filesystem>
+#include <iomanip>
 #include <iostream>
 #include <optional>
 #include <string>
@@ -182,6 +183,17 @@ int main(int argc, char* argv[])
     } catch (std::exception&) {
         std::cerr << "Failed to instantiate ChainMan, exiting" << std::endl;
         return 1;
+    }
+
+    std::cout << "Tip height: " << chainman->GetTipHeight()
+              << " IBD: " << (chainman->IsInitialBlockDownload() ? "yes" : "no") << std::endl;
+    if (auto tip_hash{chainman->GetTipBlockHash()}) {
+        const auto bytes{tip_hash->ToBytes()};
+        std::cout << "Tip hash: ";
+        for (const auto b : bytes) {
+            std::cout << std::hex << std::setw(2) << std::setfill('0') << static_cast<unsigned>(b);
+        }
+        std::cout << std::dec << std::endl;
     }
 
     std::cout << "Enter the block you want to validate on the next line:" << std::endl;
