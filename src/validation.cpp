@@ -1114,6 +1114,7 @@ kernel::ChainstateManager::~ChainstateManager()
     LOCK(::cs_main);
 
     m_versionbitscache.Clear();
+    kernel::UnregisterValidationMutexOwner(this);
 }
 
 

@@ -660,6 +660,12 @@ class ChainstateManager
 {
 private:
 
+    /**
+     * Logical owner of the process validation mutex (`::cs_main`).
+     * Same object as GetMutex() / LOCK(cs_main); sole manager per process.
+     */
+    RecursiveMutex& m_mutex;
+
     /** The last header for which a headerTip notification was issued. */
     CBlockIndex* m_last_notified_header GUARDED_BY(GetMutex()){nullptr};
 
@@ -762,17 +768,11 @@ public:
         CCoinsViewCache& coins);
 
     /**
-     * Alias for ::cs_main.
-     * Should be used in new code to make it easier to make ::cs_main a member
-     * of this class.
-     * Generally, methods of this class should be annotated to require this
-     * mutex. This will make calling code more verbose, but also help to:
-     * - Clarify that the method will acquire a mutex that heavily affects
-     *   overall performance.
-     * - Force call sites to think how long they need to acquire the mutex to
-     *   get consistent results.
+     * Validation mutex for this manager (same object as ::cs_main).
+     * Should be used in new code. Methods of this class should be annotated to
+     * require this mutex so call sites see the performance cost and hold time.
      */
-    RecursiveMutex& GetMutex() const LOCK_RETURNED(::cs_main) { return ::cs_main; }
+    RecursiveMutex& GetMutex() const LOCK_RETURNED(::cs_main) { return m_mutex; }
 
     const util::log::Context m_log;
     const util::SignalInterrupt& m_interrupt;
