@@ -575,8 +575,7 @@ FlushResult<void, AbortFailure> kernel::Chainstate::ConnectBlock(const CBlock& b
             // We don't write down blocks to disk if they may have been
             // corrupted, so this should be impossible unless we're having hardware
             // problems.
-            ::FatalError(m_notifications, state, kernel::CorruptBlockFound{});
-            result.update({util::Error{Untranslated(FatalErrorString(kernel::CorruptBlockFound{}))}, AbortFailure{.fatal = true}});
+            RecordFatalAbort(state, result, kernel::CorruptBlockFound{});
             return result;
         }
         auto error{Untranslated(strprintf("Consensus::CheckBlock: %s", state.ToString()))};
@@ -1342,8 +1341,7 @@ FlushResult<void, AbortFailure> kernel::Chainstate::ConnectTip(
     if (!block_to_connect) {
         std::shared_ptr<CBlock> pblockNew = std::make_shared<CBlock>();
         if (!m_blockman.ReadBlock(*pblockNew, *pindexNew)) {
-            ::FatalError(m_notifications, state, kernel::BlockReadFailed{});
-            result.update({util::Error{Untranslated(FatalErrorString(kernel::BlockReadFailed{}))}, AbortFailure{.fatal = true}});
+            RecordFatalAbort(state, result, kernel::BlockReadFailed{});
             return result;
         }
         block_to_connect = std::move(pblockNew);
@@ -1532,8 +1530,7 @@ FlushResult<void, AbortFailure> kernel::Chainstate::ActivateBestChainStep(BlockV
             // If we're unable to disconnect a block during normal operation,
             // then that is a failure of our local system -- we should abort
             // rather than stay on a less work chain.
-            ::FatalError(m_notifications, state, kernel::BlockDisconnectFailed{});
-            result.update({util::Error{Untranslated(FatalErrorString(kernel::BlockDisconnectFailed{}))}, AbortFailure{.fatal = true}});
+            RecordFatalAbort(state, result, kernel::BlockDisconnectFailed{});
             return result;
         }
         fBlocksDisconnected = true;
@@ -1715,11 +1712,17 @@ FlushResult<> kernel::Chainstate::ActivateBestChain(BlockValidationState& state,
                 // in case snapshot validation is completed during ActivateBestChainStep, the
                 // result of GetRole() changes from BACKGROUND to NORMAL.
                const ChainstateRole chainstate_role{this->GetRole()};
-                if (!(ActivateBestChainStep(state, *pindexMostWork, pblock && pblock->GetHash() == pindexMostWork->GetBlockHash() ? pblock : nullBlockPtr, fInvalidFound, connected_blocks) >> result)) {
-                    // A system error occurred
+                // Construct from ActivateBestChainStep so AbortFailure is kept.
+                // operator>> only moves info/messages, not ErrorType.
+                FlushResult<void, AbortFailure> step_result{ActivateBestChainStep(state, *pindexMostWork, pblock && pblock->GetHash() == pindexMostWork->GetBlockHash() ? pblock : nullBlockPtr, fInvalidFound, connected_blocks)};
+                if (!step_result) {
+                    // A system error occurred (may include typed fatal from connect/disconnect).
+                    NotifyFatalAbort(m_notifications, step_result);
+                    step_result >> result;
                     result.update(util::Error{});
                     return result;
                 }
+                step_result >> result;
                 blocks_connected = true;
 
                 if (fInvalidFound) {
@@ -2432,8 +2435,7 @@ bool kernel::ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>&
         assert(post_pos.IsNull());
         ReceivedBlockTransactions(block, pindex, blockPos);
     } catch (const std::runtime_error& e) {
-        ::FatalError(GetNotifications(), state, kernel::SystemErrorWhileSavingBlock{e.what()});
-        result.update({util::Error{Untranslated(FatalErrorString(kernel::SystemErrorWhileSavingBlock{e.what()}))}, AbortFailure{.fatal = true}});
+        RecordFatalAbort(state, result, kernel::SystemErrorWhileSavingBlock{e.what()});
         return false;
     }
 
@@ -2492,6 +2494,7 @@ bool kernel::ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlo
             ret = AcceptBlock(block, state, result, &pindex, process_request, nullptr, new_block, min_pow_checked);
         }
         if (!ret) {
+            NotifyFatalAbort(GetNotifications(), result);
             LOCK(cs_main);
             if (m_options.signals) {
                 m_options.signals->BlockChecked(block, state);
@@ -2506,6 +2509,7 @@ bool kernel::ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlo
 
     BlockValidationState state; // Only used to report errors, not invalidity - ignore it
     if (!(ActiveChainstate().ActivateBestChain(state, block) >> result)) {
+        NotifyFatalAbort(GetNotifications(), result);
         LogError(m_log, "%s: ActivateBestChain failed (%s)\n", __func__, state.ToString());
         return false;
     }
@@ -2513,10 +2517,12 @@ bool kernel::ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlo
     Chainstate* bg_chain{WITH_LOCK(cs_main, return HistoricalChainstate())};
     BlockValidationState bg_state;
     if (bg_chain && !(bg_chain->ActivateBestChain(bg_state, block) >> result)) {
+        NotifyFatalAbort(GetNotifications(), result);
         LogError(m_log, "%s: [background] ActivateBestChain failed (%s)\n", __func__, bg_state.ToString());
         return false;
      }
 
+    NotifyFatalAbort(GetNotifications(), result);
     return true;
 }
 
@@ -2809,6 +2815,7 @@ util::Result<InterruptResult, AbortFailure> kernel::ChainstateManager::LoadBlock
     // Load block index from databases
     if (m_blockman.m_blockfiles_indexed) {
         result.update(m_blockman.LoadBlockIndexDB(CurrentChainstate().m_from_snapshot_blockhash));
+        NotifyFatalAbort(GetNotifications(), result);
         if (!result || IsInterrupted(*result)) return result;
 
         m_blockman.ScanAndUnlinkAlreadyPrunedFiles();
@@ -2854,7 +2861,9 @@ FlushResult<> kernel::ChainstateManager::LoadGenesisBlock()
     }
 
     try {
-        auto blockPos{m_blockman.WriteBlock(genesis_block, 0) >> result};
+        auto write{m_blockman.WriteBlock(genesis_block, 0)};
+        NotifyFatalAbort(GetNotifications(), write);
+        auto blockPos{write >> result};
         if (!blockPos || blockPos->IsNull()) {
             auto error{Untranslated("writing genesis block to disk failed")};
             LogError(m_log, "%s: %s\n", __func__, error.original);
@@ -3057,9 +3066,9 @@ FlushResult<InterruptResult, AbortFailure> kernel::ChainstateManager::LoadExtern
             }
         }
     } catch (const std::runtime_error& e) {
-        GetNotifications().fatalError(kernel::SystemErrorWhileLoadingExternalBlockFile{e.what()});
-        result.update({util::Error{Untranslated(FatalErrorString(kernel::SystemErrorWhileLoadingExternalBlockFile{e.what()}))}, AbortFailure{.fatal = true}});
+        RecordFatalAbort(/*state=*/nullptr, result, kernel::SystemErrorWhileLoadingExternalBlockFile{e.what()});
     }
+    NotifyFatalAbort(GetNotifications(), result);
     LogInfo(m_log, "Loaded %i blocks from external file in %dms", nLoaded, Ticks<std::chrono::milliseconds>(SteadyClock::now() - start));
     return result;
 }
@@ -3602,8 +3611,7 @@ FlushResult<CBlockIndex*, AbortFailure> kernel::ChainstateManager::ActivateSnaps
             snapshot_chainstate.reset();
             bool removed = DeleteCoinsDBFromDisk(m_log, *snapshot_datadir, /*is_snapshot=*/true);
             if (!removed) {
-                GetNotifications().fatalError(kernel::SnapshotChainstateDirRemovalFailed{*snapshot_datadir});
-                result.update({util::Error{Untranslated(FatalErrorString(kernel::SnapshotChainstateDirRemovalFailed{*snapshot_datadir}))}, AbortFailure{.fatal = true}});
+                RecordFatalAbort(/*state=*/nullptr, result, kernel::SnapshotChainstateDirRemovalFailed{*snapshot_datadir});
             }
         }
     };
@@ -3612,6 +3620,7 @@ FlushResult<CBlockIndex*, AbortFailure> kernel::ChainstateManager::ActivateSnaps
         LOCK(::cs_main);
         cleanup_bad_snapshot(Untranslated("Population failed:"));
         res >> result;
+        NotifyFatalAbort(GetNotifications(), result);
         return result;
     }
 
@@ -3622,6 +3631,7 @@ FlushResult<CBlockIndex*, AbortFailure> kernel::ChainstateManager::ActivateSnaps
     // very late in the IBD process, and we wouldn't want to load a useless chainstate.
     if (!CBlockIndexWorkComparator()(ActiveTip(), snapshot_chainstate->m_chain.Tip())) {
         cleanup_bad_snapshot(Untranslated("work does not exceed active chainstate"));
+        NotifyFatalAbort(GetNotifications(), result);
         return result;
     }
     // If not in-memory, persist the base blockhash for use during subsequent
@@ -3629,6 +3639,7 @@ FlushResult<CBlockIndex*, AbortFailure> kernel::ChainstateManager::ActivateSnaps
     if (!in_memory) {
         if (!kernel::WriteSnapshotBaseBlockhash(*snapshot_chainstate)) {
             cleanup_bad_snapshot(Untranslated("could not write base blockhash"));
+            NotifyFatalAbort(GetNotifications(), result);
             return result;
         }
     }
@@ -3645,6 +3656,7 @@ FlushResult<CBlockIndex*, AbortFailure> kernel::ChainstateManager::ActivateSnaps
     // Propagate flush messages to result, but do not treat a cache rebalance failure as a snapshot activation failure.
     this->MaybeRebalanceCaches() >> result;
     result.update(snapshot_start_block);
+    NotifyFatalAbort(GetNotifications(), result);
     return result;
 }
 
@@ -3902,8 +3914,8 @@ SnapshotCompletionResult kernel::ChainstateManager::MaybeValidateSnapshot(Chains
 
         error.rename_error = unvalidated_cs.InvalidateCoinsDBOnDisk();
 
-        GetNotifications().fatalError(error);
-        result.update({util::Error{Untranslated(FatalErrorString(error))}, AbortFailure{.fatal = true}});
+        RecordFatalAbort(/*state=*/nullptr, result, error);
+        NotifyFatalAbort(GetNotifications(), result);
     };
 
     CCoinsViewDB& validated_coins_db = validated_cs.CoinsDB();
@@ -4201,8 +4213,8 @@ util::Result<void, AbortFailure> kernel::ChainstateManager::ValidatedSnapshotCle
                                    const fs::filesystem_error& err) {
         LogError(m_log, "[snapshot] Error renaming path (%s) -> (%s): %s\n",
                   fs::PathToString(p_old), fs::PathToString(p_new), err.what());
-        GetNotifications().fatalError(kernel::SnapshotChainstateRenameFailed{p_old, p_new});
-        result.update({util::Error{Untranslated(FatalErrorString(kernel::SnapshotChainstateRenameFailed{p_old, p_new}))}, AbortFailure{.fatal = true}});
+        RecordFatalAbort(/*state=*/nullptr, result, kernel::SnapshotChainstateRenameFailed{p_old, p_new});
+        NotifyFatalAbort(GetNotifications(), result);
     };
 
     try {
@@ -4233,6 +4245,7 @@ util::Result<void, AbortFailure> kernel::ChainstateManager::ValidatedSnapshotCle
         LogInfo(m_log, "[snapshot] deleted background chainstate directory (%s)",
                 fs::PathToString(validated_path));
     }
+    NotifyFatalAbort(GetNotifications(), result);
     return result;
 }
 

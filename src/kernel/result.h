@@ -23,10 +23,9 @@
 //! flush and shut down. Progress toward that: AcceptBlock no longer flushes
 //! (MaybePruneBlockFilesAfterAccept); tip/connect paths use
 //! MaybeFlushChainstateIfNeeded / MaybeFlushChainstatePeriodic on
-//! ChainstateManager; flush helpers record AbortFailure without notifying.
-//! Flush API boundaries call NotifyFatalAbort. Remaining deep FatalError sites
-//! still need the same treatment. Meantime, FlushStatus and AbortFailure mark
-//! which calls can flush or abort.
+//! ChainstateManager; flush and engine helpers record AbortFailure without
+//! notifying. API boundaries call NotifyFatalAbort (clears payload). Meantime,
+//! FlushStatus and AbortFailure mark which calls can flush or abort.
 
 namespace kernel {
 //! Result type for functions that might trigger flushes, indicating whether
