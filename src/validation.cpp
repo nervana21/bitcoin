@@ -229,6 +229,7 @@ bool CheckSequenceLocksAtTip(CBlockIndex* tip,
 
     return EvaluateSequenceLocks(index, {lock_points.height, lock_points.time});
 }
+
 CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
 {
     int halvings = nHeight / consensusParams.nSubsidyHalvingInterval;
@@ -524,6 +525,7 @@ script_verify_flags GetBlockScriptFlags(const CBlockIndex& block_index, const Co
 
     return flags;
 }
+
 
 bool CheckBlockHeader(const CBlockHeader& block, BlockValidationState& state, const Consensus::Params& consensusParams, bool fCheckPOW)
 {
@@ -835,6 +837,7 @@ bool ContextualCheckBlock(const CBlock& block, BlockValidationState& state, cons
     return true;
 }
 
+
 FlushResult<void, BlockValidationState> TestBlockValidity(
     Chainstate& chainstate,
     const CBlock& block,
@@ -1111,7 +1114,9 @@ kernel::ChainstateManager::~ChainstateManager()
     LOCK(::cs_main);
 
     m_versionbitscache.Clear();
+    kernel::UnregisterValidationMutexOwner(this);
 }
+
 
 bool IsBIP30Repeat(const CBlockIndex& block_index)
 {
