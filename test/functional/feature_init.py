@@ -302,7 +302,8 @@ class InitTest(BitcoinTestFramework):
             self.log.debug(f"Calling waitforblockheight with {self.rpc_timeout} sec RPC timeout")
             fut = ex.submit(node.waitforblockheight, height=current_height+1, timeout=self.rpc_timeout*1000*2)
 
-            self.wait_until(lambda: any(c["method"] == "waitforblockheight" for c in node.cli.getrpcinfo()["active_commands"]))
+            rpc = node.create_new_rpc_connection(mode="AUTHPROXY")
+            self.wait_until(lambda: any(c["method"] == "waitforblockheight" for c in rpc.getrpcinfo()["active_commands"]))
 
             self.log.debug(f"Sending break signal to pid {node.process.pid}")
             if platform.system() == 'Windows':
