@@ -1543,6 +1543,10 @@ BOOST_AUTO_TEST_CASE(btck_chainman_regtest_tests)
 
     BOOST_REQUIRE_EQUAL(blocks.size(), REGTEST_BLOCK_DATA.size());
 
+    // One ChainstateManager may own the process validation mutex.
+    // Drop this manager before the fresh one. Reload it after that block.
+    chainman.reset();
+
     // Validate every block with a fresh chainman by first processing its
     // header, then validating without the UTXO set.
     {
@@ -1587,6 +1591,13 @@ BOOST_AUTO_TEST_CASE(btck_chainman_regtest_tests)
             BOOST_CHECK_EQUAL(state.GetBlockValidationResult(), BlockValidationResult::CONSENSUS);
         }
     }
+
+    chainman = create_chainman(
+        test_directory, /*reindex=*/false, /*wipe_chainstate=*/false,
+        /*chainstate_db_in_memory=*/false, context);
+    chain = chainman->GetChain();
+    tip = chain.Entries().back();
+    tip_2 = tip.GetPrevious().value();
 
     // Read spent outputs for current tip and its previous block
     BlockSpentOutputs block_spent_outputs{chainman->ReadBlockSpentOutputs(tip)};
