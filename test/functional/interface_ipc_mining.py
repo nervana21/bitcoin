@@ -212,22 +212,32 @@ class IPCMiningTest(BitcoinTestFramework):
                 header = from_hex(CBlockHeader(), self.nodes[1].getblockheader(node1_block_hash, False))
                 header_only_peer = self.nodes[0].add_p2p_connection(P2PInterface())
                 header_only_peer.send_and_ping(msg_headers([header]))
-                start = time.time()
+                # Steady clock tick before createNewBlock while tip is still updating.
+                # Monotonic time only moves forward so the lower bound ignores wall clock jumps.
+                start = time.monotonic()
                 async with destroying((await mining.createNewBlock(ctx, self.default_block_create_options)).result, ctx):
                     pass
                 # Lower-bound only: a heavily loaded CI host might still exceed 0.9s
                 # even without the cooldown, so this can miss regressions but avoids
                 # spurious failures.
-                assert_greater_than_or_equal(time.time() - start, 0.9)
+                # Read the steady clock after createNewBlock returns.
+                now = time.monotonic()
+                # Elapsed seconds equals end tick minus start tick.
+                elapsed = now - start
+                assert_greater_than_or_equal(elapsed, 0.9)
 
                 self.log.debug("createNewBlock() should wake up promptly after tip advances")
                 success = False
                 duration = 0.0
                 async def wait_fn():
                     nonlocal success, duration
-                    start = time.time()
+                    # Steady clock tick before createNewBlock waits for the tip advance.
+                    start = time.monotonic()
                     res = await mining.createNewBlock(ctx, self.default_block_create_options)
-                    duration = time.time() - start
+                    # Read the steady clock after createNewBlock returns.
+                    now = time.monotonic()
+                    # Duration is how long that wait took in steady clock seconds.
+                    duration = now - start
                     success = res._has("result")
                 def do_fn():
                     block_hex = self.nodes[1].getblock(node1_block_hash, False)

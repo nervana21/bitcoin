@@ -76,8 +76,16 @@ class ChainstateWriteCrashTest(BitcoinTestFramework):
         Exceptions during startup or subsequent RPC calls should indicate a node crash (due to -dbcrashratio), in which case we try again. Give up
         after a timeout. Returns the utxo hash of the given node."""
 
-        time_start = time.time()
-        while time.time() - time_start < 120 * self.options.timeout_factor:
+        # Read the steady clock when we begin retrying restarts.
+        # Monotonic time only moves forward so the give up window ignores wall clock jumps.
+        time_start = time.monotonic()
+        # Scale one hundred twenty seconds by the test timeout factor.
+        restart_limit = 120 * self.options.timeout_factor
+        # Read the steady clock for the first loop check.
+        now = time.monotonic()
+        # How long we have already spent retrying.
+        elapsed = now - time_start
+        while elapsed < restart_limit:
             try:
                 # Any of these RPC calls could throw due to node crash
                 self.start_node(node_index)
@@ -90,6 +98,9 @@ class ChainstateWriteCrashTest(BitcoinTestFramework):
                 # enforces that bitcoind crashed.
                 self.wait_for_node_exit(node_index, timeout=10)
             self.crashed_on_restart += 1
+            # Refresh the steady clock for the next loop check.
+            now = time.monotonic()
+            elapsed = now - time_start
 
         # If we got here, bitcoind isn't coming back up on restart.  Could be a
         # bug in bitcoind, or we've gotten unlucky with our dbcrash ratio --
