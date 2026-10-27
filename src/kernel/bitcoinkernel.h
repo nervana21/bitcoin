@@ -514,7 +514,7 @@ typedef void (*btck_DestroyCallback)(void* user_data);
 typedef void (*btck_NotifyBlockTip)(void* user_data, btck_SynchronizationState state, const btck_BlockTreeEntry* entry, double verification_progress);
 typedef void (*btck_NotifyHeaderTip)(void* user_data, const btck_HeaderTip* header_tip);
 typedef void (*btck_NotifyProgress)(void* user_data, const btck_Progress* progress);
-typedef void (*btck_NotifyWarningSet)(void* user_data, btck_Warning warning, const char* message, size_t message_len);
+typedef void (*btck_NotifyWarningSet)(void* user_data, btck_Warning warning, btck_StringView message);
 typedef void (*btck_NotifyWarningUnset)(void* user_data, btck_Warning warning);
 typedef void (*btck_NotifyFlushError)(void* user_data, btck_FlushError error);
 typedef void (*btck_NotifyFatalError)(void* user_data, btck_FatalError error);
