@@ -126,7 +126,14 @@ class TestKernelNotifications : public KernelNotifications
 public:
     void HeaderTipHandler(SynchronizationState state, int64_t height, int64_t timestamp, bool presync) override
     {
+        BOOST_CHECK_GE(height, 0);
         BOOST_CHECK_GT(timestamp, 0);
+    }
+
+    void ProgressHandler(std::string_view title, int progress_percent, bool resume_possible) override
+    {
+        BOOST_CHECK_GE(progress_percent, 0);
+        BOOST_CHECK_LE(progress_percent, 100);
     }
 
     void WarningSetHandler(Warning warning, std::string_view message) override
