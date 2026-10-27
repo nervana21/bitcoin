@@ -76,8 +76,8 @@ class ChainstateWriteCrashTest(BitcoinTestFramework):
         Exceptions during startup or subsequent RPC calls should indicate a node crash (due to -dbcrashratio), in which case we try again. Give up
         after a timeout. Returns the utxo hash of the given node."""
 
-        time_start = time.time()
-        while time.time() - time_start < 120 * self.options.timeout_factor:
+        time_start = time.monotonic()
+        while time.monotonic() - time_start < 120 * self.options.timeout_factor:
             try:
                 # Any of these RPC calls could throw due to node crash
                 self.start_node(node_index)

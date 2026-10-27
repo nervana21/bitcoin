@@ -257,8 +257,8 @@ class ImportDescriptorsTest(BitcoinTestFramework):
             # Keep trying because an abort before wallet transaction scan starts
             # is reset when the scan loop begins.
             abort_succeeded = False
-            abort_deadline = time.time() + 30 * self.options.timeout_factor
-            while not importing.done() and time.time() < abort_deadline:
+            abort_deadline = time.monotonic() + 30 * self.options.timeout_factor
+            while not importing.done() and time.monotonic() < abort_deadline:
                 abort_succeeded = abort_rpc.abortrescan() or abort_succeeded
 
             assert_equal(abort_succeeded, True)
