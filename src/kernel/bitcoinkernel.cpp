@@ -392,7 +392,7 @@ public:
     }
     void warningSet(kernel::Warning id, const bilingual_str& message) override
     {
-        if (m_cbs.warning_set) m_cbs.warning_set(m_cbs.user_data, cast_btck_warning(id), message.original.c_str(), message.original.length());
+        if (m_cbs.warning_set) m_cbs.warning_set(m_cbs.user_data, cast_btck_warning(id), to_btck(message.original));
     }
     void warningUnset(kernel::Warning id) override
     {
