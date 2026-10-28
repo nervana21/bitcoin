@@ -959,6 +959,90 @@ BOOST_AUTO_TEST_CASE(btck_context_tests)
     }
 }
 
+BOOST_AUTO_TEST_CASE(btck_interface_callbacks_user_data_tests)
+{
+    int notifications_destroyed{0};
+    auto count_destroy{+[](void* user_data) { ++*static_cast<int*>(user_data); }};
+
+    btck_NotificationInterfaceCallbacks* notifications{btck_notification_interface_callbacks_create(&notifications_destroyed, count_destroy)};
+    btck_ContextOptions* options{btck_context_options_create()};
+    btck_context_options_set_notifications(options, notifications);
+
+    btck_notification_interface_callbacks_destroy(notifications);
+    BOOST_CHECK_EQUAL(notifications_destroyed, 0);
+
+    btck_Context* context{btck_context_create(options)};
+    BOOST_REQUIRE(context);
+    btck_context_options_destroy(options);
+    BOOST_CHECK_EQUAL(notifications_destroyed, 0);
+
+    btck_context_destroy(context);
+    BOOST_CHECK_EQUAL(notifications_destroyed, 1);
+
+    int never_set_destroyed{0};
+    btck_NotificationInterfaceCallbacks* never_set{btck_notification_interface_callbacks_create(&never_set_destroyed, count_destroy)};
+    btck_notification_interface_callbacks_destroy(never_set);
+    BOOST_CHECK_EQUAL(never_set_destroyed, 1);
+}
+
+BOOST_AUTO_TEST_CASE(btck_interface_callbacks_copy_on_set_tests)
+{
+    auto test_directory{TestDirectory{"callbacks_copy_on_set_test_bitcoin_kernel"}};
+    struct Counts {
+        int block_tip{0};
+        int replaced_block_tip{0};
+        int destroyed{0};
+    } counts;
+
+    btck_NotificationInterfaceCallbacks* notifications{btck_notification_interface_callbacks_create(
+        &counts, +[](void* user_data) { ++static_cast<Counts*>(user_data)->destroyed; })};
+    btck_notification_interface_callbacks_set_block_tip(notifications, +[](void* user_data, btck_SynchronizationState, const btck_BlockTreeEntry*, double) {
+        ++static_cast<Counts*>(user_data)->block_tip;
+    });
+    btck_ChainParameters* params{btck_chain_parameters_create(btck_ChainType_REGTEST)};
+    btck_ContextOptions* options{btck_context_options_create()};
+    btck_context_options_set_chainparams(options, params);
+    btck_context_options_set_notifications(options, notifications);
+    btck_chain_parameters_destroy(params);
+
+    // The options hold a copy, so replacing the callback afterwards must not reach them.
+    btck_notification_interface_callbacks_set_block_tip(notifications, +[](void* user_data, btck_SynchronizationState, const btck_BlockTreeEntry*, double) {
+        ++static_cast<Counts*>(user_data)->replaced_block_tip;
+    });
+    btck_notification_interface_callbacks_destroy(notifications);
+
+    btck_Context* context{btck_context_create(options)};
+    BOOST_REQUIRE(context);
+    btck_context_options_destroy(options);
+
+    const auto data_dir{PathToString(test_directory.m_directory)};
+    const auto blocks_dir{PathToString(test_directory.m_directory / "blocks")};
+    btck_ChainstateManagerOptions* chainman_opts{btck_chainstate_manager_options_create(
+        context, data_dir.c_str(), data_dir.length(), blocks_dir.c_str(), blocks_dir.length())};
+    BOOST_REQUIRE(chainman_opts);
+    btck_chainstate_manager_options_update_chainstate_db_in_memory(chainman_opts, 1);
+    btck_ChainstateManager* chainman{btck_chainstate_manager_create(chainman_opts)};
+    BOOST_REQUIRE(chainman);
+    btck_chainstate_manager_options_destroy(chainman_opts);
+
+    // The chainstate manager keeps the context, and with it the user data, alive.
+    btck_context_destroy(context);
+    BOOST_CHECK_EQUAL(counts.destroyed, 0);
+
+    const auto raw_block{hex_string_to_byte_vec(REGTEST_BLOCK_DATA[0])};
+    btck_Block* block{btck_block_create(raw_block.data(), raw_block.size())};
+    BOOST_REQUIRE(block);
+    int new_block{0};
+    BOOST_CHECK_EQUAL(btck_chainstate_manager_process_block(chainman, block, &new_block), 0);
+    BOOST_CHECK_EQUAL(new_block, 1);
+    btck_block_destroy(block);
+    BOOST_CHECK_GT(counts.block_tip, 0);
+    BOOST_CHECK_EQUAL(counts.replaced_block_tip, 0);
+
+    btck_chainstate_manager_destroy(chainman);
+    BOOST_CHECK_EQUAL(counts.destroyed, 1);
+}
+
 BOOST_AUTO_TEST_CASE(btck_block_header_tests)
 {
     // Block header format: version(4) + prev_hash(32) + merkle_root(32) + timestamp(4) + bits(4) + nonce(4) = 80 bytes

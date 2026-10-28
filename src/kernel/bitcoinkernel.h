@@ -608,32 +608,24 @@ typedef struct {
 } btck_ValidationInterfaceCallbacks;
 
 /**
- * A struct for holding the kernel notification callbacks. The user data
- * pointer may be used to point to user-defined structures to make processing
- * the notifications easier.
+ * Opaque data structure for holding the kernel notification callbacks.
  *
- * If user_data_destroy is provided, the kernel will automatically call this
- * callback to clean up user_data when the notification interface object is destroyed.
- * If user_data_destroy is NULL, it is the user's responsibility to ensure that
- * the user_data outlives the kernel objects. Notifications can
+ * Created with a user data pointer that is passed to every callback. Each
+ * callback is registered with its own
+ * btck_notification_interface_callbacks_set_* function, and unset callbacks
+ * are not called. New callbacks can be added over time without breaking the
+ * ABI.
+ *
+ * If user_data_destroy is provided, the kernel calls it once the callbacks
+ * object, every context options and context it was set on, and every object
+ * keeping such a context alive, e.g. a chainstate manager, have been
+ * destroyed. It runs on the thread that releases the last of them. If
+ * user_data_destroy is NULL, it is the user's responsibility to
+ * ensure that the user_data outlives the kernel objects. Notifications can
  * occur even as kernel objects are deleted, so care has to be taken to ensure
  * safe unwinding.
  */
-typedef struct {
-    void* user_data;                        //!< Holds a user-defined opaque structure that is passed to the notification callbacks.
-                                            //!< If user_data_destroy is also defined ownership of the user_data is passed to the
-                                            //!< created context options and subsequently context.
-    btck_DestroyCallback user_data_destroy; //!< Frees the provided user data structure.
-    btck_NotifyBlockTip block_tip;          //!< The chain's tip was updated to the provided block entry.
-    btck_NotifyHeaderTip header_tip;        //!< A new best block header was added.
-    btck_NotifyProgress progress;           //!< Reports on current block synchronization progress.
-    btck_NotifyWarningSet warning_set;      //!< A warning issued by the kernel library during validation.
-    btck_NotifyWarningUnset warning_unset;  //!< A previous condition leading to the issuance of a warning is no longer given.
-    btck_NotifyFlushError flush_error;      //!< An error encountered when flushing data to disk. The library reports the
-                                            //!< error type only; rendering it as a message is up to the user.
-    btck_NotifyFatalError fatal_error;      //!< An unrecoverable system error encountered by the library. The library
-                                            //!< reports the error type only; rendering it as a message is up to the user.
-} btck_NotificationInterfaceCallbacks;
+typedef struct btck_NotificationInterfaceCallbacks btck_NotificationInterfaceCallbacks;
 
 /**
  * A collection of status codes that may be issued by the script verify function.
@@ -1302,6 +1294,106 @@ BITCOINKERNEL_API void btck_chain_parameters_destroy(btck_ChainParameters* chain
 
 ///@}
 
+/** @name NotificationInterfaceCallbacks
+ * Functions for working with kernel notification callbacks.
+ */
+///@{
+
+/**
+ * @brief Create an empty set of notification callbacks. No callback is
+ * registered until it is set.
+ *
+ * @param[in] user_data         Nullable, passed to every notification callback.
+ * @param[in] user_data_destroy Nullable, frees user_data once it is no longer used.
+ * @return                      The notification callbacks.
+ */
+BITCOINKERNEL_API btck_NotificationInterfaceCallbacks* BITCOINKERNEL_WARN_UNUSED_RESULT btck_notification_interface_callbacks_create(
+    void* user_data,
+    btck_DestroyCallback user_data_destroy);
+
+/**
+ * @brief Set the callback for when the chain's tip was updated to the provided
+ * block entry.
+ *
+ * @param[in] callbacks Non-null.
+ * @param[in] block_tip Nullable, unsets the callback if null.
+ */
+BITCOINKERNEL_API void btck_notification_interface_callbacks_set_block_tip(
+    btck_NotificationInterfaceCallbacks* callbacks,
+    btck_NotifyBlockTip block_tip) BITCOINKERNEL_ARG_NONNULL(1);
+
+/**
+ * @brief Set the callback for when a new best block header was added.
+ *
+ * @param[in] callbacks  Non-null.
+ * @param[in] header_tip Nullable, unsets the callback if null.
+ */
+BITCOINKERNEL_API void btck_notification_interface_callbacks_set_header_tip(
+    btck_NotificationInterfaceCallbacks* callbacks,
+    btck_NotifyHeaderTip header_tip) BITCOINKERNEL_ARG_NONNULL(1);
+
+/**
+ * @brief Set the callback that reports on current block synchronization
+ * progress.
+ *
+ * @param[in] callbacks Non-null.
+ * @param[in] progress  Nullable, unsets the callback if null.
+ */
+BITCOINKERNEL_API void btck_notification_interface_callbacks_set_progress(
+    btck_NotificationInterfaceCallbacks* callbacks,
+    btck_NotifyProgress progress) BITCOINKERNEL_ARG_NONNULL(1);
+
+/**
+ * @brief Set the callback for a warning issued by the kernel library during
+ * validation.
+ *
+ * @param[in] callbacks   Non-null.
+ * @param[in] warning_set Nullable, unsets the callback if null.
+ */
+BITCOINKERNEL_API void btck_notification_interface_callbacks_set_warning_set(
+    btck_NotificationInterfaceCallbacks* callbacks,
+    btck_NotifyWarningSet warning_set) BITCOINKERNEL_ARG_NONNULL(1);
+
+/**
+ * @brief Set the callback for when a previous condition leading to the
+ * issuance of a warning is no longer given.
+ *
+ * @param[in] callbacks     Non-null.
+ * @param[in] warning_unset Nullable, unsets the callback if null.
+ */
+BITCOINKERNEL_API void btck_notification_interface_callbacks_set_warning_unset(
+    btck_NotificationInterfaceCallbacks* callbacks,
+    btck_NotifyWarningUnset warning_unset) BITCOINKERNEL_ARG_NONNULL(1);
+
+/**
+ * @brief Set the callback for an error encountered when flushing data to disk.
+ *
+ * @param[in] callbacks   Non-null.
+ * @param[in] flush_error Nullable, unsets the callback if null.
+ */
+BITCOINKERNEL_API void btck_notification_interface_callbacks_set_flush_error(
+    btck_NotificationInterfaceCallbacks* callbacks,
+    btck_NotifyFlushError flush_error) BITCOINKERNEL_ARG_NONNULL(1);
+
+/**
+ * @brief Set the callback for an unrecoverable system error encountered by the
+ * library.
+ *
+ * @param[in] callbacks   Non-null.
+ * @param[in] fatal_error Nullable, unsets the callback if null.
+ */
+BITCOINKERNEL_API void btck_notification_interface_callbacks_set_fatal_error(
+    btck_NotificationInterfaceCallbacks* callbacks,
+    btck_NotifyFatalError fatal_error) BITCOINKERNEL_ARG_NONNULL(1);
+
+/**
+ * Destroy the notification callbacks. Context options and contexts they were
+ * set on keep working.
+ */
+BITCOINKERNEL_API void btck_notification_interface_callbacks_destroy(btck_NotificationInterfaceCallbacks* callbacks);
+
+///@}
+
 /** @name ContextOptions
  * Functions for working with context options.
  */
@@ -1343,14 +1435,16 @@ BITCOINKERNEL_API void btck_context_options_set_logger(
 
 /**
  * @brief Set the kernel notifications for the context options. The context
- * created with the options will be configured with these notifications.
+ * created with the options will be configured with these notifications. The
+ * callbacks are copied, so later changes to @p notifications do not affect the
+ * context options, and @p notifications may be destroyed afterwards.
  *
  * @param[in] context_options Non-null, previously created by @ref btck_context_options_create.
- * @param[in] notifications   Is set to the context options.
+ * @param[in] notifications   Non-null, created by @ref btck_notification_interface_callbacks_create.
  */
 BITCOINKERNEL_API void btck_context_options_set_notifications(
     btck_ContextOptions* context_options,
-    btck_NotificationInterfaceCallbacks notifications) BITCOINKERNEL_ARG_NONNULL(1);
+    const btck_NotificationInterfaceCallbacks* notifications) BITCOINKERNEL_ARG_NONNULL(1, 2);
 
 /**
  * @brief Set the validation interface callbacks for the context options. The
