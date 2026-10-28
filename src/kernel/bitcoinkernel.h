@@ -589,23 +589,21 @@ typedef uint32_t btck_TxValidationResult;
 #define btck_TxValidationResult_UNKNOWN             ((btck_TxValidationResult)(12)) //!< transaction was not validated because package failed
 
 /**
- * Holds the validation interface callbacks. The user data pointer may be used
- * to point to user-defined structures to make processing the validation
- * callbacks easier. Note that these callbacks block any further validation
- * execution when they are called.
+ * Opaque data structure for holding the validation interface callbacks. Note
+ * that these callbacks block any further validation execution when they are
+ * called.
+ *
+ * Created with a user data pointer that is passed to every callback. Each
+ * callback is registered with its own btck_validation_interface_callbacks_set_*
+ * function, and unset callbacks are not called. New callbacks can be added
+ * over time without breaking the ABI.
+ *
+ * If user_data_destroy is provided, the kernel calls it once the callbacks
+ * object, every context options and context it was set on, and every object
+ * keeping such a context alive, e.g. a chainstate manager, have been
+ * destroyed. It runs on the thread that releases the last of them.
  */
-typedef struct {
-    void* user_data;                                              //!< Holds a user-defined opaque structure that is passed to the validation
-                                                                  //!< interface callbacks. If user_data_destroy is also defined ownership of the
-                                                                  //!< user_data is passed to the created context options and subsequently context.
-    btck_DestroyCallback user_data_destroy;                       //!< Frees the provided user data structure.
-    btck_ValidationInterfaceBlockChecked block_checked;           //!< Called when a new block has been fully validated. Contains the
-                                                                  //!< result of its validation.
-    btck_ValidationInterfacePoWValidBlock pow_valid_block;        //!< Called when a new block extends the header chain and has a valid transaction
-                                                                  //!< and segwit merkle root.
-    btck_ValidationInterfaceBlockConnected block_connected;       //!< Called when a block is valid and has now been connected to the best chain.
-    btck_ValidationInterfaceBlockDisconnected block_disconnected; //!< Called during a re-org when a block has been removed from the best chain.
-} btck_ValidationInterfaceCallbacks;
+typedef struct btck_ValidationInterfaceCallbacks btck_ValidationInterfaceCallbacks;
 
 /**
  * Opaque data structure for holding the kernel notification callbacks.
@@ -1394,6 +1392,75 @@ BITCOINKERNEL_API void btck_notification_interface_callbacks_destroy(btck_Notifi
 
 ///@}
 
+/** @name ValidationInterfaceCallbacks
+ * Functions for working with validation interface callbacks.
+ */
+///@{
+
+/**
+ * @brief Create an empty set of validation interface callbacks. No callback is
+ * registered until it is set.
+ *
+ * @param[in] user_data         Nullable, passed to every validation interface callback.
+ * @param[in] user_data_destroy Nullable, frees user_data once it is no longer used.
+ * @return                      The validation interface callbacks.
+ */
+BITCOINKERNEL_API btck_ValidationInterfaceCallbacks* BITCOINKERNEL_WARN_UNUSED_RESULT btck_validation_interface_callbacks_create(
+    void* user_data,
+    btck_DestroyCallback user_data_destroy);
+
+/**
+ * @brief Set the callback for when a new block has been fully validated. It
+ * receives the result of its validation.
+ *
+ * @param[in] callbacks     Non-null.
+ * @param[in] block_checked Nullable, unsets the callback if null.
+ */
+BITCOINKERNEL_API void btck_validation_interface_callbacks_set_block_checked(
+    btck_ValidationInterfaceCallbacks* callbacks,
+    btck_ValidationInterfaceBlockChecked block_checked) BITCOINKERNEL_ARG_NONNULL(1);
+
+/**
+ * @brief Set the callback for when a new block extends the header chain and
+ * has a valid transaction and segwit merkle root.
+ *
+ * @param[in] callbacks       Non-null.
+ * @param[in] pow_valid_block Nullable, unsets the callback if null.
+ */
+BITCOINKERNEL_API void btck_validation_interface_callbacks_set_pow_valid_block(
+    btck_ValidationInterfaceCallbacks* callbacks,
+    btck_ValidationInterfacePoWValidBlock pow_valid_block) BITCOINKERNEL_ARG_NONNULL(1);
+
+/**
+ * @brief Set the callback for when a block is valid and has now been connected
+ * to the best chain.
+ *
+ * @param[in] callbacks       Non-null.
+ * @param[in] block_connected Nullable, unsets the callback if null.
+ */
+BITCOINKERNEL_API void btck_validation_interface_callbacks_set_block_connected(
+    btck_ValidationInterfaceCallbacks* callbacks,
+    btck_ValidationInterfaceBlockConnected block_connected) BITCOINKERNEL_ARG_NONNULL(1);
+
+/**
+ * @brief Set the callback for when a block has been removed from the best chain
+ * during a re-org.
+ *
+ * @param[in] callbacks          Non-null.
+ * @param[in] block_disconnected Nullable, unsets the callback if null.
+ */
+BITCOINKERNEL_API void btck_validation_interface_callbacks_set_block_disconnected(
+    btck_ValidationInterfaceCallbacks* callbacks,
+    btck_ValidationInterfaceBlockDisconnected block_disconnected) BITCOINKERNEL_ARG_NONNULL(1);
+
+/**
+ * Destroy the validation interface callbacks. Context options and contexts
+ * they were set on keep working.
+ */
+BITCOINKERNEL_API void btck_validation_interface_callbacks_destroy(btck_ValidationInterfaceCallbacks* callbacks);
+
+///@}
+
 /** @name ContextOptions
  * Functions for working with context options.
  */
@@ -1450,15 +1517,16 @@ BITCOINKERNEL_API void btck_context_options_set_notifications(
  * @brief Set the validation interface callbacks for the context options. The
  * context created with the options will be configured for these validation
  * interface callbacks. The callbacks will then be triggered from validation
- * events issued by the chainstate manager created from the same context.
+ * events issued by the chainstate manager created from the same context. The
+ * callbacks are copied, so later changes to @p validation_interface_callbacks
+ * do not affect the context options, and it may be destroyed afterwards.
  *
  * @param[in] context_options                Non-null, previously created with btck_context_options_create.
- * @param[in] validation_interface_callbacks The callbacks used for passing validation information to the
- *                                           user.
+ * @param[in] validation_interface_callbacks Non-null, created by @ref btck_validation_interface_callbacks_create.
  */
 BITCOINKERNEL_API void btck_context_options_set_validation_interface(
     btck_ContextOptions* context_options,
-    btck_ValidationInterfaceCallbacks validation_interface_callbacks) BITCOINKERNEL_ARG_NONNULL(1);
+    const btck_ValidationInterfaceCallbacks* validation_interface_callbacks) BITCOINKERNEL_ARG_NONNULL(1, 2);
 
 /**
  * Destroy the context options.

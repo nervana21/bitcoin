@@ -962,22 +962,29 @@ BOOST_AUTO_TEST_CASE(btck_context_tests)
 BOOST_AUTO_TEST_CASE(btck_interface_callbacks_user_data_tests)
 {
     int notifications_destroyed{0};
+    int vi_destroyed{0};
     auto count_destroy{+[](void* user_data) { ++*static_cast<int*>(user_data); }};
 
     btck_NotificationInterfaceCallbacks* notifications{btck_notification_interface_callbacks_create(&notifications_destroyed, count_destroy)};
+    btck_ValidationInterfaceCallbacks* vi{btck_validation_interface_callbacks_create(&vi_destroyed, count_destroy)};
     btck_ContextOptions* options{btck_context_options_create()};
     btck_context_options_set_notifications(options, notifications);
+    btck_context_options_set_validation_interface(options, vi);
 
     btck_notification_interface_callbacks_destroy(notifications);
+    btck_validation_interface_callbacks_destroy(vi);
     BOOST_CHECK_EQUAL(notifications_destroyed, 0);
+    BOOST_CHECK_EQUAL(vi_destroyed, 0);
 
     btck_Context* context{btck_context_create(options)};
     BOOST_REQUIRE(context);
     btck_context_options_destroy(options);
     BOOST_CHECK_EQUAL(notifications_destroyed, 0);
+    BOOST_CHECK_EQUAL(vi_destroyed, 0);
 
     btck_context_destroy(context);
     BOOST_CHECK_EQUAL(notifications_destroyed, 1);
+    BOOST_CHECK_EQUAL(vi_destroyed, 1);
 
     int never_set_destroyed{0};
     btck_NotificationInterfaceCallbacks* never_set{btck_notification_interface_callbacks_create(&never_set_destroyed, count_destroy)};

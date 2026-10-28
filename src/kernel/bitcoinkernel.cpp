@@ -371,8 +371,9 @@ constexpr btck_LogCategory to_btck(BCLog::LogFlags flag)
     }
 }
 
-//! Shared by a callbacks object and every KernelNotifications copied from it.
-//! user_data_destroy runs once the last of them is destroyed.
+//! Shared by a callbacks object and every KernelNotifications or
+//! KernelValidationInterface copied from it. user_data_destroy runs once the
+//! last of them is destroyed.
 std::shared_ptr<void> MakeUserData(void* user_data, btck_DestroyCallback user_data_destroy)
 {
     return std::shared_ptr<void>{user_data, [user_data_destroy](void* ptr) {
@@ -389,6 +390,14 @@ struct NotificationCallbacks {
     btck_NotifyWarningUnset warning_unset{nullptr};
     btck_NotifyFlushError flush_error{nullptr};
     btck_NotifyFatalError fatal_error{nullptr};
+};
+
+struct ValidationInterfaceCallbacks {
+    std::shared_ptr<void> user_data;
+    btck_ValidationInterfaceBlockChecked block_checked{nullptr};
+    btck_ValidationInterfacePoWValidBlock pow_valid_block{nullptr};
+    btck_ValidationInterfaceBlockConnected block_connected{nullptr};
+    btck_ValidationInterfaceBlockDisconnected block_disconnected{nullptr};
 };
 
 class KernelNotifications final : public kernel::Notifications
@@ -439,25 +448,17 @@ public:
 
 class KernelValidationInterface final : public CValidationInterface
 {
+private:
+    const ValidationInterfaceCallbacks m_cbs;
+
 public:
-    btck_ValidationInterfaceCallbacks m_cbs;
-
-    explicit KernelValidationInterface(const btck_ValidationInterfaceCallbacks vi_cbs) : m_cbs{vi_cbs} {}
-
-    ~KernelValidationInterface()
-    {
-        if (m_cbs.user_data && m_cbs.user_data_destroy) {
-            m_cbs.user_data_destroy(m_cbs.user_data);
-        }
-        m_cbs.user_data = nullptr;
-        m_cbs.user_data_destroy = nullptr;
-    }
+    explicit KernelValidationInterface(ValidationInterfaceCallbacks vi_cbs) : m_cbs{std::move(vi_cbs)} {}
 
 protected:
     void BlockChecked(const std::shared_ptr<const CBlock>& block, const BlockValidationState& stateIn) override
     {
         if (m_cbs.block_checked) {
-            m_cbs.block_checked(m_cbs.user_data,
+            m_cbs.block_checked(m_cbs.user_data.get(),
                                 btck_Block::copy(btck_Block::ref(&block)),
                                 btck_BlockValidationState::ref(&stateIn));
         }
@@ -466,7 +467,7 @@ protected:
     void NewPoWValidBlock(const CBlockIndex* pindex, const std::shared_ptr<const CBlock>& block) override
     {
         if (m_cbs.pow_valid_block) {
-            m_cbs.pow_valid_block(m_cbs.user_data,
+            m_cbs.pow_valid_block(m_cbs.user_data.get(),
                                   btck_Block::copy(btck_Block::ref(&block)),
                                   btck_BlockTreeEntry::ref(pindex));
         }
@@ -475,7 +476,7 @@ protected:
     void BlockConnected(const ChainstateRole& role, const std::shared_ptr<const CBlock>& block, const CBlockIndex* pindex) override
     {
         if (m_cbs.block_connected) {
-            m_cbs.block_connected(m_cbs.user_data,
+            m_cbs.block_connected(m_cbs.user_data.get(),
                                   btck_Block::copy(btck_Block::ref(&block)),
                                   btck_BlockTreeEntry::ref(pindex));
         }
@@ -484,7 +485,7 @@ protected:
     void BlockDisconnected(const std::shared_ptr<const CBlock>& block, const CBlockIndex* pindex) override
     {
         if (m_cbs.block_disconnected) {
-            m_cbs.block_disconnected(m_cbs.user_data,
+            m_cbs.block_disconnected(m_cbs.user_data.get(),
                                      btck_Block::copy(btck_Block::ref(&block)),
                                      btck_BlockTreeEntry::ref(pindex));
         }
@@ -680,6 +681,7 @@ struct btck_TransactionOutput : Handle<btck_TransactionOutput, CTxOut> {};
 struct btck_ScriptPubkey : Handle<btck_ScriptPubkey, CScript> {};
 struct btck_LoggingConnection : Handle<btck_LoggingConnection, LogConnection> {};
 struct btck_NotificationInterfaceCallbacks : Handle<btck_NotificationInterfaceCallbacks, NotificationCallbacks> {};
+struct btck_ValidationInterfaceCallbacks : Handle<btck_ValidationInterfaceCallbacks, ValidationInterfaceCallbacks> {};
 struct btck_ContextOptions : Handle<btck_ContextOptions, ContextOptions> {};
 struct btck_Context : Handle<btck_Context, std::shared_ptr<const Context>> {};
 struct btck_ChainParameters : Handle<btck_ChainParameters, CChainParams> {};
@@ -1284,6 +1286,36 @@ void btck_notification_interface_callbacks_destroy(btck_NotificationInterfaceCal
     delete callbacks;
 }
 
+btck_ValidationInterfaceCallbacks* btck_validation_interface_callbacks_create(void* user_data, btck_DestroyCallback user_data_destroy)
+{
+    return btck_ValidationInterfaceCallbacks::create(ValidationInterfaceCallbacks{.user_data = MakeUserData(user_data, user_data_destroy)});
+}
+
+void btck_validation_interface_callbacks_set_block_checked(btck_ValidationInterfaceCallbacks* callbacks, btck_ValidationInterfaceBlockChecked block_checked)
+{
+    btck_ValidationInterfaceCallbacks::get(callbacks).block_checked = block_checked;
+}
+
+void btck_validation_interface_callbacks_set_pow_valid_block(btck_ValidationInterfaceCallbacks* callbacks, btck_ValidationInterfacePoWValidBlock pow_valid_block)
+{
+    btck_ValidationInterfaceCallbacks::get(callbacks).pow_valid_block = pow_valid_block;
+}
+
+void btck_validation_interface_callbacks_set_block_connected(btck_ValidationInterfaceCallbacks* callbacks, btck_ValidationInterfaceBlockConnected block_connected)
+{
+    btck_ValidationInterfaceCallbacks::get(callbacks).block_connected = block_connected;
+}
+
+void btck_validation_interface_callbacks_set_block_disconnected(btck_ValidationInterfaceCallbacks* callbacks, btck_ValidationInterfaceBlockDisconnected block_disconnected)
+{
+    btck_ValidationInterfaceCallbacks::get(callbacks).block_disconnected = block_disconnected;
+}
+
+void btck_validation_interface_callbacks_destroy(btck_ValidationInterfaceCallbacks* callbacks)
+{
+    delete callbacks;
+}
+
 btck_ContextOptions* btck_context_options_create()
 {
     return btck_ContextOptions::create();
@@ -1309,10 +1341,10 @@ void btck_context_options_set_notifications(btck_ContextOptions* options, const 
     btck_ContextOptions::get(options).m_notifications = std::make_shared<KernelNotifications>(btck_NotificationInterfaceCallbacks::get(notifications));
 }
 
-void btck_context_options_set_validation_interface(btck_ContextOptions* options, btck_ValidationInterfaceCallbacks vi_cbs)
+void btck_context_options_set_validation_interface(btck_ContextOptions* options, const btck_ValidationInterfaceCallbacks* vi_cbs)
 {
     LOCK(btck_ContextOptions::get(options).m_mutex);
-    btck_ContextOptions::get(options).m_validation_interface = std::make_shared<KernelValidationInterface>(vi_cbs);
+    btck_ContextOptions::get(options).m_validation_interface = std::make_shared<KernelValidationInterface>(btck_ValidationInterfaceCallbacks::get(vi_cbs));
 }
 
 void btck_context_options_destroy(btck_ContextOptions* options)
