@@ -144,6 +144,19 @@ static std::vector<CTxOut> RecordSpent(const CCoinsViewCache& coins, const T& tx
     return spent_outputs;
 }
 
+/** BIP54 legacy sigop total. Same adds as CheckSigopsBIP54. Always sums. No 2500 early out. */
+static unsigned CountSigopsBIP54(const CTransaction& tx, const CCoinsViewCache& inputs)
+{
+    Assert(!tx.IsCoinBase());
+    unsigned sigops{0};
+    for (const auto& txin : tx.vin) {
+        const auto& prev_txo{inputs.AccessCoin(txin.prevout).out};
+        sigops += txin.scriptSig.GetSigOpCount(/*fAccurate=*/true);
+        sigops += prev_txo.scriptPubKey.GetSigOpCount(txin.scriptSig);
+    }
+    return sigops;
+}
+
 /** Check this transaction does not exceed the BIP54 sigops limit, and record it as a test vector. */
 static void CheckWithinBIP54Limits(CTransaction&& tx, const CCoinsViewCache& coins, std::vector<TestVectorSigops>& test_vectors, std::string comment)
 {
@@ -212,6 +225,7 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
             spent_script << OP_2DUP << OP_CHECKSIGVERIFY;
         }
         spent_script << OP_CHECKSIG;
+        BOOST_REQUIRE_EQUAL(spent_script.GetSigOpCount(/*fAccurate=*/true), 100);
 
         // Reach 2500 sigops: one more sigop and we'll exceed the limit.
         for (int i{0}; i < 25; ++i) {
@@ -227,6 +241,7 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
             BOOST_REQUIRE(VerifyTxin(spent_script, tx_copy, i));
         }
 
+        BOOST_REQUIRE_EQUAL(CountSigopsBIP54(CTransaction(tx_copy), coins), 2500);
         // We don't exceed the limit yet.
         CheckWithinBIP54Limits(CTransaction(tx_copy), coins, test_vectors, "Bare Script inputs totalling 2500 CHECKSIGs");
 
@@ -249,6 +264,7 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
             BOOST_REQUIRE(VerifyTxin(spent_script, tx_copy, i));
         }
 
+        BOOST_REQUIRE_EQUAL(CountSigopsBIP54(CTransaction(tx_copy), coins), 2501);
         // Now we bump into the limit.
         CheckExceedsBIP54Limits(CTransaction(tx_copy), coins, test_vectors, "Bare Script inputs totalling 2501 CHECKSIGs");
 
@@ -270,6 +286,7 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
             BOOST_REQUIRE(VerifyTxin(script, tx_copy, i));
         }
 
+        BOOST_REQUIRE_EQUAL(CountSigopsBIP54(CTransaction(tx_copy), coins), 2501);
         // The number of accounted sigops hasn't changed. We still exceed the limit.
         CheckExceedsBIP54Limits(CTransaction(tx_copy), coins, test_vectors, "Bare Script inputs totalling 2501 CHECKSIGs and unrelated transaction fields malleated");
 
@@ -280,6 +297,7 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
             BOOST_REQUIRE(VerifyTxin(spent_script, tx_copy, i));
         }
 
+        BOOST_REQUIRE_EQUAL(CountSigopsBIP54(CTransaction(tx_copy), coins), 2500);
         // Now we don't exceed the limit anymore.
         CheckWithinBIP54Limits(CTransaction(tx_copy), coins, test_vectors, "Bare Script inputs totalling 2500 CHECKSIGs and unrelated transaction fields malleated");
     }
@@ -299,6 +317,7 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
             redeem_script = redeem_script << OP_2DUP << OP_CHECKSIGVERIFY;
         }
         redeem_script << OP_CHECKSIG;
+        BOOST_REQUIRE_EQUAL(redeem_script.GetSigOpCount(/*fAccurate=*/true), 100);
         const auto spk{GetScriptForDestination(ScriptHash(redeem_script))};
 
         // Reach 2500 sigops: one more sigop and we'll exceed the limit. Contrary
@@ -319,6 +338,7 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
             BOOST_REQUIRE(VerifyTxin(spk, tx_copy, i));
         }
 
+        BOOST_REQUIRE_EQUAL(CountSigopsBIP54(CTransaction(tx_copy), coins), 2500);
         // We don't exceed the limit yet.
         CheckWithinBIP54Limits(CTransaction(tx_copy), coins, test_vectors, "P2SH inputs totalling 2500 CHECKSIGs");
 
@@ -335,6 +355,7 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
         tx_copy.vin.back().scriptSig << SignInput(privkey, spent_script, tx_copy, idx);
         BOOST_REQUIRE(VerifyTxin(spent_script, tx_copy, idx));
 
+        BOOST_REQUIRE_EQUAL(CountSigopsBIP54(CTransaction(tx_copy), coins), 2501);
         // Now we bump into the limit.
         CheckExceedsBIP54Limits(CTransaction(tx_copy), coins, test_vectors, "P2SH inputs totalling 2500 CHECKSIGs + 1 P2PK input");
     }
@@ -356,6 +377,7 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
             spent_script << ToByteVector(pk.GetPubKey());
         }
         spent_script << OP_10 << OP_CHECKMULTISIG;
+        BOOST_REQUIRE_EQUAL(spent_script.GetSigOpCount(/*fAccurate=*/true), 10);
 
         // Spend 250 of those in a single transaction, reaching the 2500 sigops limit.
         for (int i{0}; i < 250; ++i) {
@@ -375,6 +397,7 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
             BOOST_REQUIRE(VerifyTxin(spent_script, tx_copy, i));
         }
 
+        BOOST_REQUIRE_EQUAL(CountSigopsBIP54(CTransaction(tx_copy), coins), 2500);
         // We don't exceed the limit yet.
         CheckWithinBIP54Limits(CTransaction(tx_copy), coins, test_vectors, "Bare Script inputs totalling 250 7-of-10 CHECKMULTISIGs");
 
@@ -391,6 +414,7 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
         tx_copy.vin.back().scriptSig << OP_0 << SignInput(privkeys.front(), single_spent_script, tx_copy, idx);
         BOOST_REQUIRE(VerifyTxin(single_spent_script, tx_copy, idx));
 
+        BOOST_REQUIRE_EQUAL(CountSigopsBIP54(CTransaction(tx_copy), coins), 2501);
         // Now we do exceed the limit.
         CheckExceedsBIP54Limits(CTransaction(tx_copy), coins, test_vectors, "Bare Script inputs totalling 250 7-of-10 CHECKMULTISIGs + 1 1-of-1 CHECKMULTISIG");
     }
@@ -412,6 +436,8 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
             spent_script << ToByteVector(pubkey);
         }
         spent_script << 17 << OP_CHECKMULTISIG;
+        // Pubkey count 17 is a number push, not OP_1..OP_16, so each CMS accounts for 20.
+        BOOST_REQUIRE_EQUAL(spent_script.GetSigOpCount(/*fAccurate=*/true), MAX_PUBKEYS_PER_MULTISIG);
 
         // Spend 125 of those in a single transaction, reaching the 2500 sigops limit.
         for (int i{0}; i < 125; ++i) {
@@ -431,6 +457,7 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
             BOOST_REQUIRE(VerifyTxin(spent_script, tx_copy, i));
         }
 
+        BOOST_REQUIRE_EQUAL(CountSigopsBIP54(CTransaction(tx_copy), coins), 2500);
         // We don't exceed the limit yet.
         CheckWithinBIP54Limits(CTransaction(tx_copy), coins, test_vectors, "P2SH inputs totalling 125 16-of-17 CHECKMULTISIGs");
 
@@ -457,6 +484,7 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
             BOOST_REQUIRE(VerifyTxin(spent_script, tx_copy, i));
         }
 
+        BOOST_REQUIRE_EQUAL(CountSigopsBIP54(CTransaction(tx_copy), coins), 2501);
         // Now we bump into the limit.
         CheckExceedsBIP54Limits(CTransaction(tx_copy), coins, test_vectors, "P2SH inputs totalling 125 16-of-17 CHECKMULTISIGs + 1 P2PKH input");
     }
@@ -483,12 +511,19 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
         const auto spk{GetScriptForDestination(ScriptHash(redeem_script))};
 
         // Reach 2400 sigops with 62 inputs.
+        // Two CMS. m=18 is a number push so each counts MAX_PUBKEYS_PER_MULTISIG.
+        const unsigned sigops_per_input{redeem_script.GetSigOpCount(/*fAccurate=*/true)};
+        BOOST_REQUIRE_EQUAL(sigops_per_input, 2 * MAX_PUBKEYS_PER_MULTISIG);
+
+        constexpr int n_inputs_under{62};
+        BOOST_REQUIRE_EQUAL(n_inputs_under * sigops_per_input, 2480);
+
         CMutableTransaction tx_create;
-        for (int i{0}; i < 62; ++i) {
+        for (int i{0}; i < n_inputs_under; ++i) {
             tx_create.vout.emplace_back(i, spk);
         }
         const auto prev_txid{tx_create.GetHash()};
-        for (int i{0}; i < 62; ++i) {
+        for (int i{0}; i < n_inputs_under; ++i) {
             tx_copy.vin.emplace_back(prev_txid, i);
         }
         AddCoins(coins, CTransaction(tx_create), 0, false);
@@ -498,6 +533,8 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
             tx_copy.vin[i].scriptSig << SignInput(privkey, redeem_script, tx_copy, i) << ToByteVector(redeem_script);
             BOOST_REQUIRE(VerifyTxin(spk, tx_copy, i));
         }
+
+        BOOST_REQUIRE_EQUAL(CountSigopsBIP54(CTransaction(tx_copy), coins), n_inputs_under * sigops_per_input);
 
         // We don't exceed the limit yet.
         CheckWithinBIP54Limits(CTransaction(tx_copy), coins, test_vectors, "62 inputs with a contrived P2SH redeemScript executing 2 18-of-18 CHECKMULTISIGs");
@@ -514,6 +551,9 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
             tx_copy.vin[i].scriptSig = CScript{} << SignInput(privkey, redeem_script, tx_copy, i) << ToByteVector(redeem_script);
             BOOST_REQUIRE(VerifyTxin(spk, tx_copy, i));
         }
+
+        BOOST_REQUIRE_EQUAL(CountSigopsBIP54(CTransaction(tx_copy), coins), (n_inputs_under + 1) * sigops_per_input);
+        BOOST_REQUIRE_EQUAL((n_inputs_under + 1) * sigops_per_input, 2520);
 
         // We now reached 2600 sigops. We exceed the limit.
         CheckExceedsBIP54Limits(CTransaction(tx_copy), coins, test_vectors, "62 inputs with a contrived P2SH redeemScript executing 2 18-of-18 CHECKMULTISIGs");
@@ -535,6 +575,7 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
             cs_only_script << OP_2DUP << OP_CHECKSIGVERIFY;
         }
         cs_only_script << OP_CHECKSIG;
+        BOOST_REQUIRE_EQUAL(cs_only_script.GetSigOpCount(/*fAccurate=*/true), 100);
 
         // A script with 9 1-of-20 CHECKMULTISIG's which takes 9 sigs as input.
         CScript cms_only_barescript;
@@ -549,6 +590,8 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
                 cms_only_barescript << 20 << OP_CHECKMULTISIG;
             }
         }
+        // n=20 is a number push, so each CMS accounts for MAX_PUBKEYS_PER_MULTISIG.
+        BOOST_REQUIRE_EQUAL(cms_only_barescript.GetSigOpCount(/*fAccurate=*/true), 9 * MAX_PUBKEYS_PER_MULTISIG);
 
         // A script with 50 CHECKSIG's and 5 19-of-19 CHECKMULTISIG's which takes as input
         // one signature for all CHECKSIG's and then the inputs to the 5 CMS.
@@ -569,6 +612,8 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
                 mixed_barescript << OP_CHECKMULTISIG;
             }
         }
+        // 50 CHECKSIGs + 5 CMS with n=19 number pushes (each accounts for 20).
+        BOOST_REQUIRE_EQUAL(mixed_barescript.GetSigOpCount(/*fAccurate=*/true), 50 + 5 * MAX_PUBKEYS_PER_MULTISIG);
 
         // A P2SH with 100 CHECKSIG's.
         const auto cs_only_p2sh{GetScriptForDestination(ScriptHash(cs_only_script))};
@@ -585,6 +630,7 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
                 cms_only_redeem_script << OP_CHECKMULTISIG;
             }
         }
+        BOOST_REQUIRE_EQUAL(cms_only_redeem_script.GetSigOpCount(/*fAccurate=*/true), 8 * 16);
         const auto cms_only_p2sh{GetScriptForDestination(ScriptHash(cms_only_redeem_script))};
 
         // A P2SH with 9 13-of-13 CMS followed by 9 CHECKSIGs. The 9 CHECKMULTISIG's are in
@@ -600,6 +646,7 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
             mixed_redeem_script << OP_2DUP << OP_CHECKSIGVERIFY;
         }
         mixed_redeem_script << OP_CHECKSIG;
+        BOOST_REQUIRE_EQUAL(mixed_redeem_script.GetSigOpCount(/*fAccurate=*/true), 9 * 13 + 5);
         const auto mixed_p2sh{GetScriptForDestination(ScriptHash(mixed_redeem_script))};
 
         // Now create the spending transaction. To start it will spend 2 inputs with a
@@ -616,6 +663,7 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
             tx_copy.vin[i].scriptSig << SignInput(cs_only_privkey, cs_only_script, tx_copy, i, SIGHASH_ALL | SIGHASH_ANYONECANPAY);
             BOOST_REQUIRE(VerifyTxin(cs_only_script, tx_copy, i));
         }
+        BOOST_REQUIRE_EQUAL(CountSigopsBIP54(CTransaction(tx_copy), coins), 200);
 
         // Then it will spend 10 inputs with bare multisigs, bringing it to 2000 sigops
         // accounted for in total.
@@ -641,6 +689,7 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
             }
             BOOST_REQUIRE(VerifyTxin(cms_only_barescript, tx_copy, i));
         }
+        BOOST_REQUIRE_EQUAL(CountSigopsBIP54(CTransaction(tx_copy), coins), 2000);
 
         // And it will spend one input for a bare Script with mixed CMS and CHECKSIGs. That's
         // now 2150 sigops accounted in total.
@@ -662,6 +711,7 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
             tx_copy.vin[idx].scriptSig << sig; // For the CHECKSIG's
             BOOST_REQUIRE(VerifyTxin(mixed_barescript, tx_copy, idx));
         }
+        BOOST_REQUIRE_EQUAL(CountSigopsBIP54(CTransaction(tx_copy), coins), 2150);
 
         // It will spend a single p2sh input with only CHECKSIGs, getting to 2250 sigops.
         {
@@ -679,6 +729,7 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
             tx_copy.vin[idx].scriptSig << sig << ToByteVector(cs_only_script);
             BOOST_REQUIRE(VerifyTxin(cs_only_p2sh, tx_copy, idx));
         }
+        BOOST_REQUIRE_EQUAL(CountSigopsBIP54(CTransaction(tx_copy), coins), 2250);
 
         // It will spend a single p2sh input only CMS's, getting to 2378 sigops.
         {
@@ -704,6 +755,7 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
             tx_copy.vin[idx].scriptSig << ToByteVector(cms_only_redeem_script);
             BOOST_REQUIRE(VerifyTxin(cms_only_p2sh, tx_copy, idx));
         }
+        BOOST_REQUIRE_EQUAL(CountSigopsBIP54(CTransaction(tx_copy), coins), 2378);
 
         // It will finally spend a single p2sh input with mixed CS - CMS, getting
         // to 2500 sigops.
@@ -724,6 +776,7 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
             BOOST_REQUIRE(VerifyTxin(mixed_p2sh, tx_copy, idx));
         }
 
+        BOOST_REQUIRE_EQUAL(CountSigopsBIP54(CTransaction(tx_copy), coins), 2500);
         // We reached exactly 2500 sigops, we don't exceed the limit.
         CheckWithinBIP54Limits(CTransaction(tx_copy), coins, test_vectors, "Mixed input types reaching exactly 2500 BIP54-sigops");
 
@@ -1135,6 +1188,8 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
         }
         tx_copy.vin[0].scriptSig << OP_ENDIF;
         BOOST_REQUIRE(VerifyTxin(spent_script, tx_copy, 0));
+        BOOST_REQUIRE_EQUAL(166 * 15 + 10, MAX_TX_BIP54_SIGOPS);
+        BOOST_REQUIRE_EQUAL(CountSigopsBIP54(CTransaction(tx_copy), coins), MAX_TX_BIP54_SIGOPS);
 
         // We reach but don't exceed the limit yet.
         CheckWithinBIP54Limits(CTransaction(tx_copy), coins, test_vectors, "CHECKMULTISIG's in scriptSig with 16 pubkeys or less are not rounded up to 20 sigops");
@@ -1142,6 +1197,7 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
         // Add a single CHECKSIG.
         tx_copy.vin[0].scriptSig << OP_0 << OP_1 << OP_CHECKSIG << OP_DROP;
         BOOST_REQUIRE(VerifyTxin(spent_script, tx_copy, 0));
+        BOOST_REQUIRE_EQUAL(CountSigopsBIP54(CTransaction(tx_copy), coins), MAX_TX_BIP54_SIGOPS + 1);
 
         // Now we do.
         CheckExceedsBIP54Limits(CTransaction(tx_copy), coins, test_vectors, "Enough sigops in scriptSig to exceed the BIP 54 limit (even if unexecuted)");
@@ -1215,6 +1271,7 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
         AddCoins(coins, CTransaction(tx_create), 0, false);
         tx2.vin.emplace_back(tx_create.GetHash(), 0);
 
+        BOOST_REQUIRE_EQUAL(CountSigopsBIP54(CTransaction(tx2), coins), MAX_TX_BIP54_SIGOPS + 1);
         // CheckSigopsBIP54 will return false despite the Script being invalid.
         CheckExceedsBIP54Limits(CTransaction(tx2), coins, test_vectors, "Invalid bare script with 2501 CHECKSIGs");
     }
@@ -1234,12 +1291,14 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
         for (unsigned i{0}; i < MAX_TX_BIP54_SIGOPS / 20 + 1; ++i) {
             spk << OP_CHECKMULTISIG;
         }
+        BOOST_REQUIRE_EQUAL(spk.GetSigOpCount(/*fAccurate=*/true), 126 * MAX_PUBKEYS_PER_MULTISIG);
 
         CMutableTransaction tx_create;
         tx_create.vout.emplace_back(0, spk);
         AddCoins(coins, CTransaction(tx_create), 0, false);
         tx2.vin.emplace_back(tx_create.GetHash(), 0);
 
+        BOOST_REQUIRE_EQUAL(CountSigopsBIP54(CTransaction(tx2), coins), 126 * MAX_PUBKEYS_PER_MULTISIG);
         // CheckSigopsBIP54 will return false because there is 126 CMS that account for 20 each.
         CheckExceedsBIP54Limits(CTransaction(tx2), coins, test_vectors, "Invalid bare script with 126 CHECKMULTISIGs each accounted for 20 BIP54-sigops");
     }
@@ -1260,12 +1319,14 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
         for (unsigned i{0}; i < MAX_TX_BIP54_SIGOPS - 20 + 1; ++i) {
             spk << OP_CHECKSIG;
         }
+        BOOST_REQUIRE_EQUAL(spk.GetSigOpCount(/*fAccurate=*/true), MAX_PUBKEYS_PER_MULTISIG + 2481);
 
         CMutableTransaction tx_create;
         tx_create.vout.emplace_back(0, spk);
         AddCoins(coins, CTransaction(tx_create), 0, false);
         tx2.vin.emplace_back(tx_create.GetHash(), 0);
 
+        BOOST_REQUIRE_EQUAL(CountSigopsBIP54(CTransaction(tx2), coins), MAX_PUBKEYS_PER_MULTISIG + 2481);
         // CheckSigopsBIP54 will return false because the first CHECKMULTISIG counts for 20 sigops.
         CheckExceedsBIP54Limits(CTransaction(tx2), coins, test_vectors, "Invalid bare script with 1 CHECKMULTISIG accounted for 20 sigops + 2481 CHECKSIGs");
     }
@@ -1288,6 +1349,7 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
         AddCoins(coins, CTransaction(tx_create), 0, false);
         tx2.vin.emplace_back(tx_create.GetHash(), 0);
 
+        BOOST_REQUIRE_EQUAL(CountSigopsBIP54(CTransaction(tx2), coins), MAX_TX_BIP54_SIGOPS + 1);
         // CheckSigopsBIP54 will return false because 2501 sigops were counted before encountering the error.
         CheckExceedsBIP54Limits(CTransaction(tx2), coins, test_vectors, "Bare Script with malformed PUSHDATA1 after counting 2501 BIP54-sigops");
     }
@@ -1311,6 +1373,7 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
         AddCoins(coins, CTransaction(tx_create), 0, false);
         tx2.vin.emplace_back(tx_create.GetHash(), 0);
 
+        BOOST_REQUIRE_EQUAL(CountSigopsBIP54(CTransaction(tx2), coins), MAX_TX_BIP54_SIGOPS);
         // CheckSigopsBIP54 will return true because 2500 sigops were counted before encountering the error.
         CheckWithinBIP54Limits(CTransaction(tx2), coins, test_vectors, "Bare Script with malformed PUSHDATA2 after counting 2500 BIP54-sigops");
     }
