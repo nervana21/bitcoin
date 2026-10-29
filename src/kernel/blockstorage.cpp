@@ -749,11 +749,24 @@ FlushResult<> BlockManager::FlushChainstateBlockFile(int tip_height)
     // If the cursor does not exist, it means an assumeutxo snapshot is loaded,
     // but no blocks past the snapshot height have been written yet, so there
     // is no data associated with the chainstate, and it is safe not to flush.
-    if (cursor) {
-        return FlushBlockFile(cursor->file_num, /*fFinalize=*/false, /*finalize_undo=*/false);
+    if (!cursor) {
+        return {};
     }
-    // No need to log warnings in this case.
-    return {};
+    // Default NORMAL cursor is file_num=0 before any m_blockfile_info load.
+    // Also repair a cursor that was advanced before a failed resize (invariant:
+    // file_num must be an index into m_blockfile_info).
+    if (cursor->file_num < 0 ||
+        static_cast<size_t>(cursor->file_num) >= m_blockfile_info.size()) {
+        if (m_blockfile_info.empty()) {
+            return {};
+        }
+        LogWarning(m_log,
+                   "blockfile cursor file_num=%d past m_blockfile_info size=%zu; flushing last file and repairing cursor\n",
+                   cursor->file_num, m_blockfile_info.size());
+        const int last_file{static_cast<int>(m_blockfile_info.size()) - 1};
+        cursor = BlockfileCursor{last_file, cursor->undo_height};
+    }
+    return FlushBlockFile(cursor->file_num, /*fFinalize=*/false, /*finalize_undo=*/false);
 }
 
 uint64_t BlockManager::CalculateCurrentUsageImpl()
@@ -799,7 +812,13 @@ FlushResult<FlatFilePos, AbortFailure> BlockManager::FindNextBlockPos(unsigned i
     if (!m_blockfile_cursors[chain_type]) {
         // If a snapshot is loaded during runtime, we may not have initialized this cursor yet.
         assert(chain_type == BlockfileType::ASSUMED);
-        const auto new_cursor = BlockfileCursor{this->MaxBlockfileNum() + 1};
+        const int new_file{this->MaxBlockfileNum() + 1};
+        // Grow fileinfo before publishing the cursor so a failed resize cannot
+        // leave file_num past m_blockfile_info.size().
+        if (static_cast<int>(m_blockfile_info.size()) <= new_file) {
+            m_blockfile_info.resize(new_file + 1);
+        }
+        const auto new_cursor = BlockfileCursor{new_file};
         m_blockfile_cursors[chain_type] = new_cursor;
         LogDebug(m_log, "[%s] initializing blockfile cursor to %s\n", chain_type, new_cursor);
     }
@@ -832,12 +851,11 @@ FlushResult<FlatFilePos, AbortFailure> BlockManager::FindNextBlockPos(unsigned i
 
         // Try the next unclaimed blockfile number
         nFile = this->MaxBlockfileNum() + 1;
-        // Set to increment MaxBlockfileNum() for next iteration
-        m_blockfile_cursors[chain_type] = BlockfileCursor{nFile};
-
         if (static_cast<int>(m_blockfile_info.size()) <= nFile) {
             m_blockfile_info.resize(nFile + 1);
         }
+        // Publish cursor only after fileinfo covers nFile.
+        m_blockfile_cursors[chain_type] = BlockfileCursor{nFile};
     }
     // Don't delete a pruned file that is about to hold a new block.
     m_files_to_unlink.erase(nFile);
@@ -871,7 +889,9 @@ FlushResult<FlatFilePos, AbortFailure> BlockManager::FindNextBlockPos(unsigned i
     m_blockfile_info[nFile].nSize += nAddSize;
 
     bool out_of_space;
-    size_t bytes_allocated = m_block_file_seq.Allocate(pos, nAddSize, out_of_space);
+    // Allocate through m_block_store (same FlatFileSeq WriteBlock and Flush use).
+    // Do not use the legacy m_block_file_seq twin. Dual seq desyncs preallocate.
+    size_t bytes_allocated = m_block_store->Allocate(pos, nAddSize, out_of_space);
     if (out_of_space) {
         RecordFatalAbort(/*state=*/nullptr, result, kernel::DiskSpaceTooLow{});
         return result;
@@ -891,17 +911,18 @@ void BlockManager::UpdateBlockInfo(const CBlock& block, unsigned int nHeight, co
     const BlockfileType chain_type{BlockfileTypeForHeight(nHeight)};
 
     LOCK(m_blockfile_mutex);
+    // Grow fileinfo before publishing the cursor so file_num never outruns size.
+    const unsigned int added_size = ::GetSerializeSize(TX_WITH_WITNESS(block));
+    const int nFile = pos.nFile;
+    if (static_cast<int>(m_blockfile_info.size()) <= nFile) {
+        m_blockfile_info.resize(nFile + 1);
+    }
     auto& cursor{m_blockfile_cursors[chain_type]};
     if (!cursor || cursor->file_num < pos.nFile) {
         m_blockfile_cursors[chain_type] = BlockfileCursor{pos.nFile};
     }
 
     // Update the file information with the current block.
-    const unsigned int added_size = ::GetSerializeSize(TX_WITH_WITNESS(block));
-    const int nFile = pos.nFile;
-    if (static_cast<int>(m_blockfile_info.size()) <= nFile) {
-        m_blockfile_info.resize(nFile + 1);
-    }
     m_blockfile_info[nFile].AddBlock(nHeight, block.GetBlockTime());
     m_blockfile_info[nFile].nSize = std::max(pos.nPos + added_size, m_blockfile_info[nFile].nSize);
     m_dirty_fileinfo.insert(nFile);
