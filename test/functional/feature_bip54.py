@@ -119,7 +119,7 @@ class Bip54Test(BitcoinTestFramework):
         self.mine_and_submit(node, txs)
 
     def submit_block_many_sigops_split(self, node):
-        """Create and submit a block that exceeds the BIP54 sigops limit but in multiple txs."""
+        """Create and submit a block that splits BIP54 sigops across transactions so each stays under the per transaction limit."""
         # Get the very same transactions, except we drop the sigop in the last tx..
         txs = self.create_txs_many_sigops()
         last_tx = txs[-1]
