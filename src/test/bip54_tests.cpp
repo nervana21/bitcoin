@@ -486,7 +486,7 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
 
         BOOST_REQUIRE_EQUAL(CountSigopsBIP54(CTransaction(tx_copy), coins), 2501);
         // Now we bump into the limit.
-        CheckExceedsBIP54Limits(CTransaction(tx_copy), coins, test_vectors, "P2SH inputs totalling 125 16-of-17 CHECKMULTISIGs + 1 P2PKH input");
+        CheckExceedsBIP54Limits(CTransaction(tx_copy), coins, test_vectors, "Bare Script inputs totalling 125 16-of-17 CHECKMULTISIGs + 1 P2PKH input");
     }
 
     // Exceed the 2'500 limit using 18-of-18's CHECKMULTISIGs in an intentionally contrived P2SH redeemScript.
