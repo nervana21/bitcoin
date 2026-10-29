@@ -1178,7 +1178,7 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
         AddCoins(coins, CTransaction(mtx_create), 0, false);
         tx_copy.vin.emplace_back(mtx_create.GetHash(), 0);
 
-        // 166 * 15 = 1490 CMS sigops + 10 CHECKSIG sigops
+        // 166 * 15 = 2490 CMS sigops + 10 CHECKSIG sigops = 2500.
         tx_copy.vin[0].scriptSig << OP_1 << OP_0 << OP_IF;
         for (int i{0}; i < 166; ++i) {
             tx_copy.vin[0].scriptSig << 15 << OP_CHECKMULTISIGVERIFY;
