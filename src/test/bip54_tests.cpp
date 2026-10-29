@@ -633,7 +633,7 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
         BOOST_REQUIRE_EQUAL(cms_only_redeem_script.GetSigOpCount(/*fAccurate=*/true), 8 * 16);
         const auto cms_only_p2sh{GetScriptForDestination(ScriptHash(cms_only_redeem_script))};
 
-        // A P2SH with 9 13-of-13 CMS followed by 9 CHECKSIGs. The 9 CHECKMULTISIG's are in
+        // A P2SH with 9 13-of-13 CMS followed by 5 CHECKSIGs. The 9 CHECKMULTISIG's are in
         // a non-executed Script branch. Takes as input a single signature for the CHECKSIG's.
         const auto mixed_p2sh_privkey{GetKeyAt(xprv, 50)};
         const auto mixed_p2sh_pubkey{mixed_p2sh_privkey.GetPubKey()};
