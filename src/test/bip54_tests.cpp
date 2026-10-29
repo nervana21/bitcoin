@@ -459,7 +459,7 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
 
         BOOST_REQUIRE_EQUAL(CountSigopsBIP54(CTransaction(tx_copy), coins), 2500);
         // We don't exceed the limit yet.
-        CheckWithinBIP54Limits(CTransaction(tx_copy), coins, test_vectors, "P2SH inputs totalling 125 16-of-17 CHECKMULTISIGs");
+        CheckWithinBIP54Limits(CTransaction(tx_copy), coins, test_vectors, "Bare Script inputs totalling 125 16-of-17 CHECKMULTISIGs");
 
         // Add one more input with a single sigop (a P2PKH to mix input types).
         auto spk{GetScriptForDestination(PKHash(pubkey))};
