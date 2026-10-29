@@ -555,8 +555,8 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
         BOOST_REQUIRE_EQUAL(CountSigopsBIP54(CTransaction(tx_copy), coins), (n_inputs_under + 1) * sigops_per_input);
         BOOST_REQUIRE_EQUAL((n_inputs_under + 1) * sigops_per_input, 2520);
 
-        // We now reached 2600 sigops. We exceed the limit.
-        CheckExceedsBIP54Limits(CTransaction(tx_copy), coins, test_vectors, "62 inputs with a contrived P2SH redeemScript executing 2 18-of-18 CHECKMULTISIGs");
+        // We now reached 2520 sigops. We exceed the limit.
+        CheckExceedsBIP54Limits(CTransaction(tx_copy), coins, test_vectors, "63 inputs with a contrived P2SH redeemScript executing 2 18-of-18 CHECKMULTISIGs");
     }
 
     // Now reach exactly 2500 sigops with a transaction mixing CMS-only input, CHECKSIG-only input, an input with
