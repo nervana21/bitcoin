@@ -40,7 +40,7 @@ inline constexpr int64_t MAX_TIMEWARP_BIP54{2 * 60 * 60};
  */
 inline constexpr int64_t MAX_TIMEWARP_TESTNET4 = 600;
 
-/** The maximum number of potentially executed legacy (non-Segwit) signature operations in a single tx */
+/** The maximum number of legacy (non-Segwit) signature operations present in a single tx */
 inline constexpr unsigned int MAX_TX_BIP54_SIGOPS{2'500};
 
 /**
