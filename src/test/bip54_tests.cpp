@@ -510,7 +510,7 @@ BOOST_AUTO_TEST_CASE(bip54_legacy_sigops)
         redeem_script << 18 << OP_SWAP << OP_DUP << OP_2DUP << OP_2DUP << OP_3DUP << OP_3DUP << OP_3DUP << OP_3DUP << 18 << OP_CHECKMULTISIG;
         const auto spk{GetScriptForDestination(ScriptHash(redeem_script))};
 
-        // Reach 2400 sigops with 62 inputs.
+        // Reach 2480 sigops with 62 inputs.
         // Two CMS. m=18 is a number push so each counts MAX_PUBKEYS_PER_MULTISIG.
         const unsigned sigops_per_input{redeem_script.GetSigOpCount(/*fAccurate=*/true)};
         BOOST_REQUIRE_EQUAL(sigops_per_input, 2 * MAX_PUBKEYS_PER_MULTISIG);
