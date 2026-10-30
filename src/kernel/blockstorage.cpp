@@ -705,14 +705,15 @@ FlushResult<> BlockManager::FlushBlockFile(int blockfile_num, bool fFinalize, bo
     AssertLockHeld(m_blockfile_mutex);
     FlushResult<> result;
 
-    if (m_blockfile_info.size() < 1) {
-        // Return if we haven't loaded any blockfiles yet. This happens during
-        // chainstate init, when we call ChainstateManager::MaybeRebalanceCaches() (which
-        // then calls FlushStateToDisk()), resulting in a call to this function before we
-        // have populated `m_blockfile_info` via LoadBlockIndexDB().
+    // Skip when fileinfo is empty (chainstate init / MaybeRebalanceCaches flush
+    // before LoadBlockIndexDB) or the caller passed a file_num past size.
+    // FlushChainstateBlockFile repairs the cursor first, but FindNextBlockPos
+    // and destroy ForceFlush can still hand an OOB index here — aborting the
+    // process is worse than skipping a no-op flush of a missing file slot.
+    if (blockfile_num < 0 ||
+        static_cast<size_t>(blockfile_num) >= m_blockfile_info.size()) {
         return result;
     }
-    assert(static_cast<int>(m_blockfile_info.size()) > blockfile_num);
 
     FlatFilePos block_pos_old(blockfile_num, m_blockfile_info[blockfile_num].nSize);
     if (!m_block_store->Flush(block_pos_old, fFinalize)) {
