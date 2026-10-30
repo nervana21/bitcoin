@@ -1116,7 +1116,10 @@ FlushResult<void, AbortFailure> kernel::Chainstate::FlushStateToDisk(
 
             auto coins_flush{FlushCoinsForWrite(state, empty_cache)};
             if (!coins_flush) {
-                result.update(std::move(coins_flush));
+                // Result<bool> cannot update into Result<void>. Move info and
+                // messages first, then AbortFailure as the error payload.
+                coins_flush >> result;
+                result.update({util::Error{}, std::move(coins_flush.error())});
                 return result;
             }
             coins_flush >> result;
