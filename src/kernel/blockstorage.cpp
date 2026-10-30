@@ -692,8 +692,9 @@ FlushResult<> BlockManager::FlushUndoFile(int block_file, bool finalize)
     if (!m_undo_store->Flush(undo_pos_old, finalize)) {
         auto error{_("Flushing undo file to disk failed. This is likely the result of an I/O error.")};
         m_opts.notifications.flushError(kernel::FlushError::UNDO_FILE_FLUSH_FAILED);
-        result.update(util::Error{std::move(error)});
-        result.update(util::Info{FlushStatus::FAILURE});
+        // Build failure in one Result. update(Error) then update(Info) clears the
+        // error payload (Info builds a success Result) and leaves operator bool true.
+        result.update(FlushResult<>{util::Error{std::move(error)}, util::Info{FlushStatus::FAILURE}});
     } else {
         result.update(util::Info{FlushStatus::SUCCESS});
     }
@@ -719,8 +720,9 @@ FlushResult<> BlockManager::FlushBlockFile(int blockfile_num, bool fFinalize, bo
     if (!m_block_store->Flush(block_pos_old, fFinalize)) {
         auto error{_("Flushing block file to disk failed. This is likely the result of an I/O error.")};
         m_opts.notifications.flushError(kernel::FlushError::BLOCK_FILE_FLUSH_FAILED);
-        result.update(util::Error{std::move(error)});
-        result.update(util::Info{FlushStatus::FAILURE});
+        // Build failure in one Result. update(Error) then update(Info) clears the
+        // error payload (Info builds a success Result) and leaves operator bool true.
+        result.update(FlushResult<>{util::Error{std::move(error)}, util::Info{FlushStatus::FAILURE}});
     } else {
         result.update(util::Info{FlushStatus::SUCCESS});
     }
