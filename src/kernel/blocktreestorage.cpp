@@ -81,7 +81,7 @@ public:
 
 /** A wrapper for creating a constant-sized serialization without varint encoding */
 struct BlockFileInfoWrapper : CBlockFileInfo {
-    static constexpr size_t SERIALIZED_SIZE{36};
+    static constexpr size_t SERIALIZED_SIZE{44};
 
     BlockFileInfoWrapper() = default;
 
