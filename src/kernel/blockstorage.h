@@ -322,7 +322,7 @@ public:
     size_t detail_fread(std::span<std::byte> dst) override
     {
         const auto& page = m_data[m_pos.nFile];
-        size_t available = std::min(dst.size(), page.size() - m_pos.nPos);
+        size_t available = std::min(dst.size(), page.size() - static_cast<size_t>(m_pos.nPos));
         std::copy_n(page.data() + m_pos.nPos, available, dst.begin());
         m_pos.nPos += available;
         return available;
