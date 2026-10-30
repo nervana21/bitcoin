@@ -462,12 +462,12 @@ public:
             SER_READ(obj, obj.nFile = nFile);
         }
         if (nStatus & BLOCK_HAVE_DATA) {
-            unsigned int nDataPos{obj.nDataPos};
+            uint64_t nDataPos{obj.nDataPos};
             READWRITE(VARINT(nDataPos));
             SER_READ(obj, obj.nDataPos = nDataPos);
         }
         if (nStatus & BLOCK_HAVE_UNDO) {
-            unsigned int nUndoPos{obj.nUndoPos};
+            uint64_t nUndoPos{obj.nUndoPos};
             READWRITE(VARINT(nUndoPos));
             SER_READ(obj, obj.nUndoPos = nUndoPos);
         }
@@ -499,7 +499,7 @@ public:
 
 /** A wrapper for creating a constant-sized serialization without varint encoding */
 struct DiskBlockIndexWrapper : CDiskBlockIndex {
-    static constexpr size_t SERIALIZED_SIZE{104};
+    static constexpr size_t SERIALIZED_SIZE{112};
 
     DiskBlockIndexWrapper() = default;
 
@@ -512,8 +512,8 @@ struct DiskBlockIndexWrapper : CDiskBlockIndex {
         LOCK(::cs_main);
         uint32_t nStatus{obj.nStatus};
         int nFile{obj.nFile};
-        unsigned int nDataPos{obj.nDataPos};
-        unsigned int nUndoPos{obj.nUndoPos};
+        uint64_t nDataPos{obj.nDataPos};
+        uint64_t nUndoPos{obj.nUndoPos};
         READWRITE(obj.nHeight, nStatus, obj.nTx, nFile, nDataPos, nUndoPos);
         SER_READ(obj, obj.nStatus = nStatus);
         SER_READ(obj, obj.nFile = nFile);
