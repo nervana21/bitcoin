@@ -974,12 +974,13 @@ FlushResult<void, AbortFailure> kernel::Chainstate::FlushBlockStorageForWrite(
         LOG_TIME_MILLIS_WITH_CATEGORY("write block and undo data to disk", BCLog::BENCH);
 
         // First make sure all block and undo data is flushed to disk.
-        // TODO: Handle return error, or add detailed comment why it is
-        // safe to not return an error upon failure.
+        // FlushChainstateBlockFile() already reported the specific error through flushError().
+        // Return before writing block-index metadata or coins so the last-flushed
+        // marker and on-disk coins tip stay at the previous successful flush.
         if (!(m_blockman.FlushChainstateBlockFile(m_chain.Height()) >> result)) {
-            auto warning{Untranslated({"Failed to flush block file."})};
-            LogWarning(m_log, "%s: %s\n", __func__, warning.original);
-            result.messages().warnings.push_back(std::move(warning));
+            state.Error("Failed to flush block or undo file");
+            result.update(util::Error{Untranslated("Failed to flush block or undo file")});
+            return result;
         }
     }
 
@@ -1099,21 +1100,20 @@ FlushResult<void, AbortFailure> kernel::Chainstate::FlushStateToDisk(
             LogDebug(log_coins, "Writing chainstate to disk: flush mode=%s, prune=%d, large=%d, critical=%d, periodic=%d",
                      FlushStateModeNames[size_t(mode)], fFlushForPrune, fCacheLarge, fCacheCritical, fPeriodicWrite);
 
-            // Block-file flush failures are warned and still allow the coins
-            // write (same as before the helper split). Only abort on fatal.
             {
                 auto block_storage{FlushBlockStorageForWrite(state, setFilesToPrune, fFlushForPrune)};
-                block_storage >> result;
-                if (!block_storage && block_storage.error().fatal) {
+                result.update(std::move(block_storage));
+                if (!result) {
                     return result;
                 }
             }
 
             auto coins_flush{FlushCoinsForWrite(state, empty_cache)};
-            coins_flush >> result;
             if (!coins_flush) {
+                result.update(std::move(coins_flush));
                 return result;
             }
+            coins_flush >> result;
             if (*coins_flush) {
                 m_last_flushed_block = m_blockman.LookupBlockIndex(CoinsTip().GetBestBlock());
                 full_flush_completed = true;
