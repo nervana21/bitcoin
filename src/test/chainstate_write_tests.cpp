@@ -131,7 +131,7 @@ BOOST_FIXTURE_TEST_CASE(chainstate_flush_failure_boundary, TestChain100Setup)
     BOOST_CHECK(!flushed && state.IsError());
     BOOST_CHECK_EQUAL(WITH_LOCK(::cs_main, return chainstate.GetLastFlushedBlock()), old_flushed);
     BOOST_CHECK(WITH_LOCK(::cs_main, return chainstate.CoinsDB().GetBestBlock()) == old_flushed->GetBlockHash());
-    node::CBlockFileInfo file_info;
+    kernel::CBlockFileInfo file_info;
     BOOST_REQUIRE(WITH_LOCK(::cs_main, return chainstate.m_blockman.m_block_tree_db->ReadBlockFileInfo(new_tip->nFile, file_info)));
     BOOST_CHECK_EQUAL(file_info.nHeightLast, old_flushed->nHeight);
 }
