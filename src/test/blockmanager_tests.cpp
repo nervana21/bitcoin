@@ -329,17 +329,16 @@ BOOST_FIXTURE_TEST_CASE(blockmanager_add_to_block_index_best_header, TestingSetu
     header.nTime = genesis->nTime + 1;
     header.nBits = genesis->nBits;
 
-    CBlockIndex* best_header{nullptr};
     header.nNonce = 1;
-    CBlockIndex* first{blockman.AddToBlockIndex(header, best_header)};
-    BOOST_CHECK_EQUAL(best_header, first);
+    CBlockIndex* first{blockman.AddToBlockIndex(header)};
+    BOOST_CHECK_EQUAL(blockman.BestHeader(), first);
 
     // A sibling with equal chain work must not replace the first-seen header
     header.nNonce = 2;
-    CBlockIndex* second{blockman.AddToBlockIndex(header, best_header)};
+    CBlockIndex* second{blockman.AddToBlockIndex(header)};
     BOOST_CHECK(second != first);
     BOOST_CHECK(second->nChainWork == first->nChainWork);
-    BOOST_CHECK_EQUAL(best_header, first);
+    BOOST_CHECK_EQUAL(blockman.BestHeader(), first);
 }
 
 BOOST_AUTO_TEST_CASE(raise_validity_compare_exchange)
