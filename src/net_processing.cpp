@@ -2608,6 +2608,7 @@ void PeerManagerImpl::ProcessGetBlockData(CNode& pfrom, Peer& peer, const CInv& 
     const CBlockIndex* tip{nullptr};
     bool can_direct_fetch{false};
     FlatFilePos block_pos{};
+    const bool have_recent_block{a_recent_block && a_recent_block->GetHash() == inv.hash};
     {
         LOCK(cs_main);
         pindex = m_chainman.m_blockman.LookupBlockIndex(inv.hash);
@@ -2639,15 +2640,19 @@ void PeerManagerImpl::ProcessGetBlockData(CNode& pfrom, Peer& peer, const CInv& 
         }
         // Pruned nodes may have deleted the block, so check whether
         // it's available before trying to send.
-        if (!(pindex->nStatus & BLOCK_HAVE_DATA)) {
+        // If BLOCK_HAVE_DATA is unset but m_most_recent_block still
+        // holds this hash, serve from that cache instead of dropping.
+        if (!(pindex->nStatus & BLOCK_HAVE_DATA) && !have_recent_block) {
             return;
         }
         can_direct_fetch = CanDirectFetch();
-        block_pos = pindex->GetBlockPos();
+        if (pindex->nStatus & BLOCK_HAVE_DATA) {
+            block_pos = pindex->GetBlockPos();
+        }
     }
 
     std::shared_ptr<const CBlock> pblock;
-    if (a_recent_block && a_recent_block->GetHash() == inv.hash) {
+    if (have_recent_block) {
         pblock = a_recent_block;
     } else if (inv.IsMsgWitnessBlk()) {
         // Fast-path: in this case it is possible to serve the block directly from disk,
