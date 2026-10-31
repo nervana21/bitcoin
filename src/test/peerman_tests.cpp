@@ -121,9 +121,8 @@ static void AssertGetdataServesBlock(ConnmanTestMsg& connman, CNode& peer, const
     connman.FlushSendBuffer(peer);
 }
 
-// When BLOCK_HAVE_DATA is cleared, tip getdata is refused even if
-// m_most_recent_block still holds the block. A parent hash that is not the
-// cache entry is refused.
+// Connected tip with BLOCK_HAVE_DATA cleared must still be served from
+// m_most_recent_block. A parent hash that is not the cache entry is refused.
 BOOST_FIXTURE_TEST_CASE(getdata_serves_recent_block_without_have_data, TestChain100Setup)
 {
     ConnmanTestMsg& connman{static_cast<ConnmanTestMsg&>(*m_node.connman)};
@@ -171,8 +170,7 @@ BOOST_FIXTURE_TEST_CASE(getdata_serves_recent_block_without_have_data, TestChain
         parent->nStatus &= ~BLOCK_HAVE_DATA;
     }
 
-    // Tip request is dropped when HAVE_DATA is clear despite m_most_recent_block.
-    AssertGetdataServesBlock(connman, peer, tip_hash, /*expect_block=*/false); // TODO: tip should still be served from m_most_recent_block
+    AssertGetdataServesBlock(connman, peer, tip_hash, /*expect_block=*/true);
     AssertGetdataServesBlock(connman, peer, parent_hash, /*expect_block=*/false);
 
     peerman.FinalizeNode(peer);
