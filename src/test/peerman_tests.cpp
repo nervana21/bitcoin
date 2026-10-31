@@ -171,9 +171,9 @@ static void CheckGetdataBlock(ConnmanTestMsg& connman, CNode& peer, const uint25
     connman.FlushSendBuffer(peer);
 }
 
-// Record current tip getdata behavior when BLOCK_HAVE_DATA is cleared.
-// Today the request is dropped even if m_most_recent_block still holds the block.
-// A parent hash that is not that cache entry must also be refused.
+// Prove tip getdata still works when BLOCK_HAVE_DATA is cleared.
+// The bytes must come from m_most_recent_block.
+// A parent hash that is not that cache entry must be refused.
 BOOST_FIXTURE_TEST_CASE(getdata_serves_recent_block_without_have_data, TestChain100Setup)
 {
     // Use the test connman helpers (handshake, inject messages, flush).
@@ -271,9 +271,8 @@ BOOST_FIXTURE_TEST_CASE(getdata_serves_recent_block_without_have_data, TestChain
         parent->nStatus = parent->nStatus & ~BLOCK_HAVE_DATA;
     }
 
-    // Tip request is dropped when HAVE_DATA is clear despite m_most_recent_block.
-    // TODO. Tip should still be served from m_most_recent_block.
-    CheckGetdataBlock(connman, peer, tip_hash, /*expect_block=*/false);
+    // Tip must still be served from m_most_recent_block after the clear.
+    CheckGetdataBlock(connman, peer, tip_hash, /*expect_block=*/true);
     // Parent is not the recent cache entry. Request must not produce a BLOCK.
     CheckGetdataBlock(connman, peer, parent_hash, /*expect_block=*/false);
 

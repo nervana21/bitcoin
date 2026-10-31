@@ -2608,6 +2608,19 @@ void PeerManagerImpl::ProcessGetBlockData(CNode& pfrom, Peer& peer, const CInv& 
     const CBlockIndex* tip{nullptr};
     bool can_direct_fetch{false};
     FlatFilePos block_pos{};
+    // Start by assuming the in memory recent block cache does not match this request.
+    bool have_recent_block{false};
+    // a_recent_block is a shared pointer to the block we last put in m_most_recent_block.
+    // Only look inside it when the pointer is not empty.
+    if (a_recent_block) {
+        // Ask the cached block for its hash.
+        const uint256 recent_hash{a_recent_block->GetHash()};
+        // Compare that hash to the hash the peer asked for in this getdata.
+        if (recent_hash == inv.hash) {
+            // Same hash. We can answer this request from RAM without touching disk.
+            have_recent_block = true;
+        }
+    }
     {
         LOCK(cs_main);
         pindex = m_chainman.m_blockman.LookupBlockIndex(inv.hash);
@@ -2637,17 +2650,30 @@ void PeerManagerImpl::ProcessGetBlockData(CNode& pfrom, Peer& peer, const CInv& 
             pfrom.fDisconnect = true;
             return;
         }
-        // Pruned nodes may have deleted the block, so check whether
-        // it's available before trying to send.
-        if (!(pindex->nStatus & BLOCK_HAVE_DATA)) {
-            return;
+        // Disk may have dropped this block after prune. Read the HAVE_DATA bit.
+        const uint32_t status_bits{pindex->nStatus};
+        const uint32_t have_data_bit{status_bits & BLOCK_HAVE_DATA};
+        const bool have_disk_data{have_data_bit != 0};
+        // We can keep going when either disk still has the bytes or the recent cache holds them.
+        if (!have_disk_data) {
+            // Disk says no. The only remaining hope is the in memory recent block cache.
+            if (!have_recent_block) {
+                // Disk and cache both miss. Stop. Do not try to send this block.
+                return;
+            }
         }
         can_direct_fetch = CanDirectFetch();
-        block_pos = pindex->GetBlockPos();
+        // GetBlockPos is only valid when disk still claims to store this block.
+        if (have_disk_data) {
+            // Remember the flat file offset so a later path can read the raw bytes from disk.
+            block_pos = pindex->GetBlockPos();
+        }
     }
 
     std::shared_ptr<const CBlock> pblock;
-    if (a_recent_block && a_recent_block->GetHash() == inv.hash) {
+    // Prefer the RAM copy when we already proved the cache hash matches this inv.
+    if (have_recent_block) {
+        // Reuse the shared pointer to m_most_recent_block. No disk read needed.
         pblock = a_recent_block;
     } else if (inv.IsMsgWitnessBlk()) {
         // Fast-path: in this case it is possible to serve the block directly from disk,
