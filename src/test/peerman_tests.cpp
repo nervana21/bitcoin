@@ -5,13 +5,16 @@
 #include <chain.h>
 #include <chainparams.h>
 #include <consensus/params.h>
+#include <net.h>
 #include <net_processing.h>
 #include <node/block_template_manager.h>
 #include <node/miner.h>
 #include <pow.h>
 #include <primitives/block.h>
 #include <protocol.h>
+#include <script/solver.h>
 #include <sync.h>
+#include <test/util/net.h>
 #include <test/util/setup_common.h>
 #include <test/util/time.h>
 #include <util/check.h>
@@ -22,6 +25,14 @@
 
 #include <cstdint>
 #include <memory>
+#include <vector>
+
+static CService ip(uint32_t i)
+{
+    struct in_addr s;
+    s.s_addr = i;
+    return CService(CNetAddr(s), Params().GetDefaultPort());
+}
 
 BOOST_FIXTURE_TEST_SUITE(peerman_tests, RegTestingSetup)
 
@@ -87,6 +98,85 @@ BOOST_AUTO_TEST_CASE(connections_desirable_service_flags)
     // Lastly, verify the stale tip checks can disallow limited peers connections after not receiving blocks for a prolonged period.
     clock += std::chrono::seconds{consensus.nPowTargetSpacing * NODE_NETWORK_LIMITED_ALLOW_CONN_BLOCKS + 1};
     BOOST_CHECK(peerman->GetDesirableServiceFlags(peer_flags) == ServiceFlags(NODE_NETWORK | NODE_WITNESS));
+}
+
+static bool HasQueuedBlockMsg(CNode& peer)
+{
+    LOCK(peer.cs_vSend);
+    for (const auto& msg : peer.vSendMsg) {
+        if (msg.m_type == NetMsgType::BLOCK) return true;
+    }
+    const auto& [to_send, _more, msg_type]{peer.m_transport->GetBytesToSend(false)};
+    return !to_send.empty() && msg_type == NetMsgType::BLOCK;
+}
+
+static void AssertGetdataServesBlock(ConnmanTestMsg& connman, CNode& peer, const uint256& hash, bool expect_block)
+    EXCLUSIVE_LOCKS_REQUIRED(NetEventsInterface::g_msgproc_mutex)
+{
+    std::vector<CInv> inv{CInv{MSG_WITNESS_BLOCK, hash}};
+    BOOST_REQUIRE(connman.ReceiveMsgFrom(peer, NetMsg::Make(NetMsgType::GETDATA, inv)));
+    peer.fPauseSend = false;
+    (void)connman.ProcessMessagesOnce(peer);
+    BOOST_CHECK_EQUAL(HasQueuedBlockMsg(peer), expect_block);
+    connman.FlushSendBuffer(peer);
+}
+
+// When BLOCK_HAVE_DATA is cleared, tip getdata is refused even if
+// m_most_recent_block still holds the block. A parent hash that is not the
+// cache entry is refused.
+BOOST_FIXTURE_TEST_CASE(getdata_serves_recent_block_without_have_data, TestChain100Setup)
+{
+    ConnmanTestMsg& connman{static_cast<ConnmanTestMsg&>(*m_node.connman)};
+    PeerManager& peerman{*m_node.peerman};
+
+    // TestingSetup does not register peerman. NewPoWValidBlock must fill the cache.
+    m_node.validation_signals->RegisterValidationInterface(&peerman);
+
+    const CScript scriptPubKey{GetScriptForRawPubKey(coinbaseKey.GetPubKey())};
+    const uint256 tip_hash{CreateAndProcessBlock({}, scriptPubKey).GetHash()};
+
+    CBlockIndex* tip{WITH_LOCK(::cs_main, return m_node.chainman->ActiveChain().Tip())};
+    BOOST_REQUIRE(tip);
+    BOOST_REQUIRE(tip->GetBlockHash() == tip_hash);
+    CBlockIndex* parent{tip->pprev};
+    BOOST_REQUIRE(parent);
+    const uint256 parent_hash{parent->GetBlockHash()};
+
+    CNode peer{/*id=*/0,
+               /*sock=*/nullptr,
+               CAddress{ip(0xa0b0c001), NODE_NONE},
+               /*nKeyedNetGroupIn=*/0,
+               /*nLocalHostNonceIn=*/0,
+               CAddress(),
+               /*addrNameIn=*/"",
+               ConnectionType::INBOUND,
+               /*inbound_onion=*/false,
+               /*network_key=*/0};
+
+    LOCK(NetEventsInterface::g_msgproc_mutex);
+    connman.Handshake(
+        /*node=*/peer,
+        /*successfully_connected=*/true,
+        /*remote_services=*/NODE_NONE,
+        /*local_services=*/NODE_NETWORK,
+        /*version=*/PROTOCOL_VERSION,
+        /*relay_txs=*/true);
+    connman.FlushSendBuffer(peer);
+
+    {
+        LOCK(::cs_main);
+        BOOST_REQUIRE(tip->nStatus & BLOCK_HAVE_DATA);
+        BOOST_REQUIRE(parent->nStatus & BLOCK_HAVE_DATA);
+        tip->nStatus &= ~BLOCK_HAVE_DATA;
+        parent->nStatus &= ~BLOCK_HAVE_DATA;
+    }
+
+    // Tip request is dropped when HAVE_DATA is clear despite m_most_recent_block.
+    AssertGetdataServesBlock(connman, peer, tip_hash, /*expect_block=*/false); // TODO: tip should still be served from m_most_recent_block
+    AssertGetdataServesBlock(connman, peer, parent_hash, /*expect_block=*/false);
+
+    peerman.FinalizeNode(peer);
+    m_node.validation_signals->UnregisterValidationInterface(&peerman);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
