@@ -1421,7 +1421,7 @@ BITCOINKERNEL_API const btck_BlockTreeEntry* btck_chainstate_manager_get_best_en
     const btck_ChainstateManager* chainstate_manager) BITCOINKERNEL_ARG_NONNULL(1);
 
 /**
- * @brief Processes and validates the provided btck_BlockHeader.
+ * @brief Accept a block header into the header index (no UTXO write).
  *
  * Time-sensitive checks (e.g. the future-time check) use the chainstate
  * manager's current time, which can be overridden via
@@ -1431,9 +1431,12 @@ BITCOINKERNEL_API const btck_BlockTreeEntry* btck_chainstate_manager_get_best_en
  * @param[in] header                    Non-null btck_BlockHeader to be validated.
  * @return                              The btck_BlockValidationState containing validation result, or null on error.
  */
-BITCOINKERNEL_API btck_BlockValidationState* BITCOINKERNEL_WARN_UNUSED_RESULT btck_chainstate_manager_process_block_header(
+BITCOINKERNEL_API btck_BlockValidationState* BITCOINKERNEL_WARN_UNUSED_RESULT btck_accept_header(
     btck_ChainstateManager* chainstate_manager,
     const btck_BlockHeader* header) BITCOINKERNEL_ARG_NONNULL(1, 2);
+
+/** Transitional alias while MAJOR=0; prefer @ref btck_accept_header. */
+#define btck_chainstate_manager_process_block_header btck_accept_header
 
 /**
  * @brief Override the current time used by this chainstate manager.

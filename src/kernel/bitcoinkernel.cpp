@@ -1614,7 +1614,7 @@ int btck_process_new_block(
     return accepted ? 0 : -1;
 }
 
-btck_BlockValidationState* btck_chainstate_manager_process_block_header(
+btck_BlockValidationState* btck_accept_header(
     btck_ChainstateManager* chainstate_manager,
     const btck_BlockHeader* header)
 {
@@ -1626,7 +1626,7 @@ btck_BlockValidationState* btck_chainstate_manager_process_block_header(
         assert(result == btck_BlockValidationState::get(state).IsValid());
         return state;
     } catch (const std::exception& e) {
-        LogError(btck_ChainstateManager::get(chainstate_manager).m_context->m_log, "Failed to process block header: %s", e.what());
+        LogError(btck_ChainstateManager::get(chainstate_manager).m_context->m_log, "Failed to accept block header: %s", e.what());
         return nullptr;
     }
 }
