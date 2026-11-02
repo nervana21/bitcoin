@@ -91,9 +91,12 @@ class BitcoinHTTPConnection:
 
     def expect_timeout(self, seconds):
         # Wait for response, but expect a timeout disconnection
-        start = time.time()
+        # Steady clock tick before we block waiting for the server to close.
+        # Monotonic time only moves forward so measured wait ignores wall clock jumps.
+        start = time.monotonic()
         response1 = self.recv_raw()
-        stop = time.time()
+        # Steady clock tick after the recv returns (EOF or data).
+        stop = time.monotonic()
         # Server disconnected with EOF
         assert_equal(response1, b"")
         # Server disconnected within an acceptable range of time:
