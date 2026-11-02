@@ -838,6 +838,8 @@ FlushResult<FlatFilePos, AbortFailure> BlockManager::FindNextBlockPos(uint64_t n
             m_blockfile_info.resize(nFile + 1);
         }
     }
+    // Don't delete a pruned file that is about to hold a new block.
+    m_files_to_unlink.erase(nFile);
     FlatFilePos pos;
     pos.nFile = nFile;
     pos.nPos = m_blockfile_info[nFile].nSize;

@@ -960,8 +960,8 @@ CoinsCacheSizeState kernel::Chainstate::GetCoinsCacheSizeState(
 
 FlushResult<void, AbortFailure> kernel::Chainstate::FlushBlockStorageForWrite(
     BlockValidationState& state,
-    const std::set<int>& set_files_to_prune,
-    bool flush_for_prune)
+    const std::set<int>& set_files_to_prune [[maybe_unused]],
+    bool flush_for_prune [[maybe_unused]])
 {
     AssertLockHeld(::cs_main);
     FlushResult<void, AbortFailure> result;
@@ -985,6 +985,11 @@ FlushResult<void, AbortFailure> kernel::Chainstate::FlushBlockStorageForWrite(
         }
     }
 
+    // Take the pruned files with the dirty entries, which WriteBlockIndexDB() drops
+    // even if it fails, so files are only deleted after the write that marks them pruned.
+    // m_files_to_unlink is guarded by m_blockfile_mutex because WriteBlock / FindNextBlockPos
+    // erase from it without holding cs_main (AcceptBlock uses REVERSE_LOCK).
+    const auto files_to_unlink{WITH_LOCK(m_blockman.m_blockfile_mutex, return std::exchange(m_blockman.m_files_to_unlink, {}))};
     // Then update all block file information (which may refer to block and undo files).
     {
         LOG_TIME_MILLIS_WITH_CATEGORY("write block index to disk", BCLog::BENCH);
@@ -992,10 +997,10 @@ FlushResult<void, AbortFailure> kernel::Chainstate::FlushBlockStorageForWrite(
         m_blockman.WriteBlockIndexDB();
     }
     // Finally remove any pruned files
-    if (flush_for_prune) {
+    if (!files_to_unlink.empty()) {
         LOG_TIME_MILLIS_WITH_CATEGORY("unlink pruned files", BCLog::BENCH);
 
-        m_blockman.UnlinkPrunedFiles(set_files_to_prune);
+        m_blockman.UnlinkPrunedFiles(files_to_unlink);
     }
     return result;
 }
@@ -1059,6 +1064,7 @@ FlushResult<void, AbortFailure> kernel::Chainstate::FlushStateToDisk(
                     m_blockman.m_block_tree_db->WritePruned(true);
                     m_blockman.m_have_pruned = true;
                 }
+                WITH_LOCK(m_blockman.m_blockfile_mutex, m_blockman.m_files_to_unlink.insert(setFilesToPrune.begin(), setFilesToPrune.end()));
             }
         }
         const auto nNow{NodeClock::_now_nondet()};
