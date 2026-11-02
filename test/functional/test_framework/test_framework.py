@@ -708,14 +708,21 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
         """
         rpc_connections = nodes or self.nodes
         timeout = int(timeout * self.options.timeout_factor)
-        stop_time = time.time() + timeout
-        while time.time() <= stop_time:
+        # Read the steady clock so the deadline is not tied to wall clock.
+        now = time.monotonic()
+        # Deadline equals now plus how many seconds we are willing to wait.
+        stop_time = now + timeout
+        # Keep polling while the steady clock is still at or before the deadline.
+        now = time.monotonic()
+        while now <= stop_time:
             best_hash = [x.getbestblockhash() for x in rpc_connections]
             if best_hash.count(best_hash[0]) == len(rpc_connections):
                 return
             # Check that each peer has at least one connection
             assert (all([len(x.getpeerinfo()) for x in rpc_connections]))
             time.sleep(wait)
+            # Refresh the steady clock for the next loop check.
+            now = time.monotonic()
         raise AssertionError("Block sync timed out after {}s:{}".format(
             timeout,
             "".join("\n  {!r}".format(b) for b in best_hash),
@@ -728,8 +735,13 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
         """
         rpc_connections = nodes or self.nodes
         timeout = int(timeout * self.options.timeout_factor)
-        stop_time = time.time() + timeout
-        while time.time() <= stop_time:
+        # Read the steady clock so the deadline is not tied to wall clock.
+        now = time.monotonic()
+        # Deadline equals now plus how many seconds we are willing to wait.
+        stop_time = now + timeout
+        # Keep polling while the steady clock is still at or before the deadline.
+        now = time.monotonic()
+        while now <= stop_time:
             pool = [set(r.getrawmempool()) for r in rpc_connections]
             if pool.count(pool[0]) == len(rpc_connections):
                 if flush_scheduler:
@@ -739,6 +751,8 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
             # Check that each peer has at least one connection
             assert (all([len(x.getpeerinfo()) for x in rpc_connections]))
             time.sleep(wait)
+            # Refresh the steady clock for the next loop check.
+            now = time.monotonic()
         raise AssertionError("Mempool sync timed out after {}s:{}".format(
             timeout,
             "".join("\n  {!r}".format(m) for m in pool),

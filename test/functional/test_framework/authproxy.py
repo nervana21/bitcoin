@@ -160,7 +160,10 @@ class AuthServiceProxy():
         return response
 
     def _get_response(self):
-        req_start_time = time.time()
+        # Read a tick from the steady clock before we wait on the HTTP reply.
+        # Monotonic time only moves forward. It ignores OS wall clock jumps.
+        # We use it so "how long did this RPC take" stays honest under clock skew.
+        req_start_time = time.monotonic()
         try:
             http_response = self.__conn.getresponse()
         except socket.timeout:
@@ -196,7 +199,10 @@ class AuthServiceProxy():
             raise JSONRPCException({
                 'code': -342, 'message': f'Cannot decode response in utf8 format, content: {data}, exception: {e}'})
         response = json.loads(responsedata, parse_float=decimal.Decimal)
-        elapsed = time.time() - req_start_time
+        # Read a fresh tick from the same steady clock after decoding finishes.
+        now = time.monotonic()
+        # Elapsed seconds equals end tick minus start tick.
+        elapsed = now - req_start_time
         if "error" in response and response["error"] is None:
             log.debug("<-%s- [%.6f] %s" % (response["id"], elapsed, self._json_dumps(response["result"])))
         else:

@@ -660,7 +660,9 @@ def run_tests(*, test_list, build_dir, tmpdir, jobs=1, enable_coverage=False, ar
         flags=flags,
         use_term_control=use_term_control,
     )
-    start_time = time.time()
+    # Mark when the whole test batch started using the steady clock.
+    # Monotonic time only moves forward so total runtime ignores wall clock jumps.
+    start_time = time.monotonic()
     test_results = []
 
     max_len_name = len(max(test_list, key=len))
@@ -702,7 +704,12 @@ def run_tests(*, test_list, build_dir, tmpdir, jobs=1, enable_coverage=False, ar
                              f"Test execution data left in {tmpdir}.\n"
                              f"Additional storage is needed to execute testing.")
 
-    runtime = int(time.time() - start_time)
+    # Read the steady clock after all jobs finish.
+    now = time.monotonic()
+    # Elapsed seconds equals end tick minus start tick.
+    elapsed = now - start_time
+    # Store whole seconds for the summary printer.
+    runtime = int(elapsed)
     print_results(test_results, max_len_name, runtime)
     if results_filepath:
         write_results(test_results, results_filepath, runtime)
@@ -794,9 +801,11 @@ class TestHandler:
                 task[2].wait()
                 return task
 
+            # Record start time for this one test with the steady clock.
+            test_start_time = time.monotonic()
             task = [
                 test,
-                time.time(),
+                test_start_time,
                 subprocess.Popen(
                     [sys.executable, self.tests_dir + test_argv[0]] + test_argv[1:] + self.flags + portseed_arg + tmpdir_arg,
                     text=True,
@@ -840,7 +849,13 @@ class TestHandler:
                     clearline = '\r' + (' ' * dot_count) + '\r'
                     print(clearline, end='', flush=True)
                 dot_count = 0
-                ret.append((TestResult(name, status, int(time.time() - start_time)), testdir, stdout, stderr, proc.returncode, skip_reason))
+                # Read the steady clock when this test finishes.
+                now = time.monotonic()
+                # Elapsed seconds equals end tick minus this test's start tick.
+                elapsed = now - start_time
+                # Store whole seconds on the TestResult.
+                elapsed_int = int(elapsed)
+                ret.append((TestResult(name, status, elapsed_int), testdir, stdout, stderr, proc.returncode, skip_reason))
             if ret:
                 return ret
             if self.use_term_control:

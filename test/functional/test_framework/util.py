@@ -414,12 +414,17 @@ def ensure_for(*, duration, f, check_interval=0.2):
     # to checking once in the beginning and once at the end of duration
     if check_interval <= 0 or check_interval > duration:
         check_interval = duration
-    time_end = time.time() + duration
+    # Read the steady clock so the hold window ignores wall clock jumps.
+    now = time.monotonic()
+    # End time is now plus how long the predicate must stay true.
+    time_end = now + duration
     predicate_source = "''''\n" + inspect.getsource(f) + "'''"
     while True:
         if not f():
             raise AssertionError(f"Predicate {predicate_source} became false within {duration} seconds")
-        if time.time() > time_end:
+        # Read the steady clock to see if the hold window is over.
+        now = time.monotonic()
+        if now > time_end:
             return
         time.sleep(check_interval)
 
@@ -434,9 +439,14 @@ def wait_until_helper_internal(predicate, *, timeout=60, lock=None, timeout_fact
     `p2p.py` has a preset lock.
     """
     timeout = timeout * timeout_factor
-    time_end = time.time() + timeout
+    # Read the steady clock so the wait deadline ignores wall clock jumps.
+    now = time.monotonic()
+    # Deadline is now plus the scaled timeout.
+    time_end = now + timeout
 
-    while time.time() < time_end:
+    # Keep trying while the steady clock is still strictly before the deadline.
+    now = time.monotonic()
+    while now < time_end:
         if lock:
             with lock:
                 if predicate():
@@ -444,11 +454,15 @@ def wait_until_helper_internal(predicate, *, timeout=60, lock=None, timeout_fact
                 if isinstance(lock, threading.Condition):
                     # Wake up early when the lock owner signals a state change
                     lock.wait(check_interval)
+                    # Refresh the steady clock after waking.
+                    now = time.monotonic()
                     continue
         else:
             if predicate():
                 return
         time.sleep(check_interval)
+        # Refresh the steady clock for the next loop check.
+        now = time.monotonic()
 
     # Print the cause of the timeout
     predicate_source = "''''\n" + inspect.getsource(predicate) + "'''"

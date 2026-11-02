@@ -639,7 +639,12 @@ class TestNode():
         assert_equal(type(unexpected_msgs), list)
         remaining_expected = list(expected_msgs)
 
-        time_end = time.time() + timeout * self.timeout_factor
+        # Scale the caller timeout by this node's timeout factor.
+        scaled_timeout = timeout * self.timeout_factor
+        # Read the steady clock so the deadline ignores wall clock jumps.
+        now = time.monotonic()
+        # Deadline is now plus the scaled timeout.
+        time_end = now + scaled_timeout
         prev_size = self.debug_log_size(encoding="utf-8")  # Must use same encoding that is used to read() below
 
         def join_log(log):
@@ -659,7 +664,9 @@ class TestNode():
                 remaining_expected.pop()
             if not remaining_expected:
                 return
-            if time.time() >= time_end:
+            # Read the steady clock to see if we ran out of time.
+            now = time.monotonic()
+            if now >= time_end:
                 break
             time.sleep(0.05)
         remaining_expected = [e for e in remaining_expected if e not in log]
@@ -671,7 +678,12 @@ class TestNode():
         """
         Block until we see a particular debug log message fragment or until we exceed the timeout.
         """
-        time_end = time.time() + timeout * self.timeout_factor
+        # Scale the caller timeout by this node's timeout factor.
+        scaled_timeout = timeout * self.timeout_factor
+        # Read the steady clock so the deadline ignores wall clock jumps.
+        now = time.monotonic()
+        # Deadline is now plus the scaled timeout.
+        time_end = now + scaled_timeout
         prev_size = self.debug_log_size(mode="rb")  # Must use same mode that is used to read() below
         remaining_expected = list(expected_msgs)
 
@@ -687,7 +699,9 @@ class TestNode():
             if not remaining_expected:
                 return
 
-            if time.time() >= time_end:
+            # Read the steady clock to see if we ran out of time.
+            now = time.monotonic()
+            if now >= time_end:
                 print_log = " - " + "\n - ".join(log.decode("utf8", errors="replace").splitlines())
                 break
 
