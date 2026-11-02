@@ -1539,10 +1539,15 @@ public:
         return ProcessNewBlock(block, new_block);
     }
 
-    BlockValidationState ProcessBlockHeader(const BlockHeader& header)
+    BlockValidationState AcceptHeader(const BlockHeader& header)
     {
-        auto state = btck_chainstate_manager_process_block_header(get(), header.get());
+        auto state = btck_accept_header(get(), header.get());
         return BlockValidationState{state};
+    }
+
+    [[deprecated("Use AcceptHeader")]] BlockValidationState ProcessBlockHeader(const BlockHeader& header)
+    {
+        return AcceptHeader(header);
     }
 
     void SetClockTime(std::optional<std::chrono::seconds> now)

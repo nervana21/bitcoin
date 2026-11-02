@@ -1374,7 +1374,7 @@ BOOST_AUTO_TEST_CASE(btck_chainman_regtest_tests)
         for (const auto& data : REGTEST_BLOCK_DATA) {
             Block block{hex_string_to_byte_vec(data)};
             BlockHeader header = block.GetHeader();
-            BlockValidationState state = chainman->ProcessBlockHeader(header);
+            BlockValidationState state = chainman->AcceptHeader(header);
             BOOST_CHECK(state.GetValidationMode() == ValidationMode::VALID);
             BOOST_CHECK(state.GetBlockValidationResult() == BlockValidationResult::UNSET);
             BlockTreeEntry entry{*chainman->GetBlockTreeEntry(header.Hash())};
@@ -1700,14 +1700,14 @@ BOOST_AUTO_TEST_CASE(btck_set_mock_time_tests)
 
     // With the time set 3h before the header, the kernel must see the header as >2h in the future and reject it
     KernelMockTime mock_time{block_time - std::chrono::hours{3}};
-    BlockValidationState future_state{chainman->ProcessBlockHeader(header)};
+    BlockValidationState future_state{chainman->AcceptHeader(header)};
     BOOST_CHECK(future_state.GetValidationMode() == ValidationMode::INVALID);
     BOOST_CHECK(future_state.GetBlockValidationResult() == BlockValidationResult::TIME_FUTURE);
 
     // At the upper bound the header is far in the past and must be accepted; this also
     // confirms the future-time check's "now + 2h" computation doesn't overflow when now is at its max.
     mock_time.set(max_time);
-    BlockValidationState ok_state{chainman->ProcessBlockHeader(header)};
+    BlockValidationState ok_state{chainman->AcceptHeader(header)};
     BOOST_CHECK(ok_state.GetValidationMode() == ValidationMode::VALID);
     BOOST_CHECK(ok_state.GetBlockValidationResult() == BlockValidationResult::UNSET);
 }
