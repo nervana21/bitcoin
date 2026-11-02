@@ -202,7 +202,7 @@ int main(int argc, char* argv[])
         }
 
         bool new_block = false;
-        bool accepted = chainman->ProcessBlock(*block, &new_block);
+        bool accepted = chainman->ProcessNewBlock(*block, &new_block);
         if (accepted) {
             std::cerr << "Block has not yet been rejected" << std::endl;
         } else {

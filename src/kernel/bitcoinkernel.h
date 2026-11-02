@@ -1476,12 +1476,13 @@ BITCOINKERNEL_API int BITCOINKERNEL_WARN_UNUSED_RESULT btck_chainstate_manager_i
     size_t block_file_paths_data_len) BITCOINKERNEL_ARG_NONNULL(1);
 
 /**
- * @brief Process and validate the passed in block with the chainstate
- * manager. Processing first does checks on the block, and if these passed,
- * saves it to disk. It then validates the block against the utxo set. If it is
- * valid, the chain is extended with it. The return value is not indicative of
- * the block's validity. Detailed information on the validity of the block can
- * be retrieved by registering the `block_checked` callback in the validation
+ * @brief Process a new block: checks, disk store, tip extension and UTXO write (or reject).
+ *
+ * First checks the block, and if these passed, saves it to disk. It then
+ * validates the block against the utxo set. If it is valid, the chain is
+ * extended with it. The return value is not indicative of the block's
+ * validity. Detailed information on the validity of the block can be
+ * retrieved by registering the `block_checked` callback in the validation
  * interface.
  *
  * Time-sensitive checks (e.g. the future-time check) and the IBD latch use
@@ -1496,10 +1497,13 @@ BITCOINKERNEL_API int BITCOINKERNEL_WARN_UNUSED_RESULT btck_chainstate_manager_i
  *                               before its data was persisted.
  * @return                       0 if processing the block was successful. Will also return 0 for valid, but duplicate blocks.
  */
-BITCOINKERNEL_API int BITCOINKERNEL_WARN_UNUSED_RESULT btck_chainstate_manager_process_block(
+BITCOINKERNEL_API int BITCOINKERNEL_WARN_UNUSED_RESULT btck_process_new_block(
     btck_ChainstateManager* chainstate_manager,
     const btck_Block* block,
     int* new_block) BITCOINKERNEL_ARG_NONNULL(1, 2, 3);
+
+/** Transitional alias while MAJOR=0; prefer @ref btck_process_new_block. */
+#define btck_chainstate_manager_process_block btck_process_new_block
 
 /**
  * @brief Returns the best known currently active chain. Its lifetime is
