@@ -2,6 +2,10 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+// CBlockIndex / BLOCK_HAVE_DATA live in chain.h. The prune test clears that status bit in memory.
+#include <chain.h>
+// FlatFilePos names a (file number, byte offset) inside blk/rev flat files.
+#include <flatfile.h>
 #include <node/blockstorage.h>
 #include <test/util/logging.h>
 #include <test/util/setup_common.h>
@@ -41,6 +45,13 @@ static void RestoreFile(const fs::path& file)
     const fs::path backup_path{file + ".bak"};
     fs::rename(backup_path, file);
 }
+
+// Regtest chain with pruning on. -prune=1 enables prune mode. -fastprune shrinks prune thresholds so tests finish fast.
+// Commit 1 made these extra_args actually reach BlockManager via ApplyArgsManOptions.
+struct ManualPruneSetup : public TestChain100Setup {
+    ManualPruneSetup()
+        : TestChain100Setup{ChainType::REGTEST, {.extra_args = {"-prune=1", "-fastprune"}}} {}
+};
 
 BOOST_AUTO_TEST_SUITE(chainstate_write_tests)
 
@@ -169,6 +180,81 @@ BOOST_FIXTURE_TEST_CASE(chainstate_flush_failure_boundary, TestChain100Setup)
     // On-disk block file info now includes new_tip height (it stayed at old_flushed height after the failure).
     BOOST_REQUIRE(WITH_LOCK(::cs_main, return chainstate.m_blockman.m_block_tree_db->ReadBlockFileInfo(new_tip->nFile, file_info)));
     BOOST_CHECK_EQUAL(file_info.nHeightLast, new_tip->nHeight);
+}
+
+// Characterize the bug this PR fixes: a prune flush can mark files pruned in memory, fail before the block-index write,
+// then a later successful flush can write the pruned metadata and still leave blk/rev files on disk until the next startup.
+BOOST_FIXTURE_TEST_CASE(prune_flush_failure, ManualPruneSetup)
+{
+    auto& chainstate{Assert(m_node.chainman)->ActiveChainstate()};
+    auto& blockman{chainstate.m_blockman};
+    BlockValidationState state{};
+    // Commit 1 is why IsPruneMode() is true here (extra_args reached BlockManager).
+    BOOST_REQUIRE(blockman.IsPruneMode());
+
+    // Grow the chain until tip lives in blk00001.dat (file number 1). File 0 is then a candidate to prune.
+    while (WITH_LOCK(::cs_main, return chainstate.m_chain.Tip()->nFile) == 0) {
+        mineBlocks(1);
+    }
+    // Last height still stored in file 0. Manual prune will ask to prune through this height.
+    const int prune_height{WITH_LOCK(::cs_main, return static_cast<int>(blockman.GetBlockFileInfo(0)->nHeightLast))};
+    const int tip_height{WITH_LOCK(::cs_main, return chainstate.m_chain.Height())};
+    // Keep at least MIN_BLOCKS_TO_KEEP blocks after prune_height so pruning file 0 is allowed.
+    const int blocks_needed_after_prune{prune_height + static_cast<int>(MIN_BLOCKS_TO_KEEP) - tip_height};
+    mineBlocks(blocks_needed_after_prune);
+
+    // Baseline flush so coins/block index match tip before we sabotage.
+    BOOST_REQUIRE(chainstate.FlushStateToDisk(state, FlushStateMode::FORCE_FLUSH));
+    const auto* flushed_tip{WITH_LOCK(::cs_main, return chainstate.m_chain.Tip())};
+    // Remember on-disk size of file 0 before prune marks it empty in memory.
+    const auto pruned_size{WITH_LOCK(::cs_main, return blockman.GetBlockFileInfo(0)->nSize)};
+    // Paths of the blk/rev pair for file 0. The bug leaves these files present after a retried flush.
+    const auto pruned_blk_file{blockman.GetBlockPosFilename(FlatFilePos{0, 0})};
+    const fs::path pruned_rev_file{pruned_blk_file.parent_path() / "rev00000.dat"};
+
+    // One more block so there is new tip work to flush. Sabotage that tip's blk file so FlushStateToDisk fails mid-prune.
+    mineBlocks(1);
+    const auto tip_blk_file{WITH_LOCK(::cs_main, return blockman.GetBlockPosFilename(chainstate.m_chain.Tip()->GetBlockPos()))};
+    InjectFileOpenFailure(tip_blk_file);
+
+    ASSERT_DEBUG_LOG("Flushing block file to disk failed");
+    // FlushStateMode::NONE + prune_height = manual prune path. Failure happens while flushing the tip blk file,
+    // after PruneOneBlockFile has already zeroed file 0 in memory and cleared BLOCK_HAVE_DATA.
+    BOOST_CHECK(!chainstate.FlushStateToDisk(state, FlushStateMode::NONE, prune_height));
+    BOOST_CHECK(state.IsError());
+    {
+        LOCK(::cs_main);
+        // In-memory file 0 already looks pruned (sizes cleared).
+        BOOST_CHECK_EQUAL(blockman.GetBlockFileInfo(0)->nSize, 0U);
+        BOOST_CHECK_EQUAL(blockman.GetBlockFileInfo(0)->nUndoSize, 0U);
+        for (int height{0}; height <= prune_height; ++height) {
+            BOOST_CHECK(!(chainstate.m_chain[height]->nStatus & BLOCK_HAVE_DATA));
+        }
+    }
+    // The "we have ever pruned" flag was written early, before the failing block-file flush returned.
+    bool have_pruned{false};
+    BOOST_REQUIRE(WITH_LOCK(::cs_main, return blockman.m_block_tree_db->ReadFlag("prunedblockfiles", have_pruned)));
+    BOOST_CHECK(have_pruned);
+    // But the block-index DB still has the old non-zero size for file 0: the write that would record prune never ran.
+    node::CBlockFileInfo file_info;
+    BOOST_REQUIRE(WITH_LOCK(::cs_main, return blockman.m_block_tree_db->ReadBlockFileInfo(0, file_info)));
+    BOOST_CHECK_EQUAL(file_info.nSize, pruned_size);
+    // Coins tip stayed at the pre-failure flushed tip (the failed flush did not advance coins).
+    BOOST_CHECK(WITH_LOCK(::cs_main, return chainstate.CoinsDB().GetBestBlock()) == flushed_tip->GetBlockHash());
+    // Critically: blk00000.dat and rev00000.dat are still on disk after the failed prune flush.
+    BOOST_CHECK(fs::exists(pruned_blk_file));
+    BOOST_CHECK(fs::exists(pruned_rev_file));
+
+    // Undo sabotage and FORCE_FLUSH. On master (pre-fix), the index now shows file 0 size 0, yet the files remain.
+    RestoreFile(tip_blk_file);
+    state = {};
+    BOOST_CHECK(chainstate.FlushStateToDisk(state, FlushStateMode::FORCE_FLUSH));
+    BOOST_REQUIRE(WITH_LOCK(::cs_main, return blockman.m_block_tree_db->ReadBlockFileInfo(0, file_info)));
+    BOOST_CHECK_EQUAL(file_info.nSize, 0U);
+    // TODO removed by the last commit of this PR. Until then, characterize the leak: files still exist after retry.
+    // TODO: delete pruned files after a retried flush
+    BOOST_CHECK(fs::exists(pruned_blk_file));
+    BOOST_CHECK(fs::exists(pruned_rev_file));
 }
 
 BOOST_AUTO_TEST_SUITE_END()
