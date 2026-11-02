@@ -21,6 +21,27 @@ using kernel::ChainstateRole;
 static constexpr auto DATABASE_WRITE_INTERVAL_MIN{50min};
 static constexpr auto DATABASE_WRITE_INTERVAL_MAX{70min};
 
+// Make opening `file` as a regular file fail on the next flush.
+// Old code deleted the blk file forever. This keeps a .bak copy so a later RestoreFile can undo the sabotage.
+static void InjectFileOpenFailure(const fs::path& file)
+{
+    // Move the real blk/rev bytes aside under file.bak.
+    const fs::path backup_path{file + ".bak"};
+    fs::rename(file, backup_path);
+    // Put a directory where the file path was. open() then fails because the path is a directory, not a file.
+    Assert(fs::create_directory(file));
+}
+
+// Undo InjectFileOpenFailure: remove the decoy directory and put the real file back.
+static void RestoreFile(const fs::path& file)
+{
+    // Remove the empty directory that blocked file opens.
+    Assert(fs::remove(file));
+    // Rename file.bak back to the original path so FlushStateToDisk can open the blk file again.
+    const fs::path backup_path{file + ".bak"};
+    fs::rename(backup_path, file);
+}
+
 BOOST_AUTO_TEST_SUITE(chainstate_write_tests)
 
 BOOST_FIXTURE_TEST_CASE(chainstate_write_interval, TestingSetup)
@@ -113,7 +134,6 @@ BOOST_FIXTURE_TEST_CASE(write_during_multiblock_activation, TestChain100Setup)
 
 BOOST_FIXTURE_TEST_CASE(chainstate_flush_failure_boundary, TestChain100Setup)
 {
-    auto inject_file_open_failure{[](const fs::path& file) { Assert(fs::remove(file)); Assert(fs::create_directory(file)); }};
     auto& chainstate{Assert(m_node.chainman)->ActiveChainstate()};
     BlockValidationState state{};
 
@@ -123,7 +143,9 @@ BOOST_FIXTURE_TEST_CASE(chainstate_flush_failure_boundary, TestChain100Setup)
     mineBlocks(1);
     auto* new_tip{WITH_LOCK(::cs_main, return chainstate.m_chain.Tip())};
     BOOST_REQUIRE_NE(old_flushed, new_tip);
-    inject_file_open_failure(WITH_LOCK(::cs_main, return chainstate.m_blockman.GetBlockPosFilename(new_tip->GetBlockPos())));
+    // Path of the blk*.dat that holds new_tip. Sabotage this path so the next flush cannot open it.
+    const auto blk_file{WITH_LOCK(::cs_main, return chainstate.m_blockman.GetBlockPosFilename(new_tip->GetBlockPos()))};
+    InjectFileOpenFailure(blk_file);
 
     ASSERT_DEBUG_LOG("Flushing block file to disk failed");
     bool flushed{chainstate.FlushStateToDisk(state, FlushStateMode::FORCE_FLUSH)};
@@ -134,6 +156,19 @@ BOOST_FIXTURE_TEST_CASE(chainstate_flush_failure_boundary, TestChain100Setup)
     node::CBlockFileInfo file_info;
     BOOST_REQUIRE(WITH_LOCK(::cs_main, return chainstate.m_blockman.m_block_tree_db->ReadBlockFileInfo(new_tip->nFile, file_info)));
     BOOST_CHECK_EQUAL(file_info.nHeightLast, old_flushed->nHeight);
+
+    // Put the real blk file back, then prove a later FORCE_FLUSH writes the work the failed flush skipped.
+    RestoreFile(blk_file);
+    // Clear the Error from the failed flush so the next call starts clean.
+    state = {};
+    BOOST_CHECK(chainstate.FlushStateToDisk(state, FlushStateMode::FORCE_FLUSH));
+    BOOST_CHECK(state.IsValid());
+    // Chain tip and coins tip catch up to new_tip after the successful retry.
+    BOOST_CHECK_EQUAL(WITH_LOCK(::cs_main, return chainstate.GetLastFlushedBlock()), new_tip);
+    BOOST_CHECK(WITH_LOCK(::cs_main, return chainstate.CoinsDB().GetBestBlock()) == new_tip->GetBlockHash());
+    // On-disk block file info now includes new_tip height (it stayed at old_flushed height after the failure).
+    BOOST_REQUIRE(WITH_LOCK(::cs_main, return chainstate.m_blockman.m_block_tree_db->ReadBlockFileInfo(new_tip->nFile, file_info)));
+    BOOST_CHECK_EQUAL(file_info.nHeightLast, new_tip->nHeight);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
