@@ -1599,7 +1599,7 @@ void btck_coin_destroy(btck_Coin* coin)
     delete coin;
 }
 
-int btck_chainstate_manager_process_block(
+int btck_process_new_block(
     btck_ChainstateManager* chainman,
     const btck_Block* block,
     int* _new_block)

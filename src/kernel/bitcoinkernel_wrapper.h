@@ -1526,12 +1526,17 @@ public:
         return btck_chainstate_manager_import_blocks(get(), c_paths.data(), c_paths_lens.data(), c_paths.size()) == 0;
     }
 
-    bool ProcessBlock(const Block& block, bool* new_block)
+    bool ProcessNewBlock(const Block& block, bool* new_block)
     {
         int _new_block;
-        int res = btck_chainstate_manager_process_block(get(), block.get(), &_new_block);
+        int res = btck_process_new_block(get(), block.get(), &_new_block);
         if (new_block) *new_block = _new_block == 1;
         return res == 0;
+    }
+
+    [[deprecated("Use ProcessNewBlock")]] bool ProcessBlock(const Block& block, bool* new_block)
+    {
+        return ProcessNewBlock(block, new_block);
     }
 
     BlockValidationState ProcessBlockHeader(const BlockHeader& header)
