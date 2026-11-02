@@ -2828,6 +2828,9 @@ bool Chainstate::FlushStateToDisk(
                     m_blockman.m_block_tree_db->WriteFlag("prunedblockfiles", true);
                     m_blockman.m_have_pruned = true;
                 }
+                // Remember selected file numbers on BlockManager. setFilesToPrune is local and would be lost if this flush fails
+                // before UnlinkPrunedFiles. Pending entries do not by themselves force a later write.
+                m_blockman.m_files_to_unlink.insert(setFilesToPrune.begin(), setFilesToPrune.end());
             }
         }
         const auto nNow{NodeClock::now()};
@@ -2859,17 +2862,24 @@ bool Chainstate::FlushStateToDisk(
                 }
             }
 
+            // Move pending unlink numbers out of BlockManager before WriteBlockIndexDB.
+            // Same fate as dirty index entries: WriteBlockIndexDB clears dirty sets even when the DB write fails,
+            // so we must not leave unlink work dangling on a failed write either. Only delete after the write that
+            // records the pruned sizes on disk. If FlushChainstateBlockFile failed earlier, we never reach here and
+            // m_files_to_unlink still holds the numbers for the next successful flush.
+            const auto files_to_unlink{std::exchange(m_blockman.m_files_to_unlink, {})};
             // Then update all block file information (which may refer to block and undo files).
             {
                 LOG_TIME_MILLIS_WITH_CATEGORY("write block index to disk", BCLog::BENCH);
 
                 m_blockman.WriteBlockIndexDB();
             }
-            // Finally remove any pruned files
-            if (fFlushForPrune) {
+            // Delete blk/rev for every file number taken above (this flush or an earlier failed one).
+            // Keyed off files_to_unlink, not fFlushForPrune, so a plain FORCE_FLUSH can finish unlink work.
+            if (!files_to_unlink.empty()) {
                 LOG_TIME_MILLIS_WITH_CATEGORY("unlink pruned files", BCLog::BENCH);
 
-                m_blockman.UnlinkPrunedFiles(setFilesToPrune);
+                m_blockman.UnlinkPrunedFiles(files_to_unlink);
             }
 
             if (!CoinsTip().GetBestBlock().IsNull()) {

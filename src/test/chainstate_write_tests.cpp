@@ -245,16 +245,15 @@ BOOST_FIXTURE_TEST_CASE(prune_flush_failure, ManualPruneSetup)
     BOOST_CHECK(fs::exists(pruned_blk_file));
     BOOST_CHECK(fs::exists(pruned_rev_file));
 
-    // Undo sabotage and FORCE_FLUSH. On master (pre-fix), the index now shows file 0 size 0, yet the files remain.
+    // Undo sabotage and FORCE_FLUSH. The retried flush writes pruned file 0 to the index and then unlinks the files.
     RestoreFile(tip_blk_file);
     state = {};
     BOOST_CHECK(chainstate.FlushStateToDisk(state, FlushStateMode::FORCE_FLUSH));
     BOOST_REQUIRE(WITH_LOCK(::cs_main, return blockman.m_block_tree_db->ReadBlockFileInfo(0, file_info)));
     BOOST_CHECK_EQUAL(file_info.nSize, 0U);
-    // TODO removed by the last commit of this PR. Until then, characterize the leak: files still exist after retry.
-    // TODO: delete pruned files after a retried flush
-    BOOST_CHECK(fs::exists(pruned_blk_file));
-    BOOST_CHECK(fs::exists(pruned_rev_file));
+    // Fix landed: after a successful later flush, the pruned blk/rev files are gone (not only marked pruned in the index).
+    BOOST_CHECK(!fs::exists(pruned_blk_file));
+    BOOST_CHECK(!fs::exists(pruned_rev_file));
 }
 
 BOOST_AUTO_TEST_SUITE_END()

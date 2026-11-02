@@ -895,6 +895,9 @@ FlatFilePos BlockManager::FindNextBlockPos(unsigned int nAddSize, unsigned int n
             m_blockfile_info.resize(nFile + 1);
         }
     }
+    // File nFile is about to receive a new block. If nFile was pending unlink (rare: e.g. after assumeutxo reuses a file),
+    // cancel that unlink so we do not delete a file we are about to append to.
+    m_files_to_unlink.erase(nFile);
     FlatFilePos pos;
     pos.nFile = nFile;
     pos.nPos = m_blockfile_info[nFile].nSize;

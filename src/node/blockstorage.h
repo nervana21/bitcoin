@@ -313,6 +313,11 @@ protected:
     /** Dirty block file entries. */
     std::set<int> m_dirty_fileinfo;
 
+    // Block file numbers waiting to be unlinked after a successful block-index write.
+    // Survives a failed FlushStateToDisk so a later flush can delete blk/rev files that were already pruned in memory.
+    // Local setFilesToPrune in FlushStateToDisk used to die with the failed call, which leaked files until next startup.
+    std::set<int> m_files_to_unlink GUARDED_BY(::cs_main);
+
 public:
     using Options = kernel::BlockManagerOpts;
     using ReadRawBlockResult = util::Expected<std::vector<std::byte>, ReadRawError>;
