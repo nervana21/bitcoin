@@ -16,18 +16,12 @@
 #include <utility>
 
 CKey DecodeSecret(std::string_view str, const CChainParams& params);
-CKey DecodeSecret(std::string_view str);
 std::string EncodeSecret(const CKey& key, const CChainParams& params);
-std::string EncodeSecret(const CKey& key);
 
 CExtKey DecodeExtKey(std::string_view str, const CChainParams& params);
-CExtKey DecodeExtKey(std::string_view str);
 std::string EncodeExtKey(const CExtKey& extkey, const CChainParams& params);
-std::string EncodeExtKey(const CExtKey& extkey);
 CExtPubKey DecodeExtPubKey(std::string_view str, const CChainParams& params);
-CExtPubKey DecodeExtPubKey(std::string_view str);
 std::string EncodeExtPubKey(const CExtPubKey& extpubkey, const CChainParams& params);
-std::string EncodeExtPubKey(const CExtPubKey& extpubkey);
 
 /** Decode a base58-encoded extended key string as either an xprv or xpub, using a single
  *  base58 decode. The first element of the returned pair is valid if the string encodes
@@ -35,12 +29,8 @@ std::string EncodeExtPubKey(const CExtPubKey& extpubkey);
 std::pair<CExtKey, CExtPubKey> DecodeExtKeyOrPubKey(std::string_view str);
 
 std::string EncodeDestination(const CTxDestination& dest, const CChainParams& params);
-std::string EncodeDestination(const CTxDestination& dest);
 CTxDestination DecodeDestination(const std::string& str, const CChainParams& params);
-CTxDestination DecodeDestination(const std::string& str);
 CTxDestination DecodeDestination(const std::string& str, const CChainParams& params, std::string& error_msg, std::vector<int>* error_locations = nullptr);
-CTxDestination DecodeDestination(const std::string& str, std::string& error_msg, std::vector<int>* error_locations = nullptr);
 bool IsValidDestinationString(const std::string& str, const CChainParams& params);
-bool IsValidDestinationString(const std::string& str);
 
 #endif // BITCOIN_KEY_IO_H

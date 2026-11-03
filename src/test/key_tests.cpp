@@ -40,19 +40,19 @@ BOOST_FIXTURE_TEST_SUITE(key_tests, BasicTestingSetup)
 
 BOOST_AUTO_TEST_CASE(key_test1)
 {
-    CKey key1  = DecodeSecret(strSecret1);
+    CKey key1  = DecodeSecret(strSecret1, Params());
     BOOST_CHECK(key1.IsValid());
     BOOST_CHECK(!key1.IsCompressed());
-    CKey key2  = DecodeSecret(strSecret2);
+    CKey key2  = DecodeSecret(strSecret2, Params());
     BOOST_CHECK(key2.IsValid());
     BOOST_CHECK(!key2.IsCompressed());
-    CKey key1C = DecodeSecret(strSecret1C);
+    CKey key1C = DecodeSecret(strSecret1C, Params());
     BOOST_CHECK(key1C.IsValid());
     BOOST_CHECK(key1C.IsCompressed());
-    CKey key2C = DecodeSecret(strSecret2C);
+    CKey key2C = DecodeSecret(strSecret2C, Params());
     BOOST_CHECK(key2C.IsValid());
     BOOST_CHECK(key2C.IsCompressed());
-    CKey bad_key = DecodeSecret(strAddressBad);
+    CKey bad_key = DecodeSecret(strAddressBad, Params());
     BOOST_CHECK(!bad_key.IsValid());
 
     CPubKey pubkey1  = key1. GetPubKey();
@@ -80,10 +80,10 @@ BOOST_AUTO_TEST_CASE(key_test1)
     BOOST_CHECK(!key2C.VerifyPubKey(pubkey2));
     BOOST_CHECK(key2C.VerifyPubKey(pubkey2C));
 
-    BOOST_CHECK_EQUAL(DecodeDestination(addr1),  CTxDestination(PKHash(pubkey1)));
-    BOOST_CHECK_EQUAL(DecodeDestination(addr2),  CTxDestination(PKHash(pubkey2)));
-    BOOST_CHECK_EQUAL(DecodeDestination(addr1C), CTxDestination(PKHash(pubkey1C)));
-    BOOST_CHECK_EQUAL(DecodeDestination(addr2C), CTxDestination(PKHash(pubkey2C)));
+    BOOST_CHECK_EQUAL(DecodeDestination(addr1, Params()),  CTxDestination(PKHash(pubkey1)));
+    BOOST_CHECK_EQUAL(DecodeDestination(addr2, Params()),  CTxDestination(PKHash(pubkey2)));
+    BOOST_CHECK_EQUAL(DecodeDestination(addr1C, Params()), CTxDestination(PKHash(pubkey1C)));
+    BOOST_CHECK_EQUAL(DecodeDestination(addr2C, Params()), CTxDestination(PKHash(pubkey2C)));
 
     for (int n=0; n<16; n++)
     {
@@ -170,7 +170,7 @@ BOOST_AUTO_TEST_CASE(key_test1)
 BOOST_AUTO_TEST_CASE(key_signature_tests)
 {
     // When entropy is specified, we should see at least one high R signature within 20 signatures
-    CKey key = DecodeSecret(strSecret1);
+    CKey key = DecodeSecret(strSecret1, Params());
     std::string msg = "A message to be signed";
     uint256 msg_hash = Hash(msg);
     std::vector<unsigned char> sig;
@@ -342,7 +342,7 @@ BOOST_AUTO_TEST_CASE(bip340_test_vectors)
 BOOST_AUTO_TEST_CASE(key_ellswift)
 {
     for (const auto& secret : {strSecret1, strSecret2, strSecret1C, strSecret2C}) {
-        CKey key = DecodeSecret(secret);
+        CKey key = DecodeSecret(secret, Params());
         BOOST_CHECK(key.IsValid());
 
         uint256 ent32 = m_rng.rand256();

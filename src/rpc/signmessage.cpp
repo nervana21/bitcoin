@@ -88,7 +88,7 @@ static RPCMethod signmessagewithprivkey()
             std::string strPrivkey = request.params[0].get_str();
             std::string strMessage = request.params[1].get_str();
 
-            CKey key = DecodeSecret(strPrivkey);
+            CKey key = DecodeSecret(strPrivkey, Params());
             if (!key.IsValid()) {
                 throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid private key");
             }

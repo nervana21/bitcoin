@@ -155,7 +155,7 @@ void PSBTOperationsDialog::saveTransaction() {
         CTxDestination address;
         ExtractDestination(out.script, address);
         QString amount = BitcoinUnits::format(m_client_model->getOptionsModel()->getDisplayUnit(), out.amount);
-        QString address_str = QString::fromStdString(EncodeDestination(address));
+        QString address_str = QString::fromStdString(EncodeDestination(address, Params()));
         filename_suggestion.append(address_str + "-" + amount);
         first = false;
     }
@@ -189,7 +189,7 @@ QString PSBTOperationsDialog::renderTransaction(const PartiallySignedTransaction
         totalAmount += out.amount;
         tx_description.append(bullet_point).append(tr("Sends %1 to %2")
             .arg(BitcoinUnits::formatWithUnit(BitcoinUnit::BTC, out.amount))
-            .arg(QString::fromStdString(EncodeDestination(address))));
+            .arg(QString::fromStdString(EncodeDestination(address, Params()))));
         // Check if the address is one of ours
         if (m_wallet_model != nullptr && m_wallet_model->wallet().txoutIsMine(CTxOut(out.amount, out.script))) tx_description.append(" (" + tr("own address") + ")");
         tx_description.append("<br>");

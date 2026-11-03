@@ -145,7 +145,7 @@ void WalletModel::updateAddressBook(const QString &address, const QString &label
 
 bool WalletModel::validateAddress(const QString& address) const
 {
-    return IsValidDestinationString(address.toStdString());
+    return IsValidDestinationString(address.toStdString(), Params());
 }
 
 WalletModel::SendCoinsReturn WalletModel::prepareTransaction(WalletModelTransaction &transaction, const CCoinControl& coinControl)
@@ -182,7 +182,7 @@ WalletModel::SendCoinsReturn WalletModel::prepareTransaction(WalletModelTransact
             setAddress.insert(rcp.address);
             ++nAddresses;
 
-            vecSend.emplace_back(CRecipient{DecodeDestination(rcp.address.toStdString()), rcp.amount, rcp.fSubtractFeeFromAmount});
+            vecSend.emplace_back(CRecipient{DecodeDestination(rcp.address.toStdString(), Params()), rcp.amount, rcp.fSubtractFeeFromAmount});
 
             total += rcp.amount;
         }
@@ -260,7 +260,7 @@ void WalletModel::sendCoins(WalletModelTransaction& transaction)
     {
         {
             std::string strAddress = rcp.address.toStdString();
-            CTxDestination dest = DecodeDestination(strAddress);
+            CTxDestination dest = DecodeDestination(strAddress, Params());
             std::string strLabel = rcp.label.toStdString();
             {
                 // Check if we have a new address or an updated label
@@ -353,7 +353,7 @@ static void NotifyAddressBookChanged(WalletModel *walletmodel,
         const CTxDestination &address, const std::string &label, bool isMine,
         wallet::AddressPurpose purpose, ChangeType status)
 {
-    QString strAddress = QString::fromStdString(EncodeDestination(address));
+    QString strAddress = QString::fromStdString(EncodeDestination(address, Params()));
     QString strLabel = QString::fromStdString(label);
 
     qDebug() << "NotifyAddressBookChanged: " + strAddress + " " + strLabel + " isMine=" + QString::number(isMine) + " purpose=" + QString::number(static_cast<uint8_t>(purpose)) + " status=" + QString::number(status);
@@ -539,7 +539,7 @@ bool WalletModel::bumpFee(Txid hash, Txid& new_hash)
 
 void WalletModel::displayAddress(std::string sAddress) const
 {
-    CTxDestination dest = DecodeDestination(sAddress);
+    CTxDestination dest = DecodeDestination(sAddress, Params());
     try {
         util::Result<void> result = m_wallet->displayAddress(dest);
         if (!result) {

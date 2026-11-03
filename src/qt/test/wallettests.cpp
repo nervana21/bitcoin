@@ -81,7 +81,7 @@ Txid SendCoins(CWallet& wallet, SendCoinsDialog& sendCoinsDialog, const CTxDesti
 {
     QVBoxLayout* entries = sendCoinsDialog.findChild<QVBoxLayout*>("entries");
     SendCoinsEntry* entry = qobject_cast<SendCoinsEntry*>(entries->itemAt(0)->widget());
-    entry->findChild<QValidatedLineEdit*>("payTo")->setText(QString::fromStdString(EncodeDestination(address)));
+    entry->findChild<QValidatedLineEdit*>("payTo")->setText(QString::fromStdString(EncodeDestination(address, Params())));
     entry->findChild<BitcoinAmountField*>("payAmount")->setValue(amount);
     Txid txid;
     btcsignals::scoped_connection c(wallet.NotifyTransactionChanged.connect([&txid](const Txid& hash, ChangeType status) {
@@ -204,7 +204,7 @@ std::shared_ptr<CWallet> SetupDescriptorsWallet(interfaces::Node& node, TestChai
     if (watch_only) {
         key_str = HexStr(test.coinbaseKey.GetPubKey());
     } else {
-        key_str = EncodeSecret(test.coinbaseKey);
+        key_str = EncodeSecret(test.coinbaseKey, Params());
     }
     auto descs = Parse("combo(" + key_str + ")", provider, error, /* require_checksum=*/ false);
     assert(!descs.empty());

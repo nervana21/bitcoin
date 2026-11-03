@@ -424,7 +424,7 @@ void ScriptToUniv(const CScript& script, UniValue& out, bool include_hex, bool i
     const TxoutType type{Solver(script, solns)};
 
     if (include_address && ExtractDestination(script, address) && type != TxoutType::PUBKEY) {
-        out.pushKV("address", EncodeDestination(address));
+        out.pushKV("address", EncodeDestination(address, Params()));
     }
     out.pushKV("type", GetTxnOutputType(type));
 }

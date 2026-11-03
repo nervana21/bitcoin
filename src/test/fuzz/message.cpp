@@ -33,7 +33,7 @@ FUZZ_TARGET(message, .init = initialize_message)
         const bool message_signed = MessageSign(private_key, random_message, signature);
         if (private_key.IsValid()) {
             assert(message_signed);
-            const MessageVerificationResult verification_result = MessageVerify(EncodeDestination(PKHash(private_key.GetPubKey().GetID())), signature, random_message);
+            const MessageVerificationResult verification_result = MessageVerify(EncodeDestination(PKHash(private_key.GetPubKey().GetID()), Params()), signature, random_message);
             assert(verification_result == MessageVerificationResult::OK);
         }
     }

@@ -952,7 +952,7 @@ void SendCoinsDialog::coinControlChangeEdited(const QString& text)
         m_coin_control->destChange = CNoDestination();
         ui->labelCoinControlChangeLabel->setStyleSheet("QLabel{color:red;}");
 
-        const CTxDestination dest = DecodeDestination(text.toStdString());
+        const CTxDestination dest = DecodeDestination(text.toStdString(), Params());
 
         if (text.isEmpty()) // Nothing entered
         {

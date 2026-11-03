@@ -116,7 +116,7 @@ void SignVerifyMessageDialog::on_signMessageButton_SM_clicked()
     /* Clear old signature to ensure users don't get confused on error with an old signature displayed */
     ui->signatureOut_SM->clear();
 
-    CTxDestination destination = DecodeDestination(ui->addressIn_SM->text().toStdString());
+    CTxDestination destination = DecodeDestination(ui->addressIn_SM->text().toStdString(), Params());
     if (!IsValidDestination(destination)) {
         ui->statusLabel_SM->setStyleSheet("QLabel { color: red; }");
         ui->statusLabel_SM->setText(tr("The entered address is invalid.") + QString(" ") + tr("Please check the address and try again."));

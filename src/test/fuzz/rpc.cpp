@@ -236,7 +236,7 @@ UniValue ConsumeBasicRPCArgument(FuzzedDataProvider& fuzzed_data_provider, bool&
         },
         [&] {
             // tx destination argument
-            r = UniValue{EncodeDestination(ConsumeTxDestination(fuzzed_data_provider))};
+            r = UniValue{EncodeDestination(ConsumeTxDestination(fuzzed_data_provider), Params())};
         },
         [&] {
             // uint160 argument
@@ -310,7 +310,7 @@ UniValue ConsumeBasicRPCArgument(FuzzedDataProvider& fuzzed_data_provider, bool&
                 good_data = false;
                 return;
             }
-            r = UniValue{EncodeSecret(key)};
+            r = UniValue{EncodeSecret(key, Params())};
         },
         [&] {
             // hex encoded pubkey

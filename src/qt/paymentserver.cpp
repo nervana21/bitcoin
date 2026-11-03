@@ -203,7 +203,7 @@ void PaymentServer::handleURIOrFile(const QString& s)
             if (GUIUtil::parseBitcoinURI(s, &recipient))
             {
                 std::string error_msg;
-                const CTxDestination dest = DecodeDestination(recipient.address.toStdString(), error_msg);
+                const CTxDestination dest = DecodeDestination(recipient.address.toStdString(), Params(),  error_msg);
 
                 if (!IsValidDestination(dest)) {
                     if (uri.hasQueryItem("r")) {  // payment request

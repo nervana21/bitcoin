@@ -548,7 +548,7 @@ static RPCMethod decodescript()
     }()};
 
     if (can_wrap) {
-        r.pushKV("p2sh", EncodeDestination(ScriptHash(script)));
+        r.pushKV("p2sh", EncodeDestination(ScriptHash(script), Params()));
         // P2SH and witness programs cannot be wrapped in P2WSH, if this script
         // is a witness program, don't return addresses for a segwit programs.
         const bool can_wrap_P2WSH{[&] {
@@ -593,7 +593,7 @@ static RPCMethod decodescript()
                 segwitScr = GetScriptForDestination(WitnessV0ScriptHash(script));
             }
             ScriptToUniv(segwitScr, /*out=*/sr, /*include_hex=*/true, /*include_address=*/true, /*provider=*/&provider);
-            sr.pushKV("p2sh-segwit", EncodeDestination(ScriptHash(segwitScr)));
+            sr.pushKV("p2sh-segwit", EncodeDestination(ScriptHash(segwitScr), Params()));
             r.pushKV("segwit", std::move(sr));
         }
     }
@@ -785,7 +785,7 @@ static RPCMethod signrawtransactionwithkey()
     const UniValue& keys = request.params[1].get_array();
     for (unsigned int idx = 0; idx < keys.size(); ++idx) {
         UniValue k = keys[idx];
-        CKey key = DecodeSecret(k.get_str());
+        CKey key = DecodeSecret(k.get_str(), Params());
         if (!key.IsValid()) {
             throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid private key");
         }

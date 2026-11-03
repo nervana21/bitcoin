@@ -235,11 +235,6 @@ CKey DecodeSecret(std::string_view str, const CChainParams& params)
     return key;
 }
 
-CKey DecodeSecret(std::string_view str)
-{
-    return DecodeSecret(str, Params());
-}
-
 std::string EncodeSecret(const CKey& key, const CChainParams& params)
 {
     assert(key.IsValid());
@@ -251,11 +246,6 @@ std::string EncodeSecret(const CKey& key, const CChainParams& params)
     std::string ret = EncodeBase58Check(data);
     memory_cleanse(data.data(), data.size());
     return ret;
-}
-
-std::string EncodeSecret(const CKey& key)
-{
-    return EncodeSecret(key, Params());
 }
 
 CExtPubKey DecodeExtPubKey(std::string_view str, const CChainParams& params)
@@ -271,21 +261,11 @@ CExtPubKey DecodeExtPubKey(std::string_view str, const CChainParams& params)
     return key;
 }
 
-CExtPubKey DecodeExtPubKey(std::string_view str)
-{
-    return DecodeExtPubKey(str, Params());
-}
-
 std::string EncodeExtPubKey(const CExtPubKey& key, const CChainParams& params)
 {
     std::vector<unsigned char> data = params.Base58Prefix(CChainParams::EXT_PUBLIC_KEY);
     VectorWriter{data, data.size(), key};
     return EncodeBase58Check(data);
-}
-
-std::string EncodeExtPubKey(const CExtPubKey& key)
-{
-    return EncodeExtPubKey(key, Params());
 }
 
 CExtKey DecodeExtKey(std::string_view str, const CChainParams& params)
@@ -302,11 +282,6 @@ CExtKey DecodeExtKey(std::string_view str, const CChainParams& params)
         memory_cleanse(data.data(), data.size());
     }
     return key;
-}
-
-CExtKey DecodeExtKey(std::string_view str)
-{
-    return DecodeExtKey(str, Params());
 }
 
 std::pair<CExtKey, CExtPubKey> DecodeExtKeyOrPubKey(std::string_view str)
@@ -337,19 +312,9 @@ std::string EncodeExtKey(const CExtKey& key, const CChainParams& params)
     return ret;
 }
 
-std::string EncodeExtKey(const CExtKey& key)
-{
-    return EncodeExtKey(key, Params());
-}
-
 std::string EncodeDestination(const CTxDestination& dest, const CChainParams& params)
 {
     return EncodeDestinationInternal(dest, params);
-}
-
-std::string EncodeDestination(const CTxDestination& dest)
-{
-    return EncodeDestination(dest, Params());
 }
 
 CTxDestination DecodeDestination(const std::string& str, const CChainParams& params)
@@ -358,24 +323,8 @@ CTxDestination DecodeDestination(const std::string& str, const CChainParams& par
     return DecodeDestination(str, params, error_msg, nullptr);
 }
 
-CTxDestination DecodeDestination(const std::string& str, std::string& error_msg, std::vector<int>* error_locations)
-{
-    return DecodeDestination(str, Params(), error_msg, error_locations);
-}
-
-CTxDestination DecodeDestination(const std::string& str)
-{
-    std::string error_msg;
-    return DecodeDestination(str, error_msg);
-}
-
 bool IsValidDestinationString(const std::string& str, const CChainParams& params)
 {
     std::string error_msg;
     return IsValidDestination(DecodeDestination(str, params, error_msg, nullptr));
-}
-
-bool IsValidDestinationString(const std::string& str)
-{
-    return IsValidDestinationString(str, Params());
 }

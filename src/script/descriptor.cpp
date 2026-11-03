@@ -413,7 +413,7 @@ public:
             ret = ToString(StringType::PUBLIC);
             return false;
         }
-        ret = EncodeSecret(*key);
+        ret = EncodeSecret(*key, Params());
         return true;
     }
     bool ToNormalizedString(const SigningProvider& arg, std::string& ret, const DescriptorCache* cache) const override
@@ -557,7 +557,7 @@ public:
     std::string ToString(StringType type, bool normalized) const
     {
         bool use_apostrophe{DetermineApostropheUse(type, normalized, m_apostrophe)};
-        std::string ret = EncodeExtPubKey(m_root_extkey) + FormatHDKeypath(m_path, /*apostrophe=*/use_apostrophe);
+        std::string ret = EncodeExtPubKey(m_root_extkey, Params()) + FormatHDKeypath(m_path, /*apostrophe=*/use_apostrophe);
         if (IsRange()) {
             ret += "/*";
             if (m_derive == DeriveType::HARDENED_RANGED) ret += use_apostrophe ? '\'' : 'h';
@@ -575,7 +575,7 @@ public:
             out = ToString(StringType::PUBLIC);
             return false;
         }
-        out = EncodeExtKey(key) + FormatHDKeypath(m_path, /*apostrophe=*/m_apostrophe);
+        out = EncodeExtKey(key, Params()) + FormatHDKeypath(m_path, /*apostrophe=*/m_apostrophe);
         if (IsRange()) {
             out += "/*";
             if (m_derive == DeriveType::HARDENED_RANGED) out += m_apostrophe ? '\'' : 'h';
@@ -631,7 +631,7 @@ public:
 
         // Build the string
         std::string origin_str = HexStr(origin.fingerprint) + FormatHDKeypath(origin.path);
-        out = "[" + origin_str + "]" + EncodeExtPubKey(xpub) + FormatHDKeypath(end_path);
+        out = "[" + origin_str + "]" + EncodeExtPubKey(xpub, Params()) + FormatHDKeypath(end_path);
         if (IsRange()) {
             out += "/*";
             assert(m_derive == DeriveType::UNHARDENED_RANGED);
@@ -1193,7 +1193,7 @@ class AddressDescriptor final : public DescriptorImpl
 {
     const CTxDestination m_destination;
 protected:
-    std::string ToStringExtra() const override { return EncodeDestination(m_destination); }
+    std::string ToStringExtra() const override { return EncodeDestination(m_destination, Params()); }
     std::vector<CScript> MakeScripts(const std::vector<CPubKey>&, std::span<const CScript>, FlatSigningProvider&) const override { return Vector(GetScriptForDestination(m_destination)); }
 public:
     AddressDescriptor(CTxDestination destination) : DescriptorImpl({}, "addr"), m_destination(std::move(destination)) {}
@@ -2035,7 +2035,7 @@ std::vector<std::unique_ptr<PubkeyProvider>> ParsePubkeyInner(uint32_t& key_exp_
             error = strprintf("Pubkey '%s' is invalid", str);
             return {};
         }
-        CKey key = DecodeSecret(str);
+        CKey key = DecodeSecret(str, Params());
         if (key.IsValid()) {
             if (permit_uncompressed || key.IsCompressed()) {
                 CPubKey pubkey = key.GetPubKey();
@@ -2574,7 +2574,7 @@ std::vector<std::unique_ptr<DescriptorImpl>> ParseScript(uint32_t& key_exp_index
         return {};
     }
     if (ctx == ParseScriptContext::TOP && Func("addr", expr)) {
-        CTxDestination dest = DecodeDestination(std::string(expr.begin(), expr.end()));
+        CTxDestination dest = DecodeDestination(std::string(expr.begin(), expr.end()), Params());
         if (!IsValidDestination(dest)) {
             error = "Address is not valid";
             return {};

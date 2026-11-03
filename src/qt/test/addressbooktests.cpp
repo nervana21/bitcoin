@@ -85,7 +85,7 @@ void TestAddAddressesToSendBook(interfaces::Node& node)
 
     auto build_address{[]() {
         const WitnessV0KeyHash dest{GenerateRandomKey().GetPubKey()};
-        return std::make_pair(dest, QString::fromStdString(EncodeDestination(dest)));
+        return std::make_pair(dest, QString::fromStdString(EncodeDestination(dest, Params())));
     }};
 
     CTxDestination r_key_dest, s_key_dest;

@@ -22,18 +22,18 @@ FUZZ_TARGET(key_io, .init = initialize_key_io)
 {
     const std::string random_string(buffer.begin(), buffer.end());
 
-    const CKey key = DecodeSecret(random_string);
+    const CKey key = DecodeSecret(random_string, Params());
     if (key.IsValid()) {
-        assert(key == DecodeSecret(EncodeSecret(key)));
+        assert(key == DecodeSecret(EncodeSecret(key, Params()), Params()));
     }
 
-    const CExtKey ext_key = DecodeExtKey(random_string);
+    const CExtKey ext_key = DecodeExtKey(random_string, Params());
     if (ext_key.key.size() == 32) {
-        assert(ext_key == DecodeExtKey(EncodeExtKey(ext_key)));
+        assert(ext_key == DecodeExtKey(EncodeExtKey(ext_key, Params()), Params()));
     }
 
-    const CExtPubKey ext_pub_key = DecodeExtPubKey(random_string);
+    const CExtPubKey ext_pub_key = DecodeExtPubKey(random_string, Params());
     if (ext_pub_key.pubkey.size() == CPubKey::COMPRESSED_SIZE) {
-        assert(ext_pub_key == DecodeExtPubKey(EncodeExtPubKey(ext_pub_key)));
+        assert(ext_pub_key == DecodeExtPubKey(EncodeExtPubKey(ext_pub_key, Params()), Params()));
     }
 }
