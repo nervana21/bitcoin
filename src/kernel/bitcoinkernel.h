@@ -474,6 +474,16 @@ typedef uint8_t btck_FlushError;
  */
 typedef struct btck_HeaderTip btck_HeaderTip;
 
+/**
+ * Opaque data structure for holding a progress notification.
+ *
+ * Passed to the progress callback and only valid for the duration of the
+ * callback. Its fields are read with the btck_progress_get_* functions.
+ * Strings returned by these functions are only valid for the lifetime of the
+ * btck_Progress.
+ */
+typedef struct btck_Progress btck_Progress;
+
 /** Callback function types */
 
 /**
@@ -503,7 +513,7 @@ typedef void (*btck_DestroyCallback)(void* user_data);
  */
 typedef void (*btck_NotifyBlockTip)(void* user_data, btck_SynchronizationState state, const btck_BlockTreeEntry* entry, double verification_progress);
 typedef void (*btck_NotifyHeaderTip)(void* user_data, const btck_HeaderTip* header_tip);
-typedef void (*btck_NotifyProgress)(void* user_data, const char* title, size_t title_len, int progress_percent, int resume_possible);
+typedef void (*btck_NotifyProgress)(void* user_data, const btck_Progress* progress);
 typedef void (*btck_NotifyWarningSet)(void* user_data, btck_Warning warning, btck_StringView message);
 typedef void (*btck_NotifyWarningUnset)(void* user_data, btck_Warning warning);
 typedef void (*btck_NotifyFlushError)(void* user_data, btck_FlushError error);
@@ -1204,6 +1214,40 @@ BITCOINKERNEL_API int64_t btck_header_tip_get_timestamp(
  */
 BITCOINKERNEL_API int btck_header_tip_get_presync(
     const btck_HeaderTip* header_tip) BITCOINKERNEL_ARG_NONNULL(1);
+
+///@}
+
+/** @name Progress
+ * Functions for reading a progress notification.
+ */
+///@{
+
+/**
+ * @brief Get the title of the operation in progress.
+ *
+ * @param[in] progress Non-null btck_Progress
+ * @return             Title
+ */
+BITCOINKERNEL_API btck_StringView btck_progress_get_title(
+    const btck_Progress* progress) BITCOINKERNEL_ARG_NONNULL(1);
+
+/**
+ * @brief Get how far the operation has progressed.
+ *
+ * @param[in] progress Non-null btck_Progress
+ * @return             Percentage of completion
+ */
+BITCOINKERNEL_API int btck_progress_get_percent(
+    const btck_Progress* progress) BITCOINKERNEL_ARG_NONNULL(1);
+
+/**
+ * @brief Get whether the operation can be resumed if interrupted.
+ *
+ * @param[in] progress Non-null btck_Progress
+ * @return             1 if resumable, 0 otherwise
+ */
+BITCOINKERNEL_API int btck_progress_get_resume_possible(
+    const btck_Progress* progress) BITCOINKERNEL_ARG_NONNULL(1);
 
 ///@}
 
