@@ -159,10 +159,18 @@ struct Handle {
     }
 };
 
+struct HeaderTipEvent {
+    SynchronizationState state;
+    int64_t height;
+    int64_t timestamp;
+    bool presync;
+};
+
 } // namespace
 
 struct btck_BlockTreeEntry: Handle<btck_BlockTreeEntry, CBlockIndex> {};
 struct btck_LogEntry : Handle<btck_LogEntry, util::log::Entry> {};
+struct btck_HeaderTip : Handle<btck_HeaderTip, HeaderTipEvent> {};
 struct btck_Block : Handle<btck_Block, std::shared_ptr<const CBlock>> {};
 struct btck_BlockValidationState : Handle<btck_BlockValidationState, BlockValidationState> {};
 struct btck_TxValidationState : Handle<btck_TxValidationState, TxValidationState> {};
@@ -384,7 +392,9 @@ public:
     }
     void headerTip(SynchronizationState state, int64_t height, int64_t timestamp, bool presync) override
     {
-        if (m_cbs.header_tip) m_cbs.header_tip(m_cbs.user_data, cast_state(state), height, timestamp, presync ? 1 : 0);
+        if (!m_cbs.header_tip) return;
+        const HeaderTipEvent event{.state = state, .height = height, .timestamp = timestamp, .presync = presync};
+        m_cbs.header_tip(m_cbs.user_data, btck_HeaderTip::ref(&event));
     }
     void progress(const bilingual_str& title, int progress_percent, bool resume_possible) override
     {
@@ -1118,6 +1128,26 @@ btck_LogLevel btck_log_entry_get_level(const btck_LogEntry* entry)
 btck_LogCategory btck_log_entry_get_category(const btck_LogEntry* entry)
 {
     return to_btck(static_cast<BCLog::LogFlags>(btck_LogEntry::get(entry).category));
+}
+
+btck_SynchronizationState btck_header_tip_get_state(const btck_HeaderTip* header_tip)
+{
+    return cast_state(btck_HeaderTip::get(header_tip).state);
+}
+
+int64_t btck_header_tip_get_height(const btck_HeaderTip* header_tip)
+{
+    return btck_HeaderTip::get(header_tip).height;
+}
+
+int64_t btck_header_tip_get_timestamp(const btck_HeaderTip* header_tip)
+{
+    return btck_HeaderTip::get(header_tip).timestamp;
+}
+
+int btck_header_tip_get_presync(const btck_HeaderTip* header_tip)
+{
+    return btck_HeaderTip::get(header_tip).presync ? 1 : 0;
 }
 
 btck_ChainParameters* btck_chain_parameters_create(const btck_ChainType chain_type)

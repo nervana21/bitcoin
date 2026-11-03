@@ -466,6 +466,14 @@ typedef uint8_t btck_FlushError;
 #define btck_FlushError_BLOCK_FILE_FLUSH_FAILED ((btck_FlushError)(0))
 #define btck_FlushError_UNDO_FILE_FLUSH_FAILED ((btck_FlushError)(1))
 
+/**
+ * Opaque data structure for holding a header tip notification.
+ *
+ * Passed to the header tip callback and only valid for the duration of the
+ * callback. Its fields are read with the btck_header_tip_get_* functions.
+ */
+typedef struct btck_HeaderTip btck_HeaderTip;
+
 /** Callback function types */
 
 /**
@@ -494,7 +502,7 @@ typedef void (*btck_DestroyCallback)(void* user_data);
  * Function signatures for the kernel notifications.
  */
 typedef void (*btck_NotifyBlockTip)(void* user_data, btck_SynchronizationState state, const btck_BlockTreeEntry* entry, double verification_progress);
-typedef void (*btck_NotifyHeaderTip)(void* user_data, btck_SynchronizationState state, int64_t height, int64_t timestamp, int presync);
+typedef void (*btck_NotifyHeaderTip)(void* user_data, const btck_HeaderTip* header_tip);
 typedef void (*btck_NotifyProgress)(void* user_data, const char* title, size_t title_len, int progress_percent, int resume_possible);
 typedef void (*btck_NotifyWarningSet)(void* user_data, btck_Warning warning, btck_StringView message);
 typedef void (*btck_NotifyWarningUnset)(void* user_data, btck_Warning warning);
@@ -1153,6 +1161,49 @@ BITCOINKERNEL_API btck_LogLevel btck_log_entry_get_level(
  */
 BITCOINKERNEL_API btck_LogCategory btck_log_entry_get_category(
     const btck_LogEntry* entry) BITCOINKERNEL_ARG_NONNULL(1);
+
+///@}
+
+/** @name HeaderTip
+ * Functions for reading a header tip notification.
+ */
+///@{
+
+/**
+ * @brief Get the synchronization state when the header was added.
+ *
+ * @param[in] header_tip Non-null btck_HeaderTip
+ * @return               Synchronization state
+ */
+BITCOINKERNEL_API btck_SynchronizationState btck_header_tip_get_state(
+    const btck_HeaderTip* header_tip) BITCOINKERNEL_ARG_NONNULL(1);
+
+/**
+ * @brief Get the height of the new best block header.
+ *
+ * @param[in] header_tip Non-null btck_HeaderTip
+ * @return               Block height
+ */
+BITCOINKERNEL_API int64_t btck_header_tip_get_height(
+    const btck_HeaderTip* header_tip) BITCOINKERNEL_ARG_NONNULL(1);
+
+/**
+ * @brief Get the timestamp of the new best block header.
+ *
+ * @param[in] header_tip Non-null btck_HeaderTip
+ * @return               Block header time, in seconds since the Unix epoch
+ */
+BITCOINKERNEL_API int64_t btck_header_tip_get_timestamp(
+    const btck_HeaderTip* header_tip) BITCOINKERNEL_ARG_NONNULL(1);
+
+/**
+ * @brief Get whether the header was added during headers presync.
+ *
+ * @param[in] header_tip Non-null btck_HeaderTip
+ * @return               1 if added during presync, 0 otherwise
+ */
+BITCOINKERNEL_API int btck_header_tip_get_presync(
+    const btck_HeaderTip* header_tip) BITCOINKERNEL_ARG_NONNULL(1);
 
 ///@}
 
