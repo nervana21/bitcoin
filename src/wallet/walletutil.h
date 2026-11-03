@@ -10,6 +10,8 @@
 
 #include <vector>
 
+class CChainParams;
+
 namespace wallet {
 
 enum WalletFlags : uint64_t {
@@ -169,7 +171,7 @@ public:
     bool IsCanonicallyEquivalent(const WalletDescriptor& other) const;
 };
 
-WalletDescriptor GenerateWalletDescriptor(const CExtPubKey& master_key, const OutputType& output_type, bool internal, bool is_test_chain);
+WalletDescriptor GenerateWalletDescriptor(const CExtPubKey& master_key, const OutputType& output_type, bool internal, const CChainParams& params);
 } // namespace wallet
 
 #endif // BITCOIN_WALLET_WALLETUTIL_H

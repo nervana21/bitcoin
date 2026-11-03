@@ -31,11 +31,11 @@ fs::path GetWalletDir()
     return path;
 }
 
-WalletDescriptor GenerateWalletDescriptor(const CExtPubKey& master_key, const OutputType& addr_type, bool internal, bool is_test_chain)
+WalletDescriptor GenerateWalletDescriptor(const CExtPubKey& master_key, const OutputType& addr_type, bool internal, const CChainParams& params)
 {
     int64_t creation_time = GetTime();
 
-    std::string xpub = EncodeExtPubKey(master_key, Params());
+    std::string xpub = EncodeExtPubKey(master_key, params);
 
     // Build descriptor string
     std::string desc_prefix;
@@ -67,7 +67,7 @@ WalletDescriptor GenerateWalletDescriptor(const CExtPubKey& master_key, const Ou
     assert(!desc_prefix.empty());
 
     // Mainnet derives at 0', testnet and regtest derive at 1'
-    if (is_test_chain) {
+    if (params.IsTestChain()) {
         desc_prefix += "/1h";
     } else {
         desc_prefix += "/0h";

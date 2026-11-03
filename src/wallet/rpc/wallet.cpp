@@ -812,7 +812,7 @@ static RPCMethod createwalletdescriptor()
             std::vector<std::reference_wrapper<DescriptorScriptPubKeyMan>> spkms;
             WalletBatch batch{pwallet->GetDatabase()};
             for (bool internal : internals) {
-                WalletDescriptor w_desc = GenerateWalletDescriptor(xpub, *output_type, internal, pwallet->IsTestChain());
+                WalletDescriptor w_desc = GenerateWalletDescriptor(xpub, *output_type, internal, pwallet->GetChainParams());
                 if (!pwallet->GetDescriptorScriptPubKeyMan(w_desc)) {
                     spkms.emplace_back(pwallet->SetupDescriptorScriptPubKeyMan(batch, active_hdkey, *output_type, internal));
                 }
