@@ -34,16 +34,16 @@ void MockedDescriptorConverter::Init()
                 const XOnlyPubKey pubkey{privkey.GetPubKey()};
                 keys_str[i] = HexStr(pubkey);
             } else {
-                keys_str[i] = EncodeSecret(privkey);
+                keys_str[i] = EncodeSecret(privkey, Params());
             }
         } else {
             CExtKey ext_privkey;
             ext_privkey.SetSeed(key_data);
             if (IdIsXprv(i)) {
-                keys_str[i] = EncodeExtKey(ext_privkey);
+                keys_str[i] = EncodeExtKey(ext_privkey, Params());
             } else {
                 const CExtPubKey ext_pubkey{ext_privkey.Neuter()};
-                keys_str[i] = EncodeExtPubKey(ext_pubkey);
+                keys_str[i] = EncodeExtPubKey(ext_pubkey, Params());
             }
         }
     }

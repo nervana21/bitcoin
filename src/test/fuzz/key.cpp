@@ -54,7 +54,7 @@ FUZZ_TARGET(key, .init = initialize_key)
         assert(key.begin() + key.size() == key.end());
         assert(key.IsCompressed());
         assert(key.size() == 32);
-        assert(DecodeSecret(EncodeSecret(key)) == key);
+        assert(DecodeSecret(EncodeSecret(key, Params()), Params()) == key);
     }
 
     {
@@ -183,8 +183,8 @@ FUZZ_TARGET(key, .init = initialize_key)
         const CScript script_for_destination = GetScriptForDestination(tx_destination);
         assert(script_for_destination.size() == 25);
 
-        const std::string destination_address = EncodeDestination(tx_destination);
-        assert(DecodeDestination(destination_address) == tx_destination);
+        const std::string destination_address = EncodeDestination(tx_destination, Params());
+        assert(DecodeDestination(destination_address, Params()) == tx_destination);
 
         CKeyID key_id = pubkey.GetID();
         assert(!key_id.IsNull());

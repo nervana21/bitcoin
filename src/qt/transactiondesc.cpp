@@ -105,7 +105,7 @@ QString TransactionDesc::toHTML(interfaces::Node& node, interfaces::Wallet& wall
         if (nNet > 0)
         {
             // Credit
-            CTxDestination address = DecodeDestination(rec->address);
+            CTxDestination address = DecodeDestination(rec->address, Params());
             if (IsValidDestination(address)) {
                 std::string name;
                 if (wallet.getAddress(address, &name, /*purpose=*/nullptr))
@@ -131,7 +131,7 @@ QString TransactionDesc::toHTML(interfaces::Node& node, interfaces::Wallet& wall
         // Online transaction
         std::string strAddress = *wtx.comment_to;
         strHTML += "<b>" + tr("To") + ":</b> ";
-        CTxDestination dest = DecodeDestination(strAddress);
+        CTxDestination dest = DecodeDestination(strAddress, Params());
         std::string name;
         if (wallet.getAddress(
                 dest, &name, /*purpose=*/nullptr) && !name.empty())
@@ -191,7 +191,7 @@ QString TransactionDesc::toHTML(interfaces::Node& node, interfaces::Wallet& wall
                         if (wallet.getAddress(
                                 address, &name, /*purpose=*/nullptr) && !name.empty())
                             strHTML += GUIUtil::HtmlEscape(name) + " ";
-                        strHTML += GUIUtil::HtmlEscape(EncodeDestination(address));
+                        strHTML += GUIUtil::HtmlEscape(EncodeDestination(address, Params()));
                         if(toSelf)
                             strHTML += " (" + tr("own address") + ")";
                         strHTML += "<br>";
@@ -297,7 +297,7 @@ QString TransactionDesc::toHTML(interfaces::Node& node, interfaces::Wallet& wall
                         std::string name;
                         if (wallet.getAddress(address, &name, /*purpose=*/nullptr) && !name.empty())
                             strHTML += GUIUtil::HtmlEscape(name) + " ";
-                        strHTML += QString::fromStdString(EncodeDestination(address));
+                        strHTML += QString::fromStdString(EncodeDestination(address, Params()));
                     }
                     strHTML = strHTML + " " + tr("Amount") + "=" + BitcoinUnits::formatHtmlWithUnit(unit, vout.nValue);
                     strHTML = strHTML + " IsMine=" + (wallet.txoutIsMine(vout) ? tr("true") : tr("false")) + "</li>";

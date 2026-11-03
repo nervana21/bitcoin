@@ -37,7 +37,7 @@ using node::NodeContext;
 
 COutPoint generatetoaddress(const NodeContext& node, const std::string& address)
 {
-    const auto dest = DecodeDestination(address);
+    const auto dest = DecodeDestination(address, Params());
     assert(IsValidDestination(dest));
     return MineBlock(node, {
         .coinbase_output_script = GetScriptForDestination(dest),

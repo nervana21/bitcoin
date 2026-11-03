@@ -44,17 +44,17 @@ BOOST_AUTO_TEST_CASE(key_io_valid_parse)
         if (isPrivkey) {
             bool isCompressed = metadata.find_value("isCompressed").get_bool();
             // Must be valid private key
-            privkey = DecodeSecret(exp_base58string);
+            privkey = DecodeSecret(exp_base58string, Params());
             BOOST_CHECK_MESSAGE(privkey.IsValid(), "!IsValid:" + strTest);
             BOOST_CHECK_MESSAGE(privkey.IsCompressed() == isCompressed, "compressed mismatch:" + strTest);
             BOOST_CHECK_MESSAGE(std::ranges::equal(privkey, exp_payload), "key mismatch:" + strTest);
 
             // Private key must be invalid public key
-            destination = DecodeDestination(exp_base58string);
+            destination = DecodeDestination(exp_base58string, Params());
             BOOST_CHECK_MESSAGE(!IsValidDestination(destination), "IsValid privkey as pubkey:" + strTest);
         } else {
             // Must be valid public key
-            destination = DecodeDestination(exp_base58string);
+            destination = DecodeDestination(exp_base58string, Params());
             CScript script = GetScriptForDestination(destination);
             BOOST_CHECK_MESSAGE(IsValidDestination(destination), "!IsValid:" + strTest);
             BOOST_CHECK_EQUAL(HexStr(script), HexStr(exp_payload));
@@ -67,7 +67,7 @@ BOOST_AUTO_TEST_CASE(key_io_valid_parse)
                     c = (c - 'A') + 'a';
                 }
             }
-            destination = DecodeDestination(exp_base58string);
+            destination = DecodeDestination(exp_base58string, Params());
             BOOST_CHECK_MESSAGE(IsValidDestination(destination) == try_case_flip, "!IsValid case flipped:" + strTest);
             if (IsValidDestination(destination)) {
                 script = GetScriptForDestination(destination);
@@ -75,7 +75,7 @@ BOOST_AUTO_TEST_CASE(key_io_valid_parse)
             }
 
             // Public key must be invalid private key
-            privkey = DecodeSecret(exp_base58string);
+            privkey = DecodeSecret(exp_base58string, Params());
             BOOST_CHECK_MESSAGE(!privkey.IsValid(), "IsValid pubkey as privkey:" + strTest);
         }
     }
@@ -104,12 +104,12 @@ BOOST_AUTO_TEST_CASE(key_io_valid_gen)
             CKey key;
             key.Set(exp_payload.begin(), exp_payload.end(), isCompressed);
             assert(key.IsValid());
-            BOOST_CHECK_MESSAGE(EncodeSecret(key) == exp_base58string, "result mismatch: " + strTest);
+            BOOST_CHECK_MESSAGE(EncodeSecret(key, Params()) == exp_base58string, "result mismatch: " + strTest);
         } else {
             CTxDestination dest;
             CScript exp_script(exp_payload.begin(), exp_payload.end());
             BOOST_CHECK(ExtractDestination(exp_script, dest));
-            std::string address = EncodeDestination(dest);
+            std::string address = EncodeDestination(dest, Params());
 
             BOOST_CHECK_EQUAL(address, exp_base58string);
         }
@@ -139,9 +139,9 @@ BOOST_AUTO_TEST_CASE(key_io_invalid)
         // must be invalid as public and as private key
         for (const auto& chain : {ChainType::MAIN, ChainType::TESTNET, ChainType::SIGNET, ChainType::REGTEST}) {
             SelectParams(chain);
-            destination = DecodeDestination(exp_base58string);
+            destination = DecodeDestination(exp_base58string, Params());
             BOOST_CHECK_MESSAGE(!IsValidDestination(destination), "IsValid pubkey in mainnet:" + strTest);
-            privkey = DecodeSecret(exp_base58string);
+            privkey = DecodeSecret(exp_base58string, Params());
             BOOST_CHECK_MESSAGE(!privkey.IsValid(), "IsValid privkey in mainnet:" + strTest);
         }
     }

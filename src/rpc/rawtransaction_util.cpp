@@ -130,7 +130,7 @@ std::vector<std::pair<CTxDestination, CAmount>> ParseOutputs(const UniValue& out
             CAmount amount{0};
             parsed_outputs.emplace_back(destination, amount);
         } else {
-            CTxDestination destination{DecodeDestination(name_)};
+            CTxDestination destination{DecodeDestination(name_, Params())};
             CAmount amount{AmountFromValue(value)};
             if (!IsValidDestination(destination)) {
                 throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, std::string("Invalid Bitcoin address: ") + name_);

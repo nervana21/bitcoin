@@ -68,14 +68,14 @@ static RPCMethod validateaddress()
         {
             std::string error_msg;
             std::vector<int> error_locations;
-            CTxDestination dest = DecodeDestination(request.params[0].get_str(), error_msg, &error_locations);
+            CTxDestination dest = DecodeDestination(request.params[0].get_str(), Params(), error_msg, &error_locations);
             const bool isValid = IsValidDestination(dest);
             CHECK_NONFATAL(isValid == error_msg.empty());
 
             UniValue ret(UniValue::VOBJ);
             ret.pushKV("isvalid", isValid);
             if (isValid) {
-                std::string currentAddress = EncodeDestination(dest);
+                std::string currentAddress = EncodeDestination(dest, Params());
                 ret.pushKV("address", currentAddress);
 
                 CScript scriptPubKey = GetScriptForDestination(dest);
@@ -156,7 +156,7 @@ static RPCMethod createmultisig()
             std::unique_ptr<Descriptor> descriptor = InferDescriptor(GetScriptForDestination(dest), keystore);
 
             UniValue result(UniValue::VOBJ);
-            result.pushKV("address", EncodeDestination(dest));
+            result.pushKV("address", EncodeDestination(dest, Params()));
             result.pushKV("redeemScript", HexStr(inner));
             result.pushKV("descriptor", descriptor->ToString());
 
@@ -252,7 +252,7 @@ static UniValue DeriveAddresses(const Descriptor* desc, int64_t range_begin, int
                 throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Descriptor does not have a corresponding address");
             }
 
-            addresses.push_back(EncodeDestination(dest));
+            addresses.push_back(EncodeDestination(dest, Params()));
         }
     }
 

@@ -124,7 +124,7 @@ static std::string DummyAddress(const CChainParams &params)
     } // no default case, so the compiler can warn about missing cases
     assert(!addr.empty());
 
-    if (Assume(!IsValidDestinationString(addr))) return addr;
+    if (Assume(!IsValidDestinationString(addr, Params()))) return addr;
     return {};
 }
 
@@ -240,7 +240,7 @@ QString formatBitcoinURI(const SendCoinsRecipient &info)
 
 bool isDust(interfaces::Node& node, const QString& address, const CAmount& amount)
 {
-    CTxDestination dest = DecodeDestination(address.toStdString());
+    CTxDestination dest = DecodeDestination(address.toStdString(), Params());
     CScript script = GetScriptForDestination(dest);
     CTxOut txOut(amount, script);
     return IsDust(txOut, node.getDustRelayFee());

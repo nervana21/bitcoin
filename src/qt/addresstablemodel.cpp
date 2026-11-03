@@ -87,7 +87,7 @@ public:
                         address.purpose, address.is_mine);
                 cachedAddressTable.append(AddressTableEntry(addressType,
                                   QString::fromStdString(address.name),
-                                  QString::fromStdString(EncodeDestination(address.dest))));
+                                  QString::fromStdString(EncodeDestination(address.dest, Params()))));
             }
         }
         // std::lower_bound() and std::upper_bound() require our cachedAddressTable list to be sorted in asc order
@@ -243,7 +243,7 @@ bool AddressTableModel::setData(const QModelIndex &index, const QVariant &value,
 
     if(role == Qt::EditRole)
     {
-        CTxDestination curAddress = DecodeDestination(rec->address.toStdString());
+        CTxDestination curAddress = DecodeDestination(rec->address.toStdString(), Params());
         if(index.column() == Label)
         {
             // Do nothing, if old label == new label
@@ -254,7 +254,7 @@ bool AddressTableModel::setData(const QModelIndex &index, const QVariant &value,
             }
             walletModel->wallet().setAddressBook(curAddress, value.toString().toStdString(), purpose);
         } else if(index.column() == Address) {
-            CTxDestination newAddress = DecodeDestination(value.toString().toStdString());
+            CTxDestination newAddress = DecodeDestination(value.toString().toStdString(), Params());
             // Refuse to set invalid address, set error status and return false
             if(std::get_if<CNoDestination>(&newAddress))
             {
@@ -356,7 +356,7 @@ QString AddressTableModel::addRow(const QString &type, const QString &label, con
         // Check for duplicate addresses
         {
             if (walletModel->wallet().getAddress(
-                    DecodeDestination(strAddress), /*name=*/nullptr, /*purpose=*/nullptr))
+                    DecodeDestination(strAddress, Params()), /*name=*/nullptr, /*purpose=*/nullptr))
             {
                 editStatus = DUPLICATE_ADDRESS;
                 return QString();
@@ -364,13 +364,13 @@ QString AddressTableModel::addRow(const QString &type, const QString &label, con
         }
 
         // Add entry
-        walletModel->wallet().setAddressBook(DecodeDestination(strAddress), strLabel, wallet::AddressPurpose::SEND);
+        walletModel->wallet().setAddressBook(DecodeDestination(strAddress, Params()), strLabel, wallet::AddressPurpose::SEND);
     }
     else if(type == Receive)
     {
         // Generate a new address to associate with given label
         if (auto dest{walletModel->wallet().getNewDestination(address_type, strLabel)}) {
-            strAddress = EncodeDestination(*dest);
+            strAddress = EncodeDestination(*dest, Params());
         } else {
             WalletModel::UnlockContext ctx(walletModel->requestUnlock());
             if (!ctx.isValid()) {
@@ -379,7 +379,7 @@ QString AddressTableModel::addRow(const QString &type, const QString &label, con
                 return QString();
             }
             if (auto dest_retry{walletModel->wallet().getNewDestination(address_type, strLabel)}) {
-                strAddress = EncodeDestination(*dest_retry);
+                strAddress = EncodeDestination(*dest_retry, Params());
             } else {
                 editStatus = KEY_GENERATION_FAILURE;
                 return QString();
@@ -403,7 +403,7 @@ bool AddressTableModel::removeRows(int row, int count, const QModelIndex &parent
         // Also refuse to remove receiving addresses.
         return false;
     }
-    walletModel->wallet().delAddressBook(DecodeDestination(rec->address.toStdString()));
+    walletModel->wallet().delAddressBook(DecodeDestination(rec->address.toStdString(), Params()));
     return true;
 }
 
@@ -428,7 +428,7 @@ std::optional<wallet::AddressPurpose> AddressTableModel::purposeForAddress(const
 bool AddressTableModel::getAddressData(const QString &address,
         std::string* name,
         wallet::AddressPurpose* purpose) const {
-    CTxDestination destination = DecodeDestination(address.toStdString());
+    CTxDestination destination = DecodeDestination(address.toStdString(), Params());
     return walletModel->wallet().getAddress(destination, name, purpose);
 }
 

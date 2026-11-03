@@ -320,7 +320,7 @@ static RPCMethod generatetoaddress()
     const int num_blocks{self.Arg<int>("nblocks")};
     const uint64_t max_tries{self.Arg<uint64_t>("maxtries")};
 
-    CTxDestination destination = DecodeDestination(request.params[1].get_str());
+    CTxDestination destination = DecodeDestination(request.params[1].get_str(), Params());
     if (!IsValidDestination(destination)) {
         throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Error: Invalid address");
     }
@@ -370,7 +370,7 @@ static RPCMethod generateblock()
     std::string error;
 
     if (!getScriptFromDescriptor(address_or_descriptor, coinbase_output_script, error)) {
-        const auto destination = DecodeDestination(address_or_descriptor);
+        const auto destination = DecodeDestination(address_or_descriptor, Params());
         if (!IsValidDestination(destination)) {
             throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Error: Invalid address or descriptor");
         }

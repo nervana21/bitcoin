@@ -84,7 +84,7 @@ BOOST_AUTO_TEST_CASE(valid_keys)
         CExtPubKey extpub = CreateMuSig2SyntheticXpub(m_aggregate_pubkey.value());
 
         // Check xpub
-        std::string xpub = EncodeExtPubKey(extpub);
+        std::string xpub = EncodeExtPubKey(extpub, Params());
         BOOST_CHECK_MESSAGE(xpub == test.expected_aggregate_xpub, "Test vector " << i << ": Synthetic xpub mismatch");
     }
 }

@@ -31,7 +31,7 @@ MessageVerificationResult MessageVerify(
     const std::string& signature,
     const std::string& message)
 {
-    CTxDestination destination = DecodeDestination(address);
+    CTxDestination destination = DecodeDestination(address, Params());
     if (!IsValidDestination(destination)) {
         return MessageVerificationResult::ERR_INVALID_ADDRESS;
     }

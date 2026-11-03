@@ -139,10 +139,10 @@ FUZZ_TARGET(script, .init = initialize_script)
     {
         const CTxDestination tx_destination_1{
             fuzzed_data_provider.ConsumeBool() ?
-                DecodeDestination(fuzzed_data_provider.ConsumeRandomLengthString()) :
+                DecodeDestination(fuzzed_data_provider.ConsumeRandomLengthString(), Params()) :
                 ConsumeTxDestination(fuzzed_data_provider)};
         const CTxDestination tx_destination_2{ConsumeTxDestination(fuzzed_data_provider)};
-        const std::string encoded_dest{EncodeDestination(tx_destination_1)};
+        const std::string encoded_dest{EncodeDestination(tx_destination_1, Params())};
         const UniValue json_dest{DescribeAddress(tx_destination_1)};
         (void)GetKeyForDestination(/*store=*/{}, tx_destination_1);
         const CScript dest{GetScriptForDestination(tx_destination_1)};
@@ -151,13 +151,13 @@ FUZZ_TARGET(script, .init = initialize_script)
         if (!std::get_if<PubKeyDestination>(&tx_destination_1)) {
             // Only try to round trip non-pubkey destinations since PubKeyDestination has no encoding
             Assert(dest.empty() != valid);
-            Assert(tx_destination_1 == DecodeDestination(encoded_dest));
-            Assert(valid == IsValidDestinationString(encoded_dest));
+            Assert(tx_destination_1 == DecodeDestination(encoded_dest, Params()));
+            Assert(valid == IsValidDestinationString(encoded_dest, Params()));
         }
 
         (void)(tx_destination_1 < tx_destination_2);
         if (tx_destination_1 == tx_destination_2) {
-            Assert(encoded_dest == EncodeDestination(tx_destination_2));
+            Assert(encoded_dest == EncodeDestination(tx_destination_2, Params()));
             Assert(json_dest.write() == DescribeAddress(tx_destination_2).write());
             Assert(dest == GetScriptForDestination(tx_destination_2));
         }
