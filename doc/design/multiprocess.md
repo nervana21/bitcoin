@@ -233,10 +233,19 @@ This modularization represents an advancement in Bitcoin Core's architecture, of
 
 - **virtual method**: A function or method whose behavior can be overridden within an inheriting class by a function with the same signature.
 
+## Relation to libbitcoinkernel
+
+Multiprocess isolates **node**, **wallet**, and **GUI** across processes. The [libbitcoinkernel project](https://github.com/bitcoin/bitcoin/issues/27587) isolates the **consensus engine** as a library consumed by the node (and by external programs via the C API). Both belong in the long-term architecture; they must not undo each other.
+
+- IPC (Cap'n Proto + [libmultiprocess](https://github.com/bitcoin-core/libmultiprocess)) serializes [`src/interfaces/`](../../src/interfaces/). It does not replace `btck_*` doors and must stay out of `src/kernel/`.
+- Lifecycle and CLI policy knobs (for example `-assumevalid`) stay on the node side of the cut so a bare kernel consumer does not inherit bitcoind defaults by accident.
+
 ## References
 
 - **Cap’n Proto RPC protocol description**: https://capnproto.org/rpc.html
 - **libmultiprocess project page**: https://github.com/bitcoin-core/libmultiprocess
+- **libbitcoinkernel project**: https://github.com/bitcoin/bitcoin/issues/27587
+- **Internal libraries**: [libraries.md](libraries.md)
 
 ## Acknowledgements
 
