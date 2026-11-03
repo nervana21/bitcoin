@@ -166,11 +166,18 @@ struct HeaderTipEvent {
     bool presync;
 };
 
+struct ProgressEvent {
+    std::string_view title;
+    int percent;
+    bool resume_possible;
+};
+
 } // namespace
 
 struct btck_BlockTreeEntry: Handle<btck_BlockTreeEntry, CBlockIndex> {};
 struct btck_LogEntry : Handle<btck_LogEntry, util::log::Entry> {};
 struct btck_HeaderTip : Handle<btck_HeaderTip, HeaderTipEvent> {};
+struct btck_Progress : Handle<btck_Progress, ProgressEvent> {};
 struct btck_Block : Handle<btck_Block, std::shared_ptr<const CBlock>> {};
 struct btck_BlockValidationState : Handle<btck_BlockValidationState, BlockValidationState> {};
 struct btck_TxValidationState : Handle<btck_TxValidationState, TxValidationState> {};
@@ -398,7 +405,9 @@ public:
     }
     void progress(const bilingual_str& title, int progress_percent, bool resume_possible) override
     {
-        if (m_cbs.progress) m_cbs.progress(m_cbs.user_data, title.original.c_str(), title.original.length(), progress_percent, resume_possible ? 1 : 0);
+        if (!m_cbs.progress) return;
+        const ProgressEvent event{.title = title.original, .percent = progress_percent, .resume_possible = resume_possible};
+        m_cbs.progress(m_cbs.user_data, btck_Progress::ref(&event));
     }
     void warningSet(kernel::Warning id, const bilingual_str& message) override
     {
@@ -1148,6 +1157,21 @@ int64_t btck_header_tip_get_timestamp(const btck_HeaderTip* header_tip)
 int btck_header_tip_get_presync(const btck_HeaderTip* header_tip)
 {
     return btck_HeaderTip::get(header_tip).presync ? 1 : 0;
+}
+
+btck_StringView btck_progress_get_title(const btck_Progress* progress)
+{
+    return to_btck(btck_Progress::get(progress).title);
+}
+
+int btck_progress_get_percent(const btck_Progress* progress)
+{
+    return btck_Progress::get(progress).percent;
+}
+
+int btck_progress_get_resume_possible(const btck_Progress* progress)
+{
+    return btck_Progress::get(progress).resume_possible ? 1 : 0;
 }
 
 btck_ChainParameters* btck_chain_parameters_create(const btck_ChainType chain_type)
