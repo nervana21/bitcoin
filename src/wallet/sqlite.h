@@ -5,6 +5,7 @@
 #ifndef BITCOIN_WALLET_SQLITE_H
 #define BITCOIN_WALLET_SQLITE_H
 
+#include <kernel/messagestartchars.h>
 #include <sync.h>
 #include <wallet/db.h>
 
@@ -110,6 +111,8 @@ private:
     const std::string m_file_path;
 
     const int m_additional_flags;
+
+    const MessageStartChars m_network_magic;
 
     /**
      * This mutex protects SQLite initialization and shutdown.

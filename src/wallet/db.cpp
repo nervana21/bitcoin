@@ -20,7 +20,7 @@ namespace wallet {
 bool operator<(BytePrefix a, std::span<const std::byte> b) { return std::ranges::lexicographical_compare(a.prefix, b.subspan(0, std::min(a.prefix.size(), b.size()))); }
 bool operator<(std::span<const std::byte> a, BytePrefix b) { return std::ranges::lexicographical_compare(a.subspan(0, std::min(a.size(), b.prefix.size())), b.prefix); }
 
-std::vector<std::pair<fs::path, std::string>> ListDatabases(const fs::path& wallet_dir)
+std::vector<std::pair<fs::path, std::string>> ListDatabases(const fs::path& wallet_dir, const MessageStartChars& network_magic)
 {
     std::vector<std::pair<fs::path, std::string>> paths;
     std::error_code ec;
@@ -34,7 +34,7 @@ std::vector<std::pair<fs::path, std::string>> ListDatabases(const fs::path& wall
                 if (IsBDBFile(BDBDataFile(it->path()))) {
                     // Found a directory which contains wallet.dat btree file, add it as a wallet with BERKELEY format.
                     paths.emplace_back(path, "bdb");
-                } else if (IsSQLiteFile(SQLiteDataFile(it->path()))) {
+                } else if (IsSQLiteFile(SQLiteDataFile(it->path()), network_magic)) {
                     // Found a directory which contains wallet.dat sqlite file, add it as a wallet with SQLITE format.
                     paths.emplace_back(path, "sqlite");
                 }
@@ -44,7 +44,7 @@ std::vector<std::pair<fs::path, std::string>> ListDatabases(const fs::path& wall
                     // as a wallet.
                     if (IsBDBFile(it->path())) {
                         paths.emplace_back(fs::path(), "bdb");
-                    } else if (IsSQLiteFile(it->path())) {
+                    } else if (IsSQLiteFile(it->path(), network_magic)) {
                         paths.emplace_back(fs::path(), "sqlite");
                     }
                 } else if (IsBDBFile(it->path())) {
@@ -116,7 +116,7 @@ bool IsBDBFile(const fs::path& path)
     return data == 0x00053162 || data == 0x62310500;
 }
 
-bool IsSQLiteFile(const fs::path& path)
+bool IsSQLiteFile(const fs::path& path, const MessageStartChars& network_magic)
 {
     if (!fs::exists(path)) return false;
 
@@ -146,14 +146,23 @@ bool IsSQLiteFile(const fs::path& path)
         return false;
     }
 
-    // Check the application id matches our network magic
-    return memcmp(Params().MessageStart().data(), app_id, 4) == 0;
+    // Check the application id matches the caller's network magic
+    return memcmp(network_magic.data(), app_id, 4) == 0;
+}
+
+MessageStartChars ResolveNetworkMagic(const DatabaseOptions& options)
+{
+    if (options.network_magic) return *options.network_magic;
+    return Params().MessageStart();
 }
 
 void ReadDatabaseArgs(const ArgsManager& args, DatabaseOptions& options)
 {
     // Override current options with args values, if any were specified
     options.use_unsafe_sync = args.GetBoolArg("-unsafesqlitesync", options.use_unsafe_sync);
+    if (!options.network_magic) {
+        options.network_magic = Params().MessageStart();
+    }
 }
 
 } // namespace wallet

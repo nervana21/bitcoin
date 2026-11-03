@@ -6,7 +6,6 @@
 
 #include <wallet/sqlite.h>
 
-#include <chainparams.h>
 #include <crypto/common.h>
 #include <sync.h>
 #include <util/check.h>
@@ -116,7 +115,7 @@ SQLiteDatabase::SQLiteDatabase(const fs::path& dir_path, const fs::path& file_pa
 {}
 
 SQLiteDatabase::SQLiteDatabase(const fs::path& dir_path, const fs::path& file_path, const DatabaseOptions& options, int additional_flags)
-    : WalletDatabase(), m_dir_path(dir_path), m_file_path(fs::PathToString(file_path)), m_additional_flags(additional_flags), m_write_semaphore(1), m_use_unsafe_sync(options.use_unsafe_sync)
+    : WalletDatabase(), m_dir_path(dir_path), m_file_path(fs::PathToString(file_path)), m_additional_flags(additional_flags), m_network_magic(ResolveNetworkMagic(options)), m_write_semaphore(1), m_use_unsafe_sync(options.use_unsafe_sync)
 {
     {
         LOCK(g_sqlite_mutex);
@@ -196,7 +195,7 @@ bool SQLiteDatabase::Verify(bilingual_str& error)
     auto read_result = ReadPragmaInteger(m_db, "application_id", "the application id", error);
     if (!read_result.has_value()) return false;
     uint32_t app_id = static_cast<uint32_t>(read_result.value());
-    uint32_t net_magic = ReadBE32(Params().MessageStart().data());
+    uint32_t net_magic = ReadBE32(m_network_magic.data());
     if (app_id != net_magic) {
         error = strprintf(_("SQLiteDatabase: Unexpected application id. Expected %u, got %u"), net_magic, app_id);
         return false;
@@ -336,7 +335,7 @@ void SQLiteDatabase::Open(int additional_flags)
         }
 
         // Set the application id
-        uint32_t app_id = ReadBE32(Params().MessageStart().data());
+        uint32_t app_id = ReadBE32(m_network_magic.data());
         SetPragma(m_db, "application_id", strprintf("%d", static_cast<int32_t>(app_id)),
                   "Failed to set the application id");
 

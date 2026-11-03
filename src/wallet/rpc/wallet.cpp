@@ -171,7 +171,7 @@ static RPCMethod listwalletdir()
         [](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue
 {
     UniValue wallets(UniValue::VARR);
-    for (const auto& [path, db_type] : ListDatabases(GetWalletDir())) {
+    for (const auto& [path, db_type] : ListDatabases(GetWalletDir(), Params().MessageStart())) {
         UniValue wallet(UniValue::VOBJ);
         wallet.pushKV("name", path.utf8string());
                 UniValue warnings(UniValue::VARR);

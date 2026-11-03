@@ -7,6 +7,7 @@
 #define BITCOIN_WALLET_DB_H
 
 #include <clientversion.h>
+#include <kernel/messagestartchars.h>
 #include <streams.h>
 #include <support/allocators/secure.h>
 #include <util/fs.h>
@@ -175,6 +176,9 @@ struct DatabaseOptions {
     // Specialized options. Not every option is supported by every backend.
     bool verify = true;             //!< Check data integrity on load.
     bool use_unsafe_sync = false;   //!< Disable file sync for faster performance.
+    //! P2P / wallet-db network magic. Filled from Params().MessageStart() when
+    //! unset so SQLite code does not call Params() itself.
+    std::optional<MessageStartChars> network_magic{};
 };
 
 enum class DatabaseStatus {
@@ -193,16 +197,18 @@ enum class DatabaseStatus {
     FAILED_NEW_UNNAMED,
 };
 
-/** Recursively list database paths in directory. */
-std::vector<std::pair<fs::path, std::string>> ListDatabases(const fs::path& path);
+/** Recursively list database paths in directory for the given network magic. */
+std::vector<std::pair<fs::path, std::string>> ListDatabases(const fs::path& path, const MessageStartChars& network_magic);
 
 void ReadDatabaseArgs(const ArgsManager& args, DatabaseOptions& options);
+//! Ensure options.network_magic is set (from Params() if still unset).
+MessageStartChars ResolveNetworkMagic(const DatabaseOptions& options);
 std::unique_ptr<WalletDatabase> MakeDatabase(const fs::path& path, const DatabaseOptions& options, DatabaseStatus& status, bilingual_str& error);
 
 fs::path BDBDataFile(const fs::path& path);
 fs::path SQLiteDataFile(const fs::path& path);
 bool IsBDBFile(const fs::path& path);
-bool IsSQLiteFile(const fs::path& path);
+bool IsSQLiteFile(const fs::path& path, const MessageStartChars& network_magic);
 } // namespace wallet
 
 #endif // BITCOIN_WALLET_DB_H
