@@ -1729,16 +1729,17 @@ BITCOINKERNEL_API int BITCOINKERNEL_WARN_UNUSED_RESULT btck_chainstate_manager_s
  * on the same chainstate manager is in progress. The process aborts when this
  * is detected.
  *
- * @param[in] chainstate_manager        Non-null.
- * @param[in] block_file_paths_data     Nullable, array of block files described by their full filesystem paths.
- * @param[in] block_file_paths_lens     Nullable, array containing the lengths of each of the paths.
- * @param[in] block_file_paths_data_len Length of the block_file_paths_data and block_file_paths_len arrays.
- * @return                              0 if the import blocks call was completed successfully, non-zero otherwise.
+ * @param[in] chainstate_manager Non-null.
+ * @param[in] block_file_paths   Nullable, array of block file paths. Entries with
+ *                               a null data pointer are skipped. Must be non-null
+ *                               when block_file_paths_len is non-zero.
+ * @param[in] block_file_paths_len Length of the block_file_paths array.
+ * @return                       0 if the import blocks call was completed successfully, non-zero otherwise.
  */
 BITCOINKERNEL_API int BITCOINKERNEL_WARN_UNUSED_RESULT btck_chainstate_manager_import_blocks(
     btck_ChainstateManager* chainstate_manager,
-    const char** block_file_paths_data, size_t* block_file_paths_lens,
-    size_t block_file_paths_data_len) BITCOINKERNEL_ARG_NONNULL(1);
+    const btck_StringView* block_file_paths,
+    size_t block_file_paths_len) BITCOINKERNEL_ARG_NONNULL(1);
 
 /**
  * @brief Process a new block: checks, disk store, tip extension and UTXO write (or reject).
