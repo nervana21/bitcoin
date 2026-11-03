@@ -2,7 +2,6 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <chainparams.h>
 #include <common/args.h>
 #include <common/system.h>
 #include <external_signer.h>
@@ -51,11 +50,12 @@ std::unique_ptr<ExternalSignerScriptPubKeyMan> ExternalSignerScriptPubKeyMan::Cr
     return spkm;
 }
 
- util::Result<ExternalSigner> ExternalSignerScriptPubKeyMan::GetExternalSigner() {
+util::Result<ExternalSigner> ExternalSignerScriptPubKeyMan::GetExternalSigner(const std::string& chain_type_string)
+{
     const std::string command = gArgs.GetArg("-signer", "");
     if (command == "") return util::Error{Untranslated("restart bitcoind with -signer=<cmd>")};
     std::vector<ExternalSigner> signers;
-    ExternalSigner::Enumerate(command, signers, Params().GetChainTypeString());
+    ExternalSigner::Enumerate(command, signers, chain_type_string);
     if (signers.empty()) return util::Error{Untranslated("No external signers found")};
     // TODO: add fingerprint argument instead of failing in case of multiple signers.
     if (signers.size() > 1) return util::Error{Untranslated("More than one external signer found. Please connect only one at a time.")};
@@ -77,7 +77,7 @@ util::Result<void> ExternalSignerScriptPubKeyMan::DisplayAddress(const CTxDestin
     const UniValue& ret_address = result.find_value("address");
     if (!ret_address.isStr()) return util::Error{_("Signer did not echo address")};
 
-    if (ret_address.getValStr() != EncodeDestination(dest)) {
+    if (ret_address.getValStr() != EncodeDestination(dest, m_storage.GetChainParams())) {
         return util::Error{strprintf(_("Signer echoed unexpected address %s"), ret_address.getValStr())};
     }
 
@@ -98,7 +98,7 @@ std::optional<PSBTError> ExternalSignerScriptPubKeyMan::FillPSBT(PartiallySigned
     }
     if (complete) return {};
 
-    auto signer{GetExternalSigner()};
+    auto signer{GetExternalSigner(m_storage.GetChainTypeString())};
     if (!signer) {
         LogWarning("%s", util::ErrorString(signer).original);
         return PSBTError::EXTERNAL_SIGNER_NOT_FOUND;

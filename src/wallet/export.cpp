@@ -170,7 +170,7 @@ util::Result<std::string> ExportWatchOnlyWallet(const CWallet& wallet, const fs:
 
             // Copy address book
             for (const auto& [dest, entry] : wallet.m_address_book) {
-                auto address{EncodeDestination(dest)};
+                auto address{EncodeDestination(dest, wallet.GetChainParams())};
                 if (entry.purpose) watchonly_batch.WritePurpose(address, PurposeToString(*entry.purpose));
                 if (entry.label) watchonly_batch.WriteName(address, *entry.label);
                 for (const auto& [id, request] : entry.receive_requests) {

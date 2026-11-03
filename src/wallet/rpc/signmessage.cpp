@@ -46,7 +46,7 @@ RPCMethod signmessage()
             std::string strAddress = request.params[0].get_str();
             std::string strMessage = request.params[1].get_str();
 
-            CTxDestination dest = DecodeDestination(strAddress);
+            CTxDestination dest = DecodeDestination(strAddress, pwallet->GetChainParams());
             if (!IsValidDestination(dest)) {
                 throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid address");
             }

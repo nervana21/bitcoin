@@ -951,7 +951,7 @@ static DBErrors LoadAddressBookRecords(CWallet* pwallet, DatabaseBatch& batch) E
         key >> strAddress;
         std::string label;
         value >> label;
-        pwallet->m_address_book[DecodeDestination(strAddress)].SetLabel(label);
+        pwallet->m_address_book[DecodeDestination(strAddress, pwallet->GetChainParams())].SetLabel(label);
         return DBErrors::LOAD_OK;
     });
     result = std::max(result, name_res.m_result);
@@ -967,7 +967,7 @@ static DBErrors LoadAddressBookRecords(CWallet* pwallet, DatabaseBatch& batch) E
         if (!purpose) {
             pwallet->WalletLogPrintf("Warning: nonstandard purpose string '%s' for address '%s'", purpose_str, strAddress);
         }
-        pwallet->m_address_book[DecodeDestination(strAddress)].purpose = purpose;
+        pwallet->m_address_book[DecodeDestination(strAddress, pwallet->GetChainParams())].purpose = purpose;
         return DBErrors::LOAD_OK;
     });
     result = std::max(result, purpose_res.m_result);
@@ -979,7 +979,7 @@ static DBErrors LoadAddressBookRecords(CWallet* pwallet, DatabaseBatch& batch) E
         key >> strAddress;
         key >> strKey;
         value >> strValue;
-        const CTxDestination& dest{DecodeDestination(strAddress)};
+        const CTxDestination& dest{DecodeDestination(strAddress, pwallet->GetChainParams())};
         if (strKey.compare("used") == 0) {
             // Load "used" key indicating if an IsMine address has
             // previously been spent from with avoid_reuse option enabled.
@@ -1307,24 +1307,24 @@ bool RunWithinTxn(WalletDatabase& database, std::string_view process_desc, const
 
 bool WalletBatch::WriteAddressPreviouslySpent(const CTxDestination& dest, bool previously_spent)
 {
-    auto key{std::make_pair(DBKeys::DESTDATA, std::make_pair(EncodeDestination(dest), std::string("used")))};
+    auto key{std::make_pair(DBKeys::DESTDATA, std::make_pair(EncodeDestination(dest, Params()), std::string("used")))};
     return previously_spent ? WriteIC(key, std::string("1")) : EraseIC(key);
 }
 
 bool WalletBatch::WriteAddressReceiveRequest(const CTxDestination& dest, const std::string& id, const std::string& receive_request)
 {
-    return WriteIC(std::make_pair(DBKeys::DESTDATA, std::make_pair(EncodeDestination(dest), "rr" + id)), receive_request);
+    return WriteIC(std::make_pair(DBKeys::DESTDATA, std::make_pair(EncodeDestination(dest, Params()), "rr" + id)), receive_request);
 }
 
 bool WalletBatch::EraseAddressReceiveRequest(const CTxDestination& dest, const std::string& id)
 {
-    return EraseIC(std::make_pair(DBKeys::DESTDATA, std::make_pair(EncodeDestination(dest), "rr" + id)));
+    return EraseIC(std::make_pair(DBKeys::DESTDATA, std::make_pair(EncodeDestination(dest, Params()), "rr" + id)));
 }
 
 bool WalletBatch::EraseAddressData(const CTxDestination& dest)
 {
     DataStream prefix;
-    prefix << DBKeys::DESTDATA << EncodeDestination(dest);
+    prefix << DBKeys::DESTDATA << EncodeDestination(dest, Params());
     return m_batch->ErasePrefix(prefix);
 }
 

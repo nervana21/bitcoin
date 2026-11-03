@@ -724,10 +724,10 @@ RPCMethod gethdkeys()
                     descriptors.push_back(std::move(d));
                 }
                 UniValue xpub_info(UniValue::VOBJ);
-                xpub_info.pushKV("xpub", EncodeExtPubKey(xpub));
+                xpub_info.pushKV("xpub", EncodeExtPubKey(xpub, wallet->GetChainParams()));
                 xpub_info.pushKV("has_private", has_xprv);
                 if (priv && has_xprv) {
-                    xpub_info.pushKV("xprv", EncodeExtKey(wallet_xprvs.at(xpub)));
+                    xpub_info.pushKV("xprv", EncodeExtKey(wallet_xprvs.at(xpub), wallet->GetChainParams()));
                 }
                 xpub_info.pushKV("descriptors", std::move(descriptors));
 
@@ -797,7 +797,7 @@ static RPCMethod createwalletdescriptor()
                 }
                 xpub = active_xpubs.begin()->first;
             } else {
-                xpub = DecodeExtPubKey(hdkey.get_str());
+                xpub = DecodeExtPubKey(hdkey.get_str(), pwallet->GetChainParams());
                 if (!xpub.pubkey.IsValid()) {
                     throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Unable to parse HD key. Please provide a valid xpub");
                 }
@@ -805,14 +805,14 @@ static RPCMethod createwalletdescriptor()
 
             std::optional<CKey> key = pwallet->GetKey(xpub.pubkey.GetID());
             if (!key) {
-                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, strprintf("Private key for %s is not known", EncodeExtPubKey(xpub)));
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, strprintf("Private key for %s is not known", EncodeExtPubKey(xpub, pwallet->GetChainParams())));
             }
             CExtKey active_hdkey(xpub, *key);
 
             std::vector<std::reference_wrapper<DescriptorScriptPubKeyMan>> spkms;
             WalletBatch batch{pwallet->GetDatabase()};
             for (bool internal : internals) {
-                WalletDescriptor w_desc = GenerateWalletDescriptor(xpub, *output_type, internal);
+                WalletDescriptor w_desc = GenerateWalletDescriptor(xpub, *output_type, internal, pwallet->IsTestChain());
                 if (!pwallet->GetDescriptorScriptPubKeyMan(w_desc)) {
                     spkms.emplace_back(pwallet->SetupDescriptorScriptPubKeyMan(batch, active_hdkey, *output_type, internal));
                 }
@@ -866,10 +866,10 @@ RPCMethod addhdkey()
 
             std::optional<CExtKey> hdkey;
             if (!request.params[0].isNull()) {
-                hdkey = DecodeExtKey(request.params[0].get_str());
+                hdkey = DecodeExtKey(request.params[0].get_str(), wallet->GetChainParams());
                 if (!hdkey->key.IsValid()) {
                     // Check if the user gave us an xpub and give a more descriptive error if so
-                    CExtPubKey xpub = DecodeExtPubKey(request.params[0].get_str());
+                    CExtPubKey xpub = DecodeExtPubKey(request.params[0].get_str(), wallet->GetChainParams());
                     if (xpub.pubkey.IsValid()) {
                         throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Extended public key (xpub) provided, but extended private key (xprv) is required");
                     } else {
@@ -887,7 +887,7 @@ RPCMethod addhdkey()
             }
 
             UniValue response(UniValue::VOBJ);
-            response.pushKV("xpub", EncodeExtPubKey(*res));
+            response.pushKV("xpub", EncodeExtPubKey(*res, wallet->GetChainParams()));
             return response;
         },
     };
@@ -988,7 +988,7 @@ RPCMethod derivehdkey()
 
             CExtPubKey xpub;
             if (!hdkey.isNull()) {
-                xpub = DecodeExtPubKey(hdkey.get_str());
+                xpub = DecodeExtPubKey(hdkey.get_str(), wallet->GetChainParams());
                 if (!xpub.pubkey.IsValid()) {
                     throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Unable to parse HD key. Please provide a valid xpub");
                 }
@@ -1032,7 +1032,7 @@ RPCMethod derivehdkey()
 
             std::optional<CExtKey> xprv{wallet->GetExtKey(xpub)};
             if (!xprv) {
-                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, strprintf("Private key for %s is not known", EncodeExtPubKey(xpub)));
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, strprintf("Private key for %s is not known", EncodeExtPubKey(xpub, wallet->GetChainParams())));
             }
 
             std::optional<std::pair<CExtKey, KeyOriginInfo>> child{DeriveExtKey(*xprv, path)};
@@ -1045,9 +1045,9 @@ RPCMethod derivehdkey()
             const std::string fingerprint{HexStr(child->second.fingerprint)};
 
             res.pushKV("origin", strprintf("[%s%s]", fingerprint, FormatHDKeypath(child->second.path)));
-            res.pushKV("xpub", EncodeExtPubKey(child->first.Neuter()));
+            res.pushKV("xpub", EncodeExtPubKey(child->first.Neuter(), wallet->GetChainParams()));
             if (priv) {
-                res.pushKV("xprv", EncodeExtKey(child->first));
+                res.pushKV("xprv", EncodeExtKey(child->first, wallet->GetChainParams()));
             }
             return res;
         },

@@ -64,7 +64,7 @@ RPCMethod getnewaddress()
         throw JSONRPCError(RPC_WALLET_KEYPOOL_RAN_OUT, util::ErrorString(op_dest).original);
     }
 
-    return EncodeDestination(*op_dest);
+    return EncodeDestination(*op_dest, pwallet->GetChainParams());
 },
     };
 }
@@ -109,7 +109,7 @@ RPCMethod getrawchangeaddress()
     if (!op_dest) {
         throw JSONRPCError(RPC_WALLET_KEYPOOL_RAN_OUT, util::ErrorString(op_dest).original);
     }
-    return EncodeDestination(*op_dest);
+    return EncodeDestination(*op_dest, pwallet->GetChainParams());
 },
     };
 }
@@ -136,7 +136,7 @@ RPCMethod setlabel()
 
     LOCK(pwallet->cs_wallet);
 
-    CTxDestination dest = DecodeDestination(request.params[0].get_str());
+    CTxDestination dest = DecodeDestination(request.params[0].get_str(), pwallet->GetChainParams());
     if (!IsValidDestination(dest)) {
         throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid Bitcoin address");
     }
@@ -198,7 +198,7 @@ RPCMethod listaddressgroupings()
         for (const CTxDestination& address : grouping)
         {
             UniValue addressInfo(UniValue::VARR);
-            addressInfo.push_back(EncodeDestination(address));
+            addressInfo.push_back(EncodeDestination(address, pwallet->GetChainParams()));
             addressInfo.push_back(ValueFromAmount(balances[address]));
             {
                 const auto* address_book_entry = pwallet->FindAddressBookEntry(address);
@@ -261,6 +261,7 @@ class DescribeWalletAddressVisitor
 {
 public:
     const SigningProvider * const provider;
+    const CChainParams& m_params;
 
     // NOLINTNEXTLINE(misc-no-recursion)
     void ProcessSubScript(const CScript& subscript, UniValue& obj) const
@@ -279,7 +280,7 @@ public:
             subobj.pushKVs(std::move(detail));
             UniValue wallet_detail = std::visit(*this, embedded);
             subobj.pushKVs(std::move(wallet_detail));
-            subobj.pushKV("address", EncodeDestination(embedded));
+            subobj.pushKV("address", EncodeDestination(embedded, m_params));
             subobj.pushKV("scriptPubKey", HexStr(subscript));
             // Always report the pubkey at the top level, so that `getnewaddress()['pubkey']` always works.
             if (subobj.exists("pubkey")) obj.pushKV("pubkey", subobj["pubkey"]);
@@ -296,7 +297,7 @@ public:
         }
     }
 
-    explicit DescribeWalletAddressVisitor(const SigningProvider* _provider) : provider(_provider) {}
+    explicit DescribeWalletAddressVisitor(const SigningProvider* _provider, const CChainParams& params) : provider(_provider), m_params(params) {}
 
     UniValue operator()(const CNoDestination& dest) const { return UniValue(UniValue::VOBJ); }
     UniValue operator()(const PubKeyDestination& dest) const { return UniValue(UniValue::VOBJ); }
@@ -361,7 +362,7 @@ static UniValue DescribeWalletAddress(const CWallet& wallet, const CTxDestinatio
     std::unique_ptr<SigningProvider> provider = nullptr;
     provider = wallet.GetSolvingProvider(script);
     ret.pushKVs(std::move(detail));
-    ret.pushKVs(std::visit(DescribeWalletAddressVisitor(provider.get()), dest));
+    ret.pushKVs(std::visit(DescribeWalletAddressVisitor(provider.get(), wallet.GetChainParams()), dest));
     return ret;
 }
 
@@ -475,7 +476,7 @@ RPCMethod getaddressinfo()
     LOCK(pwallet->cs_wallet);
 
     std::string error_msg;
-    CTxDestination dest = DecodeDestination(request.params[0].get_str(), error_msg);
+    CTxDestination dest = DecodeDestination(request.params[0].get_str(), pwallet->GetChainParams(), error_msg);
 
     // Make sure the destination is valid
     if (!IsValidDestination(dest)) {
@@ -487,7 +488,7 @@ RPCMethod getaddressinfo()
 
     UniValue ret(UniValue::VOBJ);
 
-    std::string currentAddress = EncodeDestination(dest);
+    std::string currentAddress = EncodeDestination(dest, pwallet->GetChainParams());
     ret.pushKV("address", currentAddress);
 
     CScript scriptPubKey = GetScriptForDestination(dest);
@@ -595,7 +596,7 @@ RPCMethod getaddressesbylabel()
     pwallet->ForEachAddrBookEntry([&](const CTxDestination& _dest, const std::string& _label, bool _is_change, const std::optional<AddressPurpose>& _purpose) {
         if (_is_change) return;
         if (_label == label) {
-            std::string address = EncodeDestination(_dest);
+            std::string address = EncodeDestination(_dest, pwallet->GetChainParams());
             // CWallet::m_address_book is not expected to contain duplicate
             // address strings, but build a separate set as a precaution just in
             // case it does.
@@ -700,7 +701,7 @@ RPCMethod walletdisplayaddress()
 
             LOCK(pwallet->cs_wallet);
 
-            CTxDestination dest = DecodeDestination(request.params[0].get_str());
+            CTxDestination dest = DecodeDestination(request.params[0].get_str(), pwallet->GetChainParams());
 
             // Make sure the destination is valid
             if (!IsValidDestination(dest)) {

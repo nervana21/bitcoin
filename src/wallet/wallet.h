@@ -471,6 +471,9 @@ public:
     ~CWallet();
 
     bool IsLocked() const override;
+    bool IsTestChain() const override;
+    std::string GetChainTypeString() const override;
+    const CChainParams& GetChainParams() const override;
     bool Lock();
 
     /** Interface to assert chain access */

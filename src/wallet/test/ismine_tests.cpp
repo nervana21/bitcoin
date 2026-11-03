@@ -39,7 +39,7 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
     // P2PK compressed - Descriptor
     {
         CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
-        std::string desc_str = "pk(" + EncodeSecret(keys[0]) + ")";
+        std::string desc_str = "pk(" + EncodeSecret(keys[0], Params()) + ")";
 
         auto spk_manager = CreateDescriptor(keystore, desc_str, true);
 
@@ -51,7 +51,7 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
     // P2PK uncompressed - Descriptor
     {
         CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
-        std::string desc_str = "pk(" + EncodeSecret(uncompressedKey) + ")";
+        std::string desc_str = "pk(" + EncodeSecret(uncompressedKey, Params()) + ")";
 
         auto spk_manager = CreateDescriptor(keystore, desc_str, true);
 
@@ -63,7 +63,7 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
     // P2PKH compressed - Descriptor
     {
         CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
-        std::string desc_str = "pkh(" + EncodeSecret(keys[0]) + ")";
+        std::string desc_str = "pkh(" + EncodeSecret(keys[0], Params()) + ")";
 
         auto spk_manager = CreateDescriptor(keystore, desc_str, true);
 
@@ -75,7 +75,7 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
     // P2PKH uncompressed - Descriptor
     {
         CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
-        std::string desc_str = "pkh(" + EncodeSecret(uncompressedKey) + ")";
+        std::string desc_str = "pkh(" + EncodeSecret(uncompressedKey, Params()) + ")";
 
         auto spk_manager = CreateDescriptor(keystore, desc_str, true);
 
@@ -87,7 +87,7 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
     // P2SH - Descriptor
     {
         CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
-        std::string desc_str = "sh(pkh(" + EncodeSecret(keys[0]) + "))";
+        std::string desc_str = "sh(pkh(" + EncodeSecret(keys[0], Params()) + "))";
 
         auto spk_manager = CreateDescriptor(keystore, desc_str, true);
 
@@ -100,7 +100,7 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
     // (P2PKH inside) P2SH inside P2SH (invalid) - Descriptor
     {
         CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
-        std::string desc_str = "sh(sh(" + EncodeSecret(keys[0]) + "))";
+        std::string desc_str = "sh(sh(" + EncodeSecret(keys[0], Params()) + "))";
 
         auto spk_manager = CreateDescriptor(keystore, desc_str, false);
         BOOST_CHECK_EQUAL(spk_manager, nullptr);
@@ -109,7 +109,7 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
     // (P2PKH inside) P2SH inside P2WSH (invalid) - Descriptor
     {
         CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
-        std::string desc_str = "wsh(sh(" + EncodeSecret(keys[0]) + "))";
+        std::string desc_str = "wsh(sh(" + EncodeSecret(keys[0], Params()) + "))";
 
         auto spk_manager = CreateDescriptor(keystore, desc_str, false);
         BOOST_CHECK_EQUAL(spk_manager, nullptr);
@@ -118,7 +118,7 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
     // P2WPKH inside P2WSH (invalid) - Descriptor
     {
         CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
-        std::string desc_str = "wsh(wpkh(" + EncodeSecret(keys[0]) + "))";
+        std::string desc_str = "wsh(wpkh(" + EncodeSecret(keys[0], Params()) + "))";
 
         auto spk_manager = CreateDescriptor(keystore, desc_str, false);
         BOOST_CHECK_EQUAL(spk_manager, nullptr);
@@ -127,7 +127,7 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
     // (P2PKH inside) P2WSH inside P2WSH (invalid) - Descriptor
     {
         CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
-        std::string desc_str = "wsh(wsh(" + EncodeSecret(keys[0]) + "))";
+        std::string desc_str = "wsh(wsh(" + EncodeSecret(keys[0], Params()) + "))";
 
         auto spk_manager = CreateDescriptor(keystore, desc_str, false);
         BOOST_CHECK_EQUAL(spk_manager, nullptr);
@@ -136,7 +136,7 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
     // P2WPKH compressed - Descriptor
     {
         CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
-        std::string desc_str = "wpkh(" + EncodeSecret(keys[0]) + ")";
+        std::string desc_str = "wpkh(" + EncodeSecret(keys[0], Params()) + ")";
 
         auto spk_manager = CreateDescriptor(keystore, desc_str, true);
 
@@ -148,7 +148,7 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
     // P2WPKH uncompressed (invalid) - Descriptor
     {
         CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
-        std::string desc_str = "wpkh(" + EncodeSecret(uncompressedKey) + ")";
+        std::string desc_str = "wpkh(" + EncodeSecret(uncompressedKey, Params()) + ")";
 
         auto spk_manager = CreateDescriptor(keystore, desc_str, false);
         BOOST_CHECK_EQUAL(spk_manager, nullptr);
@@ -157,7 +157,7 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
     // scriptPubKey multisig - Descriptor
     {
         CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
-        std::string desc_str = "multi(2," + EncodeSecret(uncompressedKey) + "," + EncodeSecret(keys[1]) + ")";
+        std::string desc_str = "multi(2," + EncodeSecret(uncompressedKey, Params()) + "," + EncodeSecret(keys[1], Params()) + ")";
 
         auto spk_manager = CreateDescriptor(keystore, desc_str, true);
 
@@ -170,7 +170,7 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
     {
         CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
 
-        std::string desc_str = "sh(multi(2," + EncodeSecret(uncompressedKey) + "," + EncodeSecret(keys[1]) + "))";
+        std::string desc_str = "sh(multi(2," + EncodeSecret(uncompressedKey, Params()) + "," + EncodeSecret(keys[1], Params()) + "))";
 
         auto spk_manager = CreateDescriptor(keystore, desc_str, true);
 
@@ -184,7 +184,7 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
     {
         CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
 
-        std::string desc_str = "wsh(multi(2," + EncodeSecret(keys[0]) + "," + EncodeSecret(keys[1]) + "))";
+        std::string desc_str = "wsh(multi(2," + EncodeSecret(keys[0], Params()) + "," + EncodeSecret(keys[1], Params()) + "))";
 
         auto spk_manager = CreateDescriptor(keystore, desc_str, true);
 
@@ -198,7 +198,7 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
     {
         CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
 
-        std::string desc_str = "wsh(multi(2," + EncodeSecret(uncompressedKey) + "," + EncodeSecret(keys[1]) + "))";
+        std::string desc_str = "wsh(multi(2," + EncodeSecret(uncompressedKey, Params()) + "," + EncodeSecret(keys[1], Params()) + "))";
 
         auto spk_manager = CreateDescriptor(keystore, desc_str, false);
         BOOST_CHECK_EQUAL(spk_manager, nullptr);
@@ -208,7 +208,7 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
     {
         CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
 
-        std::string desc_str = "sh(wsh(multi(2," + EncodeSecret(keys[0]) + "," + EncodeSecret(keys[1]) + ")))";
+        std::string desc_str = "sh(wsh(multi(2," + EncodeSecret(keys[0], Params()) + "," + EncodeSecret(keys[1], Params()) + ")))";
 
         auto spk_manager = CreateDescriptor(keystore, desc_str, true);
 
@@ -223,7 +223,7 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
     {
         CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
 
-        std::string desc_str = "combo(" + EncodeSecret(keys[0]) + ")";
+        std::string desc_str = "combo(" + EncodeSecret(keys[0], Params()) + ")";
 
         auto spk_manager = CreateDescriptor(keystore, desc_str, true);
 
@@ -267,7 +267,7 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
     {
         CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
 
-        std::string desc_str = "tr(" + EncodeSecret(keys[0]) + ")";
+        std::string desc_str = "tr(" + EncodeSecret(keys[0], Params()) + ")";
 
         auto spk_manager = CreateDescriptor(keystore, desc_str, true);
 

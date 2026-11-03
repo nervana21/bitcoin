@@ -42,7 +42,7 @@ BOOST_AUTO_TEST_CASE(addhdkey_with_key)
     auto result = interface->addHDKey(key);
     BOOST_REQUIRE(result);
     BOOST_CHECK(result->pubkey.IsValid());
-    BOOST_CHECK_EQUAL(EncodeExtPubKey(*result), EncodeExtPubKey(key.Neuter()));
+    BOOST_CHECK_EQUAL(EncodeExtPubKey(*result, Params()), EncodeExtPubKey(key.Neuter(), Params()));
 }
 
 BOOST_AUTO_TEST_CASE(addhdkey_with_malformed_key)
