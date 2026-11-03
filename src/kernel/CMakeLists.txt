@@ -20,6 +20,11 @@ foreach(src ${kernel_sources})
   target_sources(bitcoinkernel PRIVATE "${PROJECT_SOURCE_DIR}/src/${src}")
 endforeach()
 
+get_target_property(chainparams_sources bitcoin_chainparams SOURCES)
+foreach(src ${chainparams_sources})
+  target_sources(bitcoinkernel PRIVATE "${PROJECT_SOURCE_DIR}/src/${src}")
+endforeach()
+
 get_target_property(util_sources bitcoin_util SOURCES)
 foreach(src ${util_sources})
   target_sources(bitcoinkernel PRIVATE "${PROJECT_SOURCE_DIR}/src/util/${src}")

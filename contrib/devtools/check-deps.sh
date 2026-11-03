@@ -6,6 +6,7 @@ set -Eeuo pipefail
 # Declare paths to libraries
 declare -A LIBS
 LIBS[cli]="libbitcoin_cli.a"
+LIBS[chainparams]="libbitcoin_chainparams.a"
 LIBS[common]="libbitcoin_common.a"
 LIBS[consensus]="libbitcoin_consensus.a"
 LIBS[crypto]="libbitcoin_crypto.a"
@@ -19,11 +20,14 @@ LIBS[wallet]="libbitcoin_wallet.a"
 ALLOWED_DEPENDENCIES=(
     "cli common"
     "cli util"
+    "chainparams consensus"
+    "chainparams util"
+    "common chainparams"
     "common consensus"
     "common crypto"
     "common util"
-    "common kernel"
     "consensus crypto"
+    "kernel chainparams"
     "kernel util"
     "kernel consensus"
     "kernel crypto"
@@ -35,7 +39,6 @@ ALLOWED_DEPENDENCIES=(
     "util crypto"
     "wallet common"
     "wallet crypto"
-    "wallet kernel"
     "wallet util"
 )
 
