@@ -22,7 +22,7 @@ public:
     static std::unique_ptr<ExternalSignerScriptPubKeyMan> LoadFromStorage(WalletStorage& storage, const uint256& id, WalletDescriptor& descriptor, int64_t keypool_size, const KeyMap& keys, const CryptedKeyMap& ckeys);
     static std::unique_ptr<ExternalSignerScriptPubKeyMan> CreateNew(WalletStorage& storage, WalletBatch& batch, int64_t keypool_size, std::unique_ptr<Descriptor> desc);
 
-  static util::Result<ExternalSigner> GetExternalSigner();
+  static util::Result<ExternalSigner> GetExternalSigner(const std::string& chain_type_string);
 
   /**
   * Display address on the device and verify that the returned value matches.

@@ -94,7 +94,7 @@ BOOST_AUTO_TEST_CASE(reject_invalid_descriptor_ranges)
 
     CExtKey ext_key;
     ext_key.SetSeed(std::array<std::byte, 32>{});
-    const std::string descriptor_without_checksum{"wpkh(" + EncodeExtKey(ext_key) + "/*)"};
+    const std::string descriptor_without_checksum{"wpkh(" + EncodeExtKey(ext_key, Params()) + "/*)"};
     const std::string descriptor{descriptor_without_checksum + "#" + GetDescriptorChecksum(descriptor_without_checksum)};
 
     const std::array invalid_ranges{
@@ -308,7 +308,7 @@ BOOST_FIXTURE_TEST_CASE(update_non_range_descriptor, TestingSetup)
         LOCK(wallet.cs_wallet);
         wallet.SetWalletFlag(WALLET_FLAG_DESCRIPTORS);
         auto key{GenerateRandomKey()};
-        auto desc_str{"combo(" + EncodeSecret(key) + ")"};
+        auto desc_str{"combo(" + EncodeSecret(key, Params()) + ")"};
         FlatSigningProvider provider;
         std::string error;
         auto descs{Parse(desc_str, provider, error, /* require_checksum=*/ false)};

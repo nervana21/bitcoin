@@ -31,6 +31,7 @@
 #include <unordered_set>
 
 enum class OutputType;
+class CChainParams;
 
 namespace wallet {
 struct MigrationData;
@@ -53,6 +54,12 @@ public:
     virtual bool WithEncryptionKey(std::function<bool (const CKeyingMaterial&)> cb) const = 0;
     virtual bool HasEncryptionKeys() const = 0;
     virtual bool IsLocked() const = 0;
+    //! Active chain is not mainnet (descriptor coin-type / BIP44 path).
+    virtual bool IsTestChain() const = 0;
+    //! Chain type name for external signers and similar.
+    virtual std::string GetChainTypeString() const = 0;
+    //! Chainparams for address encoding (no hidden Params() in key_io from wallet code).
+    virtual const CChainParams& GetChainParams() const = 0;
     //! Callback function for after TopUp completes containing any scripts that were added by a SPKMan
     virtual void TopUpCallback(const std::set<CScript>&, ScriptPubKeyMan*) = 0;
 };

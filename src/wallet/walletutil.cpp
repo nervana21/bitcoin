@@ -4,7 +4,6 @@
 
 #include <wallet/walletutil.h>
 
-#include <chainparams.h>
 #include <common/args.h>
 #include <key_io.h>
 #include <util/log.h>
@@ -32,11 +31,11 @@ fs::path GetWalletDir()
     return path;
 }
 
-WalletDescriptor GenerateWalletDescriptor(const CExtPubKey& master_key, const OutputType& addr_type, bool internal)
+WalletDescriptor GenerateWalletDescriptor(const CExtPubKey& master_key, const OutputType& addr_type, bool internal, bool is_test_chain)
 {
     int64_t creation_time = GetTime();
 
-    std::string xpub = EncodeExtPubKey(master_key);
+    std::string xpub = EncodeExtPubKey(master_key, Params());
 
     // Build descriptor string
     std::string desc_prefix;
@@ -68,7 +67,7 @@ WalletDescriptor GenerateWalletDescriptor(const CExtPubKey& master_key, const Ou
     assert(!desc_prefix.empty());
 
     // Mainnet derives at 0', testnet and regtest derive at 1'
-    if (Params().IsTestChain()) {
+    if (is_test_chain) {
         desc_prefix += "/1h";
     } else {
         desc_prefix += "/0h";

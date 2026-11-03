@@ -293,7 +293,7 @@ bool LegacyDataSPKM::LoadCScript(const CScript& redeemScript)
      * these. Do not add them to the wallet and warn. */
     if (redeemScript.size() > MAX_SCRIPT_ELEMENT_SIZE)
     {
-        std::string strAddr = EncodeDestination(ScriptHash(redeemScript));
+        std::string strAddr = EncodeDestination(ScriptHash(redeemScript), m_storage.GetChainParams());
         WalletLogPrintf("%s: Warning: This wallet contains a redeemScript of size %i which exceeds maximum size %i thus can never be redeemed. Do not use address %s.", __func__, redeemScript.size(), MAX_SCRIPT_ELEMENT_SIZE, strAddr);
         return true;
     }
@@ -653,7 +653,7 @@ std::optional<MigrationData> LegacyDataSPKM::MigrateToDescriptor()
             }
 
             // Make the combo descriptor
-            std::string xpub = EncodeExtPubKey(master_key.Neuter());
+            std::string xpub = EncodeExtPubKey(master_key.Neuter(), m_storage.GetChainParams());
             std::string desc_str = "combo(" + xpub + "/0h/" + ToString(i) + "h/*h)";
             FlatSigningProvider provider;
             std::string error;
@@ -868,7 +868,7 @@ std::unique_ptr<DescriptorScriptPubKeyMan> DescriptorScriptPubKeyMan::LoadFromSt
 
 std::unique_ptr<DescriptorScriptPubKeyMan> DescriptorScriptPubKeyMan::GenerateNewSingleSig(WalletStorage& storage, WalletBatch& batch, int64_t keypool_size, const CExtKey& master_key, OutputType addr_type, bool internal)
 {
-    WalletDescriptor desc = GenerateWalletDescriptor(master_key.Neuter(), addr_type, internal);
+    WalletDescriptor desc = GenerateWalletDescriptor(master_key.Neuter(), addr_type, internal, storage.IsTestChain());
 
     auto spkm = std::unique_ptr<DescriptorScriptPubKeyMan>(new DescriptorScriptPubKeyMan(storage, desc, keypool_size));
 

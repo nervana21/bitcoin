@@ -47,7 +47,7 @@ void AddKey(CWallet& wallet, const CKey& key)
     LOCK(wallet.cs_wallet);
     FlatSigningProvider provider;
     std::string error;
-    auto descs = Parse("combo(" + EncodeSecret(key) + ")", provider, error, /* require_checksum=*/ false);
+    auto descs = Parse("combo(" + EncodeSecret(key, Params()) + ")", provider, error, /* require_checksum=*/ false);
     assert(descs.size() == 1);
     auto& desc = descs.at(0);
     WalletDescriptor w_desc(std::move(desc), /*creation_time=*/0, /*range_start=*/0, /*range_end=*/1, /*next_index=*/1);
@@ -111,7 +111,7 @@ void TestUnloadWallet(std::shared_ptr<CWallet>&& wallet)
 std::string getnewaddress(CWallet& w)
 {
     constexpr auto output_type = OutputType::BECH32;
-    return EncodeDestination(getNewDestination(w, output_type));
+    return EncodeDestination(getNewDestination(w, output_type), Params());
 }
 
 CTxDestination getNewDestination(CWallet& w, OutputType output_type)

@@ -27,7 +27,7 @@ static CAmount GetReceived(const CWallet& wallet, const UniValue& params, bool b
         if (addresses.empty()) throw JSONRPCError(RPC_WALLET_ERROR, "Label not found in wallet");
     } else {
         // Get the address
-        CTxDestination dest = DecodeDestination(params[0].get_str());
+        CTxDestination dest = DecodeDestination(params[0].get_str(), wallet.GetChainParams());
         if (!IsValidDestination(dest)) {
             throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid Bitcoin address");
         }
@@ -531,7 +531,7 @@ RPCMethod listunspent()
         UniValue inputs = request.params[2].get_array();
         for (unsigned int idx = 0; idx < inputs.size(); idx++) {
             const UniValue& input = inputs[idx];
-            CTxDestination dest = DecodeDestination(input.get_str());
+            CTxDestination dest = DecodeDestination(input.get_str(), pwallet->GetChainParams());
             if (!IsValidDestination(dest)) {
                 throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, std::string("Invalid Bitcoin address: ") + input.get_str());
             }
@@ -611,7 +611,7 @@ RPCMethod listunspent()
         entry.pushKV("vout", out.outpoint.n);
 
         if (fValidAddress) {
-            entry.pushKV("address", EncodeDestination(address));
+            entry.pushKV("address", EncodeDestination(address, pwallet->GetChainParams()));
 
             const auto* address_book_entry = pwallet->FindAddressBookEntry(address);
             if (address_book_entry) {

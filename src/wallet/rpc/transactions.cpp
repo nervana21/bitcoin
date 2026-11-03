@@ -97,10 +97,10 @@ static UniValue ListReceived(const CWallet& wallet, const UniValue& params, cons
 
     std::optional<CTxDestination> filtered_address{std::nullopt};
     if (!by_label && !params[3].isNull() && !params[3].get_str().empty()) {
-        if (!IsValidDestinationString(params[3].get_str())) {
+        if (!IsValidDestinationString(params[3].get_str(), wallet.GetChainParams())) {
             throw JSONRPCError(RPC_WALLET_ERROR, "address_filter parameter was invalid");
         }
-        filtered_address = DecodeDestination(params[3].get_str());
+        filtered_address = DecodeDestination(params[3].get_str(), wallet.GetChainParams());
     }
 
     // Tally
@@ -165,7 +165,7 @@ static UniValue ListReceived(const CWallet& wallet, const UniValue& params, cons
             _item.nConf = std::min(_item.nConf, nConf);
         } else {
             UniValue obj(UniValue::VOBJ);
-            obj.pushKV("address",       EncodeDestination(address));
+            obj.pushKV("address",       EncodeDestination(address, wallet.GetChainParams()));
             obj.pushKV("amount",        ValueFromAmount(nAmount));
             obj.pushKV("confirmations", (nConf == std::numeric_limits<int>::max() ? 0 : nConf));
             obj.pushKV("label", label);
@@ -301,10 +301,10 @@ RPCMethod listreceivedbylabel()
     };
 }
 
-static void MaybePushAddress(UniValue & entry, const CTxDestination &dest)
+static void MaybePushAddress(UniValue & entry, const CTxDestination &dest, const CChainParams& params)
 {
     if (IsValidDestination(dest)) {
-        entry.pushKV("address", EncodeDestination(dest));
+        entry.pushKV("address", EncodeDestination(dest, params));
     }
 }
 
@@ -336,7 +336,7 @@ static void ListTransactions(const CWallet& wallet, const CWalletTx& wtx, int nM
         for (const COutputEntry& s : listSent)
         {
             UniValue entry(UniValue::VOBJ);
-            MaybePushAddress(entry, s.destination);
+            MaybePushAddress(entry, s.destination, wallet.GetChainParams());
             entry.pushKV("category", "send");
             entry.pushKV("amount", ValueFromAmount(-s.amount));
             const auto* address_book_entry = wallet.FindAddressBookEntry(s.destination);
@@ -365,7 +365,7 @@ static void ListTransactions(const CWallet& wallet, const CWalletTx& wtx, int nM
                 continue;
             }
             UniValue entry(UniValue::VOBJ);
-            MaybePushAddress(entry, r.destination);
+            MaybePushAddress(entry, r.destination, wallet.GetChainParams());
             PushParentDescriptors(wallet, wtx.GetTx()->vout.at(r.vout).scriptPubKey, entry);
             if (wtx.IsCoinBase())
             {

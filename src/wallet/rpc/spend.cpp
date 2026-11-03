@@ -542,7 +542,7 @@ CreatedTransactionResult FundTransaction(CWallet& wallet, const CMutableTransact
 
         if (options.exists("changeAddress") || options.exists("change_address")) {
             const std::string change_address_str = GetOptionWithAlias(options, "change_address", "changeAddress").get_str();
-            CTxDestination dest = DecodeDestination(change_address_str);
+            CTxDestination dest = DecodeDestination(change_address_str, wallet.GetChainParams());
 
             if (!IsValidDestination(dest)) {
                 throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Change address must be a valid bitcoin address");
@@ -1435,7 +1435,7 @@ RPCMethod sendall()
                     recipient_key_value_pairs.push_back(std::move(rkvp));
                     // Store the decoded destination, so it matches the outputs below
                     // also when the address was given in another case (e.g. uppercase bech32)
-                    addresses_without_amount.insert(DecodeDestination(recipient.get_str()));
+                    addresses_without_amount.insert(DecodeDestination(recipient.get_str(), pwallet->GetChainParams()));
                 } else {
                     recipient_key_value_pairs.push_back(recipient);
                 }
@@ -1617,7 +1617,7 @@ RPCMethod sendall()
                 } else {
                     if (IsDust(out, pwallet->chain().relayDustFee())) {
                         // Specified output amount is dust
-                        throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Specified output amount to %s is below dust threshold.", EncodeDestination(dest)));
+                        throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Specified output amount to %s is below dust threshold.", EncodeDestination(dest, pwallet->GetChainParams())));
                     }
                 }
             }

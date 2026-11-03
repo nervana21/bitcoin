@@ -2316,7 +2316,7 @@ bool CWallet::SetAddressBookWithDB(WalletBatch& batch, const CTxDestination& add
         purpose = record.purpose;
     }
 
-    const std::string& encoded_dest = EncodeDestination(address);
+    const std::string& encoded_dest = EncodeDestination(address, GetChainParams());
     if (new_purpose && !batch.WritePurpose(encoded_dest, PurposeToString(*new_purpose))) {
         WalletLogPrintf("Error: fail to write address book 'purpose' entry");
         return false;
@@ -2348,7 +2348,7 @@ bool CWallet::DelAddressBook(const CTxDestination& address)
 
 bool CWallet::DelAddressBookWithDB(WalletBatch& batch, const CTxDestination& address)
 {
-    const std::string& dest = EncodeDestination(address);
+    const std::string& dest = EncodeDestination(address, GetChainParams());
     {
         LOCK(cs_wallet);
         // If we want to delete receiving addresses, we should avoid calling EraseAddressData because it will delete the previously_spent value. Could instead just erase the label so it becomes a change address, and keep the data.
@@ -2541,7 +2541,7 @@ util::Result<void> CWallet::DisplayAddress(const CTxDestination& dest)
         if (signer_spk_man == nullptr) {
             continue;
         }
-        auto signer{ExternalSignerScriptPubKeyMan::GetExternalSigner()};
+        auto signer{ExternalSignerScriptPubKeyMan::GetExternalSigner(GetChainTypeString())};
         if (!signer) throw std::runtime_error(util::ErrorString(signer).original);
         return signer_spk_man->DisplayAddress(dest, *signer);
     }
@@ -3219,6 +3219,25 @@ bool CWallet::IsTxImmatureCoinBase(const CWalletTx& wtx) const
     return GetTxBlocksToMaturity(wtx) > 0;
 }
 
+bool CWallet::IsTestChain() const
+{
+    if (HaveChain()) return chain().isTestChain();
+    return GetChainParams().IsTestChain();
+}
+
+std::string CWallet::GetChainTypeString() const
+{
+    if (HaveChain()) return chain().getChainTypeString();
+    return GetChainParams().GetChainTypeString();
+}
+
+const CChainParams& CWallet::GetChainParams() const
+{
+    // Address encoding needs full CChainParams. Wallet / tool process calls
+    // SelectParams before wallet use; interfaces::Chain does not expose this type.
+    return Params();
+}
+
 bool CWallet::IsLocked() const
 {
     if (!HasEncryptionKeys()) {
@@ -3493,7 +3512,7 @@ void CWallet::SetupDescriptorScriptPubKeyMans()
             return true;
         })) throw std::runtime_error("Error: cannot process db transaction for descriptors setup");
     } else {
-        auto signer = ExternalSignerScriptPubKeyMan::GetExternalSigner();
+        auto signer = ExternalSignerScriptPubKeyMan::GetExternalSigner(GetChainTypeString());
         if (!signer) throw std::runtime_error(util::ErrorString(signer).original);
 
         // TODO: add account parameter
@@ -3716,7 +3735,7 @@ util::Expected<CExtPubKey, WalletError> CWallet::AddHDKey(const std::optional<CE
         hdkey.SetSeed(seed_key);
     }
 
-    std::string desc_str = "unused(" + EncodeExtKey(hdkey) + ")";
+    std::string desc_str = "unused(" + EncodeExtKey(hdkey, GetChainParams()) + ")";
     FlatSigningProvider keys;
     std::string parse_error;
     std::vector<std::unique_ptr<Descriptor>> descs = Parse(desc_str, keys, parse_error, /*require_checksum=*/false);
@@ -3994,8 +4013,8 @@ util::Result<void> CWallet::ApplyMigrationData(WalletBatch& local_wallet_batch, 
     if (data.solvable_wallet) wallets_vec.emplace_back(data.solvable_wallet, std::move(solvables_batch));
 
     // Write address book entry to disk
-    auto func_store_addr = [](WalletBatch& batch, const CTxDestination& dest, const CAddressBookData& entry) {
-        auto address{EncodeDestination(dest)};
+    auto func_store_addr = [this](WalletBatch& batch, const CTxDestination& dest, const CAddressBookData& entry) {
+        auto address{EncodeDestination(dest, GetChainParams())};
         if (entry.purpose) batch.WritePurpose(address, PurposeToString(*entry.purpose));
         if (entry.label) batch.WriteName(address, *entry.label);
         for (const auto& [id, request] : entry.receive_requests) {
