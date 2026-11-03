@@ -107,6 +107,21 @@ class bitcoin-qt,bitcoind,bitcoin-cli,bitcoin-wallet bold
 
 - GUI, node, and wallet code internal implementations should all be independent of each other, and the *libbitcoinqt*, *libbitcoin_node*, *libbitcoin_wallet* libraries should never reference each other's symbols. They should only call each other through [`src/interfaces/`](../../src/interfaces/) abstract interfaces.
 
+## Co-ship with multiprocess
+
+[The libbitcoinkernel Project #27587](https://github.com/bitcoin/bitcoin/issues/27587) and the multiprocess process split ([multiprocess design](multiprocess.md)) are meant to ship together. They cut different boundaries:
+
+| Layer | Boundary | Mechanism |
+|-------|----------|-----------|
+| Kernel library | Consensus engine vs node/app | *libbitcoin_kernel* / `btck_*` C API |
+| Node | P2P, RPC, policy, lifecycle, CLI defaults | *libbitcoin_node* |
+| Wallet / GUI | Isolated from validation | `src/interfaces/` (+ Cap'n Proto / libmultiprocess when `ENABLE_IPC` is on) |
+
+Invariants that keep the two projects compatible:
+
+- Cap'n Proto and libmultiprocess wrap those interfaces. They are not a substitute for the kernel C API and must not appear under `src/kernel/`.
+- Node owns CLI policy defaults such as `-assumevalid` / `chainparams.defaultAssumeValid`. The kernel library must not bake that hash when the option is unset (unset means always verify).
+
 ## Work in progress
 
 - Validation code is moving from *libbitcoin_node* to *libbitcoin_kernel* as part of [The libbitcoinkernel Project #27587](https://github.com/bitcoin/bitcoin/issues/27587)
