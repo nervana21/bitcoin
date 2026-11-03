@@ -4105,7 +4105,10 @@ static kernel::ChainstateManager::Options&& Flatten(kernel::ChainstateManager::O
 {
     if (!opts.check_block_index.has_value()) opts.check_block_index = opts.chainparams.DefaultConsistencyChecks();
     if (!opts.minimum_chain_work.has_value()) opts.minimum_chain_work = UintToArith256(opts.chainparams.GetConsensus().nMinimumChainWork);
-    if (!opts.assumed_valid_block.has_value()) opts.assumed_valid_block = opts.chainparams.GetConsensus().defaultAssumeValid;
+    // Unset assumed_valid_block means always verify (null hash). Never bake
+    // chainparams.defaultAssumeValid here — that is a node policy default applied
+    // in node::ApplyArgsManOptions when -assumevalid is absent.
+    if (!opts.assumed_valid_block.has_value()) opts.assumed_valid_block = uint256::ZERO;
     return std::move(opts);
 }
 

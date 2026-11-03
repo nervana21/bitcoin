@@ -1033,4 +1033,29 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_args, BasicTestingSetup)
     BOOST_CHECK(!get_opts({"-prevoutfetchthreads=-1"}));
 }
 
+//! Kernel Construct: unset assumed_valid_block must not install chainparams.defaultAssumeValid.
+BOOST_FIXTURE_TEST_CASE(chainstatemanager_assumevalid_library_default, BasicTestingSetup)
+{
+    BOOST_REQUIRE(!Params().GetConsensus().defaultAssumeValid.IsNull());
+
+    kernel::Notifications notifications{};
+    kernel::Mempool mempool{};
+    ChainstateManager::Options options{
+        .chainparams = Params(),
+        .datadir = m_args.GetDataDirNet(),
+        .mempool_interface = mempool,
+        .notifications = notifications,
+    };
+    BOOST_CHECK(!options.assumed_valid_block.has_value());
+
+    BlockManager::Options blockman_opts{
+        .chainparams = options.chainparams,
+        .blocks_dir = m_args.GetBlocksDirPath(),
+        .block_tree_dir = m_args.GetDataDirNet() / "blocks" / "index",
+        .notifications = notifications,
+    };
+    ChainstateManager chainman{m_logger, *Assert(m_node.shutdown_signal), options, blockman_opts};
+    BOOST_CHECK(chainman.AssumedValidBlock().IsNull());
+}
+
 BOOST_AUTO_TEST_SUITE_END()

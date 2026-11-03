@@ -30,6 +30,7 @@
 #include <node/blockmanager_args.h>
 #include <node/blockstorage.h>
 #include <node/chainstate.h>
+#include <node/chainstatemanager_args.h>
 #include <node/context.h>
 #include <node/kernel_mempool.h>
 #include <node/kernel_notifications.h>
@@ -327,6 +328,8 @@ ChainTestingSetup::ChainTestingSetup(const ChainType chainType, TestOpts opts)
             chainman_opts.script_execution_cache_bytes = 0;
             chainman_opts.signature_cache_bytes = 0;
         }
+        // Same path as AppInit: node applies -assumevalid / chainparams default.
+        Assert(ApplyArgsManOptions(*m_node.args, chainman_opts));
         BlockManager::Options blockman_opts{
             .chainparams = chainman_opts.chainparams,
             .blocks_dir = m_args.GetBlocksDirPath(),
