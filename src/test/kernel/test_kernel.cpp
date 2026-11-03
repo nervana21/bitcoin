@@ -126,6 +126,7 @@ class TestKernelNotifications : public KernelNotifications
 public:
     void HeaderTipHandler(SynchronizationState state, int64_t height, int64_t timestamp, bool presync) override
     {
+        BOOST_CHECK_GE(height, 0);
         BOOST_CHECK_GT(timestamp, 0);
     }
 
