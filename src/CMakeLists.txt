@@ -107,7 +107,6 @@ add_library(bitcoin_kernel STATIC EXCLUDE_FROM_ALL
   kernel/utxo_snapshot.cpp
   kernel/chainstatemanager.cpp
   pow.cpp
-  script/solver.cpp
   script/sigcache.cpp
   signet.cpp
   txdb.cpp
@@ -178,6 +177,7 @@ add_library(bitcoin_common STATIC EXCLUDE_FROM_ALL
   script/parsing.cpp
   script/sign.cpp
   script/signingprovider.cpp
+  script/solver.cpp
   util/bip32.cpp
   util/bytevectorhash.cpp
   util/sock.cpp
