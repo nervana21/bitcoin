@@ -174,9 +174,9 @@ util::Result<std::string> ExportWatchOnlyWallet(const CWallet& wallet, const fs:
                 if (entry.purpose) watchonly_batch.WritePurpose(address, PurposeToString(*entry.purpose));
                 if (entry.label) watchonly_batch.WriteName(address, *entry.label);
                 for (const auto& [id, request] : entry.receive_requests) {
-                    watchonly_batch.WriteAddressReceiveRequest(dest, id, request);
+                    watchonly_batch.WriteAddressReceiveRequest(dest, id, request, wallet.GetChainParams());
                 }
-                if (entry.previously_spent) watchonly_batch.WriteAddressPreviouslySpent(dest, true);
+                if (entry.previously_spent) watchonly_batch.WriteAddressPreviouslySpent(dest, true, wallet.GetChainParams());
             }
 
             if (!watchonly_batch.TxnCommit()) {

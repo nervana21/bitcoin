@@ -2359,7 +2359,7 @@ bool CWallet::DelAddressBookWithDB(WalletBatch& batch, const CTxDestination& add
             return false;
         }
         // Delete data rows associated with this address
-        if (!batch.EraseAddressData(address)) {
+        if (!batch.EraseAddressData(address, GetChainParams())) {
             WalletLogPrintf("Error: cannot erase address book entry data");
             return false;
         }
@@ -2687,11 +2687,11 @@ bool CWallet::SetAddressPreviouslySpent(WalletBatch& batch, const CTxDestination
 
     if (!used) {
         if (auto* data{common::FindKey(m_address_book, dest)}) data->previously_spent = false;
-        return batch.WriteAddressPreviouslySpent(dest, false);
+        return batch.WriteAddressPreviouslySpent(dest, false, GetChainParams());
     }
 
     LoadAddressPreviouslySpent(dest);
-    return batch.WriteAddressPreviouslySpent(dest, true);
+    return batch.WriteAddressPreviouslySpent(dest, true, GetChainParams());
 }
 
 void CWallet::LoadAddressPreviouslySpent(const CTxDestination& dest)
@@ -2723,14 +2723,14 @@ std::vector<std::string> CWallet::GetAddressReceiveRequests() const
 
 bool CWallet::SetAddressReceiveRequest(WalletBatch& batch, const CTxDestination& dest, const std::string& id, const std::string& value)
 {
-    if (!batch.WriteAddressReceiveRequest(dest, id, value)) return false;
+    if (!batch.WriteAddressReceiveRequest(dest, id, value, GetChainParams())) return false;
     m_address_book[dest].receive_requests[id] = value;
     return true;
 }
 
 bool CWallet::EraseAddressReceiveRequest(WalletBatch& batch, const CTxDestination& dest, const std::string& id)
 {
-    if (!batch.EraseAddressReceiveRequest(dest, id)) return false;
+    if (!batch.EraseAddressReceiveRequest(dest, id, GetChainParams())) return false;
     m_address_book[dest].receive_requests.erase(id);
     return true;
 }
@@ -4018,9 +4018,9 @@ util::Result<void> CWallet::ApplyMigrationData(WalletBatch& local_wallet_batch, 
         if (entry.purpose) batch.WritePurpose(address, PurposeToString(*entry.purpose));
         if (entry.label) batch.WriteName(address, *entry.label);
         for (const auto& [id, request] : entry.receive_requests) {
-            batch.WriteAddressReceiveRequest(dest, id, request);
+            batch.WriteAddressReceiveRequest(dest, id, request, GetChainParams());
         }
-        if (entry.previously_spent) batch.WriteAddressPreviouslySpent(dest, true);
+        if (entry.previously_spent) batch.WriteAddressPreviouslySpent(dest, true, GetChainParams());
     };
 
     // Check the address book data in the same way we did for transactions
