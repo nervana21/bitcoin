@@ -77,6 +77,7 @@ add_library(bitcoin_consensus STATIC EXCLUDE_FROM_ALL
   script/interpreter.cpp
   script/script.cpp
   script/script_error.cpp
+  script/solver.cpp
   uint256.cpp
 )
 target_link_libraries(bitcoin_consensus
@@ -107,7 +108,6 @@ add_library(bitcoin_kernel STATIC EXCLUDE_FROM_ALL
   kernel/utxo_snapshot.cpp
   kernel/chainstatemanager.cpp
   pow.cpp
-  script/solver.cpp
   script/sigcache.cpp
   signet.cpp
   txdb.cpp

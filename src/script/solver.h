@@ -3,7 +3,9 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-// The Solver functions are used by policy and the wallet, but not consensus.
+// Script type classification helpers. Not consensus-critical rules, but they
+// live in libbitcoin_consensus so both libbitcoin_kernel and libbitcoin_common
+// can use them without a common → kernel link.
 
 #ifndef BITCOIN_SCRIPT_SOLVER_H
 #define BITCOIN_SCRIPT_SOLVER_H
