@@ -6,14 +6,15 @@
 #ifndef BITCOIN_POW_H
 #define BITCOIN_POW_H
 
+#include <arith_uint256.h>
 #include <consensus/params.h>
+#include <uint256.h>
 
 #include <cstdint>
+#include <optional>
 
 class CBlockHeader;
 class CBlockIndex;
-class uint256;
-class arith_uint256;
 
 /**
  * Convert nBits value to target.
@@ -24,7 +25,21 @@ class arith_uint256;
  * @return              the proof-of-work target or nullopt if the nBits value
  *                      is invalid (due to overflow or exceeding pow_limit)
  */
-std::optional<arith_uint256> DeriveTarget(unsigned int nBits, uint256 pow_limit);
+inline std::optional<arith_uint256> DeriveTarget(unsigned int nBits, const uint256& pow_limit)
+{
+    bool fNegative;
+    bool fOverflow;
+    arith_uint256 bnTarget;
+
+    bnTarget.SetCompact(nBits, &fNegative, &fOverflow);
+
+    // Check range
+    if (fNegative || bnTarget == 0 || fOverflow || bnTarget > UintToArith256(pow_limit)) {
+        return std::nullopt;
+    }
+
+    return bnTarget;
+}
 
 unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock, const Consensus::Params&);
 unsigned int CalculateNextWorkRequired(const CBlockIndex* pindexLast, int64_t nFirstBlockTime, const Consensus::Params&);

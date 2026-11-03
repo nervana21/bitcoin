@@ -143,21 +143,6 @@ bool CheckProofOfWork(uint256 hash, unsigned int nBits, const Consensus::Params&
     return CheckProofOfWorkImpl(hash, nBits, params);
 }
 
-std::optional<arith_uint256> DeriveTarget(unsigned int nBits, const uint256 pow_limit)
-{
-    bool fNegative;
-    bool fOverflow;
-    arith_uint256 bnTarget;
-
-    bnTarget.SetCompact(nBits, &fNegative, &fOverflow);
-
-    // Check range
-    if (fNegative || bnTarget == 0 || fOverflow || bnTarget > UintToArith256(pow_limit))
-        return {};
-
-    return bnTarget;
-}
-
 bool CheckProofOfWorkImpl(uint256 hash, unsigned int nBits, const Consensus::Params& params)
 {
     auto bnTarget{DeriveTarget(nBits, params.powLimit)};
