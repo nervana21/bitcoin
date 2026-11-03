@@ -10,7 +10,6 @@
 #include <consensus/amount.h>
 #include <interfaces/chain.h>
 #include <interfaces/handler.h>
-#include <kernel/cs_main.h>
 #include <key.h>
 #include <node/types.h>
 #include <outputtype.h>
@@ -883,11 +882,11 @@ public:
 
     /**
      * Blocks until the wallet state is up-to-date to /at least/ the current
-     * chain at the time this function is entered
-     * Obviously holding cs_main/cs_wallet when going into this call may cause
-     * deadlock
+     * chain at the time this function is entered. Uses interfaces::Chain
+     * notification waits (no kernel lock header). Do not call while holding
+     * cs_wallet. The wait may need that lock on the notification path.
      */
-    void BlockUntilSyncedToCurrentChain() const LOCKS_EXCLUDED(::cs_main) EXCLUSIVE_LOCKS_REQUIRED(!cs_wallet);
+    void BlockUntilSyncedToCurrentChain() const EXCLUSIVE_LOCKS_REQUIRED(!cs_wallet);
 
     /** set a single wallet flag */
     void SetWalletFlag(uint64_t flags);
