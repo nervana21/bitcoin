@@ -1305,26 +1305,26 @@ bool RunWithinTxn(WalletDatabase& database, std::string_view process_desc, const
     return RunWithinTxn(batch, process_desc, func);
 }
 
-bool WalletBatch::WriteAddressPreviouslySpent(const CTxDestination& dest, bool previously_spent)
+bool WalletBatch::WriteAddressPreviouslySpent(const CTxDestination& dest, bool previously_spent, const CChainParams& params)
 {
-    auto key{std::make_pair(DBKeys::DESTDATA, std::make_pair(EncodeDestination(dest, Params()), std::string("used")))};
+    auto key{std::make_pair(DBKeys::DESTDATA, std::make_pair(EncodeDestination(dest, params), std::string("used")))};
     return previously_spent ? WriteIC(key, std::string("1")) : EraseIC(key);
 }
 
-bool WalletBatch::WriteAddressReceiveRequest(const CTxDestination& dest, const std::string& id, const std::string& receive_request)
+bool WalletBatch::WriteAddressReceiveRequest(const CTxDestination& dest, const std::string& id, const std::string& receive_request, const CChainParams& params)
 {
-    return WriteIC(std::make_pair(DBKeys::DESTDATA, std::make_pair(EncodeDestination(dest, Params()), "rr" + id)), receive_request);
+    return WriteIC(std::make_pair(DBKeys::DESTDATA, std::make_pair(EncodeDestination(dest, params), "rr" + id)), receive_request);
 }
 
-bool WalletBatch::EraseAddressReceiveRequest(const CTxDestination& dest, const std::string& id)
+bool WalletBatch::EraseAddressReceiveRequest(const CTxDestination& dest, const std::string& id, const CChainParams& params)
 {
-    return EraseIC(std::make_pair(DBKeys::DESTDATA, std::make_pair(EncodeDestination(dest, Params()), "rr" + id)));
+    return EraseIC(std::make_pair(DBKeys::DESTDATA, std::make_pair(EncodeDestination(dest, params), "rr" + id)));
 }
 
-bool WalletBatch::EraseAddressData(const CTxDestination& dest)
+bool WalletBatch::EraseAddressData(const CTxDestination& dest, const CChainParams& params)
 {
     DataStream prefix;
-    prefix << DBKeys::DESTDATA << EncodeDestination(dest, Params());
+    prefix << DBKeys::DESTDATA << EncodeDestination(dest, params);
     return m_batch->ErasePrefix(prefix);
 }
 

@@ -18,6 +18,7 @@
 #include <unordered_set>
 #include <vector>
 
+class CChainParams;
 class CScript;
 class uint160;
 class uint256;
@@ -265,10 +266,10 @@ public:
     bool WriteLockedUTXO(const COutPoint& output);
     bool EraseLockedUTXO(const COutPoint& output);
 
-    bool WriteAddressPreviouslySpent(const CTxDestination& dest, bool previously_spent);
-    bool WriteAddressReceiveRequest(const CTxDestination& dest, const std::string& id, const std::string& receive_request);
-    bool EraseAddressReceiveRequest(const CTxDestination& dest, const std::string& id);
-    bool EraseAddressData(const CTxDestination& dest);
+    bool WriteAddressPreviouslySpent(const CTxDestination& dest, bool previously_spent, const CChainParams& params);
+    bool WriteAddressReceiveRequest(const CTxDestination& dest, const std::string& id, const std::string& receive_request, const CChainParams& params);
+    bool EraseAddressReceiveRequest(const CTxDestination& dest, const std::string& id, const CChainParams& params);
+    bool EraseAddressData(const CTxDestination& dest, const CChainParams& params);
 
     bool WriteActiveScriptPubKeyMan(uint8_t type, const uint256& id, bool internal);
     bool EraseActiveScriptPubKeyMan(uint8_t type, bool internal);
