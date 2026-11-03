@@ -9,6 +9,7 @@
 #include <common/settings.h>
 #include <consensus/amount.h>
 #include <kernel/chain.h> // IWYU pragma: export
+#include <kernel/messagestartchars.h>
 #include <primitives/transaction.h>
 #include <util/expected.h>
 #include <util/fees.h>
@@ -286,6 +287,15 @@ public:
 
     //! Check if in IBD.
     virtual bool isInitialBlockDownload() = 0;
+
+    //! True if the active chain is not mainnet.
+    virtual bool isTestChain() = 0;
+
+    //! Chain type name (main, test, signet, regtest, …).
+    virtual std::string getChainTypeString() = 0;
+
+    //! P2P / wallet-db network magic bytes for the active chain.
+    virtual MessageStartChars getMessageStart() = 0;
 
     //! Check if shutdown requested.
     virtual bool shutdownRequested() = 0;

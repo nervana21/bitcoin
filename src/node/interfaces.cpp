@@ -778,6 +778,20 @@ public:
     {
         return chainman().IsInitialBlockDownload();
     }
+    // These read SelectParams() globals, not chainman. Wallet verify (AppInit
+    // Step 5) calls them before InitAndLoadChainstate creates chainman (Step 7).
+    bool isTestChain() override
+    {
+        return Params().IsTestChain();
+    }
+    std::string getChainTypeString() override
+    {
+        return Params().GetChainTypeString();
+    }
+    MessageStartChars getMessageStart() override
+    {
+        return Params().MessageStart();
+    }
     bool shutdownRequested() override { return ShutdownRequested(m_node); }
     void initMessage(const std::string& message) override { ::uiInterface.InitMessage(message); }
     void initWarning(const bilingual_str& message) override { InitWarning(message); }
