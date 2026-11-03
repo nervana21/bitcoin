@@ -33,6 +33,7 @@
 
 #include <cstdio>
 #include <functional>
+#include <map>
 #include <memory>
 
 using util::SplitString;
@@ -588,7 +589,8 @@ static void MutateTxSign(CMutableTransaction& tx, const std::string& flagStr)
     // starts as a clone of the raw tx:
     CMutableTransaction mergedTx{tx};
     const CMutableTransaction txv{tx};
-    CCoinsViewCache view{&CoinsViewEmpty::Get()};
+    // Local prevout map only (no CCoinsViewCache / libbitcoin_kernel).
+    std::map<COutPoint, Coin> coins;
 
     if (!registers.contains("privatekeys"))
         throw std::runtime_error("privatekeys register variable must be set.");
@@ -637,10 +639,10 @@ static void MutateTxSign(CMutableTransaction& tx, const std::string& flagStr)
             CScript scriptPubKey(pkData.begin(), pkData.end());
 
             {
-                const Coin& coin = view.AccessCoin(out);
-                if (!coin.IsSpent() && coin.out.scriptPubKey != scriptPubKey) {
+                const auto it = coins.find(out);
+                if (it != coins.end() && !it->second.IsSpent() && it->second.out.scriptPubKey != scriptPubKey) {
                     std::string err("Previous output scriptPubKey mismatch:\n");
-                    err = err + ScriptToAsmStr(coin.out.scriptPubKey) + "\nvs:\n"+
+                    err = err + ScriptToAsmStr(it->second.out.scriptPubKey) + "\nvs:\n"+
                         ScriptToAsmStr(scriptPubKey);
                     throw std::runtime_error(err);
                 }
@@ -651,7 +653,7 @@ static void MutateTxSign(CMutableTransaction& tx, const std::string& flagStr)
                     newcoin.out.nValue = AmountFromValue(prevOut["amount"]);
                 }
                 newcoin.nHeight = 1;
-                view.AddCoin(out, std::move(newcoin), true);
+                coins[out] = std::move(newcoin);
             }
 
             // if redeemScript given and private keys given,
@@ -675,10 +677,11 @@ static void MutateTxSign(CMutableTransaction& tx, const std::string& flagStr)
     // Sign what we can:
     for (unsigned int i = 0; i < mergedTx.vin.size(); i++) {
         CTxIn& txin = mergedTx.vin[i];
-        const Coin& coin = view.AccessCoin(txin.prevout);
-        if (coin.IsSpent()) {
+        const auto coin_it = coins.find(txin.prevout);
+        if (coin_it == coins.end() || coin_it->second.IsSpent()) {
             continue;
         }
+        const Coin& coin = coin_it->second;
         const CScript& prevPubKey = coin.out.scriptPubKey;
         const CAmount& amount = coin.out.nValue;
 

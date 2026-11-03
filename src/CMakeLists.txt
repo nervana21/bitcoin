@@ -87,18 +87,31 @@ target_link_libraries(bitcoin_consensus
     secp256k1
 )
 
+# Network / chainparams *definitions* shared by kernel validation and app code
+# without pulling the validation engine into libbitcoin_common. Factory
+# (Params / SelectParams / CreateChainParams) stays in bitcoin_common.
+add_library(bitcoin_chainparams STATIC EXCLUDE_FROM_ALL
+  deploymentinfo.cpp
+  kernel/chainparams.cpp
+)
+target_link_libraries(bitcoin_chainparams
+  PRIVATE
+    core_interface
+    bitcoin_consensus
+    bitcoin_util
+    $<TARGET_NAME_IF_EXISTS:USDT::headers>
+)
+
 add_library(bitcoin_kernel STATIC EXCLUDE_FROM_ALL
   chain.cpp
   coins.cpp
   compressor.cpp
   consensus/tx_verify.cpp
-  deploymentinfo.cpp
   deploymentstatus.cpp
   flatfile.cpp
   kernel/blocktreestorage.cpp
   kernel/coinsstore.cpp
   kernel/chain.cpp
-  kernel/chainparams.cpp
   kernel/checks.cpp
   kernel/coinstats.cpp
   kernel/context.cpp
@@ -118,6 +131,7 @@ add_library(bitcoin_kernel STATIC EXCLUDE_FROM_ALL
 target_link_libraries(bitcoin_kernel
   PRIVATE
     core_interface
+    bitcoin_chainparams
     bitcoin_consensus
     bitcoin_util
     secp256k1
@@ -187,8 +201,8 @@ add_library(bitcoin_common STATIC EXCLUDE_FROM_ALL
 target_link_libraries(bitcoin_common
   PRIVATE
     core_interface
+    bitcoin_chainparams
     bitcoin_consensus
-    bitcoin_kernel
     bitcoin_util
     univalue
     secp256k1
