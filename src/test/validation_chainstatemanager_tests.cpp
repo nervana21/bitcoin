@@ -1001,7 +1001,8 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_args, BasicTestingSetup)
     };
 
     // test -assumevalid
-    BOOST_CHECK(!get_valid_opts({}).assumed_valid_block);
+    // Absent -assumevalid: node installs chainparams.defaultAssumeValid (not left unset).
+    BOOST_CHECK_EQUAL(get_valid_opts({}).assumed_valid_block, Params().GetConsensus().defaultAssumeValid);
     BOOST_CHECK_EQUAL(get_valid_opts({"-assumevalid="}).assumed_valid_block, uint256::ZERO);
     BOOST_CHECK_EQUAL(get_valid_opts({"-assumevalid=0"}).assumed_valid_block, uint256::ZERO);
     BOOST_CHECK_EQUAL(get_valid_opts({"-noassumevalid"}).assumed_valid_block, uint256::ZERO);

@@ -44,6 +44,11 @@ util::Result<void> ApplyArgsManOptions(const ArgsManager& args, ChainstateManage
         } else {
             return util::Error{Untranslated(strprintf("Invalid assumevalid block hash specified (%s), must be up to %d hex digits (or 0 to disable)", *value, uint256::size() * 2))};
         }
+    } else {
+        // Node owns the chainparams assumevalid default. The kernel library does
+        // not apply it (unset / null = always verify). Keeps embedders and the C
+        // API honest while bitcoind / bitcoin-node keep historical CLI defaults.
+        opts.assumed_valid_block = opts.chainparams.GetConsensus().defaultAssumeValid;
     }
 
     if (auto value{args.GetIntArg("-maxtipage")}) opts.max_tip_age = std::chrono::seconds{*value};
