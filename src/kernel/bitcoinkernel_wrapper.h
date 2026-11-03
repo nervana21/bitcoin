@@ -1251,19 +1251,19 @@ public:
         static_assert(std::is_base_of_v<KernelNotifications, T>);
         auto heap_notifications = std::make_unique<std::shared_ptr<T>>(std::move(notifications));
         using user_type = std::shared_ptr<T>*;
-        btck_context_options_set_notifications(
-            get(),
-            btck_NotificationInterfaceCallbacks{
-                .user_data = heap_notifications.release(),
-                .user_data_destroy = +[](void* user_data) { delete static_cast<user_type>(user_data); },
-                .block_tip = +[](void* user_data, btck_SynchronizationState state, const btck_BlockTreeEntry* entry, double verification_progress) { (*static_cast<user_type>(user_data))->BlockTipHandler(static_cast<SynchronizationState>(state), BlockTreeEntry{entry}, verification_progress); },
-                .header_tip = +[](void* user_data, btck_SynchronizationState state, int64_t height, int64_t timestamp, int presync) { (*static_cast<user_type>(user_data))->HeaderTipHandler(static_cast<SynchronizationState>(state), height, timestamp, presync == 1); },
-                .progress = +[](void* user_data, const char* title, size_t title_len, int progress_percent, int resume_possible) { (*static_cast<user_type>(user_data))->ProgressHandler({title, title_len}, progress_percent, resume_possible == 1); },
-                .warning_set = +[](void* user_data, btck_Warning warning, const char* message, size_t message_len) { (*static_cast<user_type>(user_data))->WarningSetHandler(static_cast<Warning>(warning), {message, message_len}); },
-                .warning_unset = +[](void* user_data, btck_Warning warning) { (*static_cast<user_type>(user_data))->WarningUnsetHandler(static_cast<Warning>(warning)); },
-                .flush_error = +[](void* user_data, const char* error, size_t error_len) { (*static_cast<user_type>(user_data))->FlushErrorHandler({error, error_len}); },
-                .fatal_error = +[](void* user_data, const char* error, size_t error_len) { (*static_cast<user_type>(user_data))->FatalErrorHandler({error, error_len}); },
-            });
+        std::unique_ptr<btck_NotificationInterfaceCallbacks, decltype(&btck_notification_interface_callbacks_destroy)> cbs{
+            check(btck_notification_interface_callbacks_create(
+                heap_notifications.release(),
+                +[](void* user_data) { delete static_cast<user_type>(user_data); })),
+            &btck_notification_interface_callbacks_destroy};
+        btck_notification_interface_callbacks_set_block_tip(cbs.get(), +[](void* user_data, btck_SynchronizationState state, const btck_BlockTreeEntry* entry, double verification_progress) { (*static_cast<user_type>(user_data))->BlockTipHandler(static_cast<SynchronizationState>(state), BlockTreeEntry{entry}, verification_progress); });
+        btck_notification_interface_callbacks_set_header_tip(cbs.get(), +[](void* user_data, btck_SynchronizationState state, int64_t height, int64_t timestamp, int presync) { (*static_cast<user_type>(user_data))->HeaderTipHandler(static_cast<SynchronizationState>(state), height, timestamp, presync == 1); });
+        btck_notification_interface_callbacks_set_progress(cbs.get(), +[](void* user_data, const char* title, size_t title_len, int progress_percent, int resume_possible) { (*static_cast<user_type>(user_data))->ProgressHandler({title, title_len}, progress_percent, resume_possible == 1); });
+        btck_notification_interface_callbacks_set_warning_set(cbs.get(), +[](void* user_data, btck_Warning warning, const char* message, size_t message_len) { (*static_cast<user_type>(user_data))->WarningSetHandler(static_cast<Warning>(warning), {message, message_len}); });
+        btck_notification_interface_callbacks_set_warning_unset(cbs.get(), +[](void* user_data, btck_Warning warning) { (*static_cast<user_type>(user_data))->WarningUnsetHandler(static_cast<Warning>(warning)); });
+        btck_notification_interface_callbacks_set_flush_error(cbs.get(), +[](void* user_data, const char* error, size_t error_len) { (*static_cast<user_type>(user_data))->FlushErrorHandler({error, error_len}); });
+        btck_notification_interface_callbacks_set_fatal_error(cbs.get(), +[](void* user_data, const char* error, size_t error_len) { (*static_cast<user_type>(user_data))->FatalErrorHandler({error, error_len}); });
+        btck_context_options_set_notifications(get(), cbs.get());
     }
 
     template <typename T>
