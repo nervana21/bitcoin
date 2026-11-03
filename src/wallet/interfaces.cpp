@@ -659,7 +659,7 @@ public:
     std::vector<std::pair<std::string, std::string>> listWalletDir() override
     {
         std::vector<std::pair<std::string, std::string>> paths;
-        for (auto& [path, format] : ListDatabases(GetWalletDir())) {
+        for (auto& [path, format] : ListDatabases(GetWalletDir(), m_context.chain->getMessageStart())) {
             paths.emplace_back(fs::PathToString(path), format);
         }
         return paths;
