@@ -19,6 +19,7 @@
 #include <wallet/scan.h>
 #include <wallet/test/util.h>
 #include <wallet/test/wallet_test_fixture.h>
+#include <chainparams.h>
 #include <wallet/wallet.h>
 #include <wallet/walletdb.h>
 
@@ -560,6 +561,7 @@ BOOST_FIXTURE_TEST_CASE(scan_for_wallet_transactions_attach_chain, TestChain100S
     WalletContext context;
     context.args = &m_args;
     context.chain = m_node.chain.get();
+    context.chain_params = &Params();
     auto wallet = TestCreateWallet(context);
     AddKey(*wallet, coinbaseKey);
     TestUnloadWallet(std::move(wallet));

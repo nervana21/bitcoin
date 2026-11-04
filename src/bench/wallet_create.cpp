@@ -11,6 +11,7 @@
 #include <util/translation.h>
 #include <wallet/context.h>
 #include <wallet/db.h>
+#include <chainparams.h>
 #include <wallet/wallet.h>
 #include <wallet/walletutil.h>
 
@@ -29,11 +30,13 @@ static void WalletCreate(benchmark::Bench& bench, bool encrypted)
     WalletContext context;
     context.args = &test_setup->m_args;
     context.chain = test_setup->m_node.chain.get();
+    context.chain_params = &Params();
 
     DatabaseOptions options;
     options.require_format = DatabaseFormat::SQLITE;
     options.require_create = true;
     options.create_flags = WALLET_FLAG_DESCRIPTORS;
+    options.network_magic = Params().MessageStart();
 
     if (encrypted) {
         options.create_passphrase = random.rand256().ToString();

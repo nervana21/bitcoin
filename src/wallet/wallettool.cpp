@@ -4,6 +4,7 @@
 
 #include <wallet/wallettool.h>
 
+#include <chainparams.h>
 #include <common/args.h>
 #include <util/check.h>
 #include <util/fs.h>
@@ -49,8 +50,8 @@ static std::shared_ptr<CWallet> MakeWallet(const std::string& name, const fs::pa
         return nullptr;
     }
 
-    // dummy chain interface
-    std::shared_ptr<CWallet> wallet_instance{new CWallet(/*chain=*/nullptr, name, std::move(database)), WalletToolReleaseWallet};
+    // dummy chain interface; process already called SelectParams
+    std::shared_ptr<CWallet> wallet_instance{new CWallet(/*chain=*/nullptr, name, std::move(database), Params()), WalletToolReleaseWallet};
     DBErrors load_wallet_ret;
     try {
         load_wallet_ret = wallet_instance->PopulateWalletFromDB(error, warnings);
@@ -119,6 +120,7 @@ bool ExecuteWalletToolFunc(const ArgsManager& args, const std::string& command)
         }
         DatabaseOptions options;
         ReadDatabaseArgs(args, options);
+        options.network_magic = Params().MessageStart();
         options.require_create = true;
         options.create_flags |= WALLET_FLAG_DESCRIPTORS;
         options.require_format = DatabaseFormat::SQLITE;
@@ -130,6 +132,7 @@ bool ExecuteWalletToolFunc(const ArgsManager& args, const std::string& command)
     } else if (command == "info") {
         DatabaseOptions options;
         ReadDatabaseArgs(args, options);
+        options.network_magic = Params().MessageStart();
         options.require_existing = true;
         const std::shared_ptr<CWallet> wallet_instance = MakeWallet(name, path, options);
         if (!wallet_instance) return false;
@@ -138,6 +141,7 @@ bool ExecuteWalletToolFunc(const ArgsManager& args, const std::string& command)
     } else if (command == "dump") {
         DatabaseOptions options;
         ReadDatabaseArgs(args, options);
+        options.network_magic = Params().MessageStart();
         options.require_existing = true;
         DatabaseStatus status;
 

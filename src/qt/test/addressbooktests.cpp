@@ -17,6 +17,7 @@
 #include <qt/walletmodel.h>
 
 #include <key.h>
+#include <chainparams.h>
 #include <key_io.h>
 #include <wallet/wallet.h>
 #include <wallet/test/util.h>
@@ -76,7 +77,7 @@ void TestAddAddressesToSendBook(interfaces::Node& node)
     auto wallet_loader = interfaces::MakeWalletLoader(*test.m_node.chain, *Assert(test.m_node.args));
     test.m_node.wallet_loader = wallet_loader.get();
     node.setContext(&test.m_node);
-    const std::shared_ptr<CWallet> wallet = std::make_shared<CWallet>(node.context()->chain.get(), "", CreateMockableWalletDatabase());
+    const std::shared_ptr<CWallet> wallet = std::make_shared<CWallet>(node.context()->chain.get(), "", CreateMockableWalletDatabase(), Params());
     wallet->SetWalletFlag(WALLET_FLAG_DESCRIPTORS);
     {
         LOCK(wallet->cs_wallet);

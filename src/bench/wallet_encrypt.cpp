@@ -19,6 +19,7 @@
 #include <wallet/db.h>
 #include <wallet/sqlite.h>
 #include <wallet/test/util.h>
+#include <chainparams.h>
 #include <wallet/wallet.h>
 #include <wallet/walletutil.h>
 
@@ -40,6 +41,7 @@ static void WalletEncrypt(benchmark::Bench& bench, unsigned int key_count)
     WalletContext context;
     context.args = &test_setup->m_args;
     context.chain = test_setup->m_node.chain.get();
+    context.chain_params = &Params();
 
     uint64_t create_flags = WALLET_FLAG_DESCRIPTORS;
 

@@ -9,6 +9,7 @@
 #include <util/fs.h>
 #include <util/time.h>
 #include <util/translation.h>
+#include <chainparams.h>
 #include <wallet/db.h>
 #include <wallet/dump.h>
 #include <wallet/migrate.h>
@@ -39,7 +40,8 @@ FUZZ_TARGET(wallet_bdb_parser, .init = initialize_wallet_bdb_parser)
         assert(outfile.fclose() == 0);
     }
 
-    const DatabaseOptions options{};
+    DatabaseOptions options;
+    options.network_magic = Params().MessageStart();
     DatabaseStatus status;
     bilingual_str error;
 

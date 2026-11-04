@@ -13,6 +13,7 @@
 #include <wallet/fees.h>
 #include <wallet/spend.h>
 #include <wallet/test/util.h>
+#include <chainparams.h>
 #include <wallet/wallet.h>
 
 namespace wallet {
@@ -24,7 +25,7 @@ struct FuzzedWallet {
     std::shared_ptr<CWallet> wallet;
     FuzzedWallet(interfaces::Chain& chain, const std::string& name, const std::string& seed_insecure)
     {
-        wallet = std::make_shared<CWallet>(&chain, name, CreateMockableWalletDatabase());
+        wallet = std::make_shared<CWallet>(&chain, name, CreateMockableWalletDatabase(), Params());
         {
             LOCK(wallet->cs_wallet);
             wallet->SetWalletFlag(WALLET_FLAG_DESCRIPTORS);

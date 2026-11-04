@@ -380,6 +380,9 @@ private:
     /** Interface for accessing chain state. */
     interfaces::Chain* m_chain;
 
+    /** Network params for address/key encode and decode. Lifetime owned by process (Params()). */
+    const CChainParams* m_chain_params;
+
     /** Wallet name: relative directory name or "" for default wallet. */
     std::string m_name;
 
@@ -467,7 +470,7 @@ public:
     unsigned int nMasterKeyMaxID = 0;
 
     /** Construct wallet with specified name and database implementation. */
-    CWallet(interfaces::Chain* chain, const std::string& name, std::unique_ptr<WalletDatabase> database);
+    CWallet(interfaces::Chain* chain, const std::string& name, std::unique_ptr<WalletDatabase> database, const CChainParams& chain_params);
     ~CWallet();
 
     bool IsLocked() const override;

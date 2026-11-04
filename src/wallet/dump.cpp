@@ -4,6 +4,7 @@
 
 #include <wallet/dump.h>
 
+#include <chainparams.h>
 #include <common/args.h>
 #include <streams.h>
 #include <util/fs.h>
@@ -207,14 +208,15 @@ bool CreateFromDump(const ArgsManager& args, const std::string& name, const fs::
     DatabaseOptions options;
     DatabaseStatus status;
     ReadDatabaseArgs(args, options);
+    options.network_magic = Params().MessageStart();
     options.require_create = true;
     options.require_format = DatabaseFormat::SQLITE;
     std::unique_ptr<WalletDatabase> database = MakeDatabase(wallet_path, options, status, error);
     if (!database) return false;
 
-    // dummy chain interface
+    // dummy chain interface; process already called SelectParams
     bool ret = true;
-    std::shared_ptr<CWallet> wallet(new CWallet(/*chain=*/nullptr, name, std::move(database)), WalletToolReleaseWallet);
+    std::shared_ptr<CWallet> wallet(new CWallet(/*chain=*/nullptr, name, std::move(database), Params()), WalletToolReleaseWallet);
     {
         // Get the database handle
         WalletDatabase& db = wallet->GetDatabase();

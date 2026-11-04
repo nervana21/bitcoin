@@ -484,8 +484,9 @@ std::shared_ptr<CWallet> RestoreWallet(WalletContext& context, const fs::path& b
     return wallet;
 }
 
-CWallet::CWallet(interfaces::Chain* chain, const std::string& name, std::unique_ptr<WalletDatabase> database)
+CWallet::CWallet(interfaces::Chain* chain, const std::string& name, std::unique_ptr<WalletDatabase> database, const CChainParams& chain_params)
     : m_chain(chain),
+      m_chain_params(&chain_params),
       m_name(name),
       m_database(std::move(database)),
       m_scanner(std::make_unique<ChainScanner>(*this))
@@ -2943,7 +2944,7 @@ std::shared_ptr<CWallet> CWallet::CreateNew(WalletContext& context, const std::s
     const auto start{SteadyClock::now()};
     // TODO: Can't use std::make_shared because we need a custom deleter but
     // should be possible to use std::allocate_shared.
-    std::shared_ptr<CWallet> walletInstance(new CWallet(chain, name, std::move(database)), FlushAndDeleteWallet);
+    std::shared_ptr<CWallet> walletInstance(new CWallet(chain, name, std::move(database), *Assert(context.chain_params)), FlushAndDeleteWallet);
 
     if (!LoadWalletArgs(walletInstance, context, error, warnings)) {
         return nullptr;
@@ -3003,7 +3004,7 @@ std::shared_ptr<CWallet> CWallet::LoadExisting(WalletContext& context, const std
     const std::string& walletFile = database->Filename();
 
     const auto start{SteadyClock::now()};
-    std::shared_ptr<CWallet> walletInstance(new CWallet(chain, name, std::move(database)), FlushAndDeleteWallet);
+    std::shared_ptr<CWallet> walletInstance(new CWallet(chain, name, std::move(database), *Assert(context.chain_params)), FlushAndDeleteWallet);
 
     if (!LoadWalletArgs(walletInstance, context, error, warnings)) {
         return nullptr;
@@ -3235,9 +3236,7 @@ std::string CWallet::GetChainTypeString() const
 
 const CChainParams& CWallet::GetChainParams() const
 {
-    // Address encoding needs full CChainParams. Wallet / tool process calls
-    // SelectParams before wallet use; interfaces::Chain does not expose this type.
-    return Params();
+    return *Assert(m_chain_params);
 }
 
 bool CWallet::IsLocked() const
@@ -3826,6 +3825,7 @@ bool CWallet::MigrateToSQLite(bilingual_str& error)
     DatabaseOptions opts;
     opts.require_create = true;
     opts.require_format = DatabaseFormat::SQLITE;
+    opts.network_magic = GetChainParams().MessageStart();
     DatabaseStatus db_status;
     std::unique_ptr<WalletDatabase> new_db = MakeDatabase(wallet_path, opts, db_status, error);
     assert(new_db); // This is to prevent doing anything further with this wallet. The original file was deleted, but a backup exists.
@@ -4122,6 +4122,7 @@ bool DoMigration(CWallet& wallet, WalletContext& context, bilingual_str& error, 
 
         WalletContext empty_context;
         empty_context.args = context.args;
+        empty_context.chain_params = context.chain_params;
 
         // Make the wallets
         options.create_flags = WALLET_FLAG_DISABLE_PRIVATE_KEYS | WALLET_FLAG_BLANK_WALLET | WALLET_FLAG_DESCRIPTORS;
@@ -4251,6 +4252,7 @@ util::Result<MigrationResult> MigrateLegacyToDescriptor(const std::string& walle
     // No signals should be connected nor should anything else be aware of this wallet
     WalletContext empty_context;
     empty_context.args = context.args;
+    empty_context.chain_params = context.chain_params;
     DatabaseOptions options;
     options.require_existing = true;
     options.require_format = DatabaseFormat::BERKELEY_RO;
