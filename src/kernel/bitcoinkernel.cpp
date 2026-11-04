@@ -36,6 +36,7 @@
 #include <tinyformat.h>
 #include <uint256.h>
 #include <undo.h>
+#include <util/btcsignals.h>
 #include <util/check.h>
 #include <util/fs.h>
 #include <util/hasher.h>
@@ -43,7 +44,6 @@
 #include <util/overloaded.h>
 #include <util/result.h>
 #include <util/signalinterrupt.h>
-#include <util/stdmutex.h>
 #include <util/string.h>
 #include <util/task_runner.h>
 #include <util/time.h>
@@ -508,10 +508,10 @@ using UserData = std::unique_ptr<void, UserDataDeleter>;
 //! kernel code by this library is a LogConnection (see the util::log::hooks definitions).
 class LogConnection : public util::log::Logger
 {
-    const btck_LogCallback m_fn;
-    const UserData m_user_data;
-    //! Serializes invocations of the callback.
-    mutable StdMutex m_mutex;
+    //! Calls the connected callback. The signal holds no lock while a callback runs.
+    btcsignals::signal<void(const btck_LogEntry*)> m_signal;
+    //! Empty for the discard logger. Disconnects in the destructor.
+    btcsignals::connection m_connection;
     //! Entries below this level are not delivered.
     std::atomic<util::log::Level> m_min_level{util::log::Level::Info};
     //! Number of contexts using this connection.
@@ -519,14 +519,27 @@ class LogConnection : public util::log::Logger
 
 public:
     //! Construct a connection without a callback, which discards all entries.
-    LogConnection() : m_fn{nullptr}, m_user_data{nullptr, {nullptr}} {}
+    LogConnection() = default;
     //! Construct a connection that delivers entries to fn. Takes ownership of user_data.
-    LogConnection(btck_LogCallback fn, UserData user_data) : m_fn{fn}, m_user_data{std::move(user_data)} {}
+    LogConnection(btck_LogCallback fn, UserData user_data)
+    {
+        // Hold a reference until connect() returns, so a failed connect() doesn't destroy user_data
+        // while the signal's mutex is held.
+        std::shared_ptr<void> data{std::move(user_data)};
+        m_connection = m_signal.connect([fn, data](const btck_LogEntry* entry) {
+            try {
+                fn(data.get(), entry);
+            } catch (...) {
+                // Don't log the error: the entry would go back to the same callback.
+            }
+        });
+    }
     ~LogConnection()
     {
         // Contexts refer to the connection they use, so it must outlive them (see
         // btck_context_options_set_logger). Abort instead of leaving them with a dangling pointer.
         assert(m_uses == 0);
+        m_connection.disconnect();
     }
     LogConnection(const LogConnection&) = delete;
     LogConnection& operator=(const LogConnection&) = delete;
@@ -538,11 +551,15 @@ public:
     //! Whether an entry at this level would be delivered.
     bool ShouldLog(util::log::Level level) const
     {
-        return m_fn && level >= m_min_level.load(std::memory_order_relaxed);
+        return m_connection.connected() && level >= m_min_level.load(std::memory_order_relaxed);
     }
     //! Deliver the entry to the callback if ShouldLog() passes for its level. Exceptions from the
     //! callback are swallowed.
-    void Log(const util::log::Entry& entry) const EXCLUSIVE_LOCKS_REQUIRED(!m_mutex);
+    void Log(const util::log::Entry& entry) const
+    {
+        if (!ShouldLog(entry.level)) return;
+        m_signal(btck_LogEntry::ref(&entry));
+    }
 };
 
 struct ContextOptions {
@@ -662,19 +679,6 @@ struct ChainMan {
     ChainMan(std::unique_ptr<ChainstateManager> chainman, std::shared_ptr<const Context> context)
         : m_chainman(std::move(chainman)), m_context(std::move(context)) {}
 };
-
-void LogConnection::Log(const util::log::Entry& entry) const
-{
-    if (!ShouldLog(entry.level)) return;
-
-    STDLOCK(m_mutex);
-    try {
-        m_fn(m_user_data.get(), btck_LogEntry::ref(&entry));
-    } catch (...) {
-        // Can't log the error here because we're already inside the logging path (would
-        // deadlock on m_mutex).
-    }
-}
 
 } // namespace
 
