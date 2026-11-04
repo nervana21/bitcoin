@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <key.h>
+#include <chainparams.h>
 #include <key_io.h>
 #include <test/util/common.h>
 #include <test/util/setup_common.h>
@@ -20,7 +21,7 @@ BOOST_AUTO_TEST_CASE(DescriptorScriptPubKeyManTests)
 {
     std::unique_ptr<interfaces::Chain>& chain = m_node.chain;
 
-    CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
+    CWallet keystore(chain.get(), "", CreateMockableWalletDatabase(), Params());
     auto key_scriptpath = GenerateRandomKey();
 
     // Verify that a SigningProvider for a pubkey is only returned if its corresponding private key is available
@@ -44,7 +45,7 @@ BOOST_AUTO_TEST_CASE(desc_spkm_topup_fail)
     // should throw even though it is valid and can be parsed
     CExtKey extkey;
     extkey.SetSeed(std::array<std::byte, 32>{});
-    CWallet keystore(m_node.chain.get(), "", CreateMockableWalletDatabase());
+    CWallet keystore(m_node.chain.get(), "", CreateMockableWalletDatabase(), Params());
     BOOST_CHECK_EXCEPTION(
         CreateDescriptor(keystore, "wpkh(" + EncodeExtPubKey(extkey.Neuter(), Params()) + "/*h)", /*success=*/true),
         std::runtime_error, HasReason("Could not top up scriptPubKeys"));

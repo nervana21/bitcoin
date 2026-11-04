@@ -16,6 +16,7 @@
 #include <wallet/coincontrol.h>
 #include <wallet/fees.h>
 #include <wallet/test/util.h>
+#include <chainparams.h>
 #include <wallet/wallet.h>
 
 #include <optional>
@@ -97,7 +98,7 @@ FUZZ_TARGET(wallet_fees, .init = initialize_setup)
         target_feerate > node.mempool->m_opts.min_relay_feerate) {
         MockMempoolMinFee(target_feerate, *node.mempool);
     }
-    std::unique_ptr<CWallet> wallet_ptr{std::make_unique<CWallet>(node.chain.get(), "", CreateMockableWalletDatabase())};
+    std::unique_ptr<CWallet> wallet_ptr{std::make_unique<CWallet>(node.chain.get(), "", CreateMockableWalletDatabase(), Params())};
     CWallet& wallet{*wallet_ptr};
     {
         LOCK(wallet.cs_wallet);

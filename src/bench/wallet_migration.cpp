@@ -21,6 +21,7 @@
 #include <wallet/scriptpubkeyman.h>
 #include <wallet/test/util.h>
 #include <wallet/transaction.h>
+#include <chainparams.h>
 #include <wallet/wallet.h>
 #include <wallet/walletdb.h>
 
@@ -60,7 +61,7 @@ static void WalletMigration(benchmark::Bench& bench)
     bench.epochs(/*numEpochs=*/1) // run the migration exactly once
         .setup([&] {
             // Setup legacy wallet
-            wallet = std::make_unique<CWallet>(test_setup->m_node.chain.get(), std::string(i++, 'A'), CreateMockableWalletDatabase());
+            wallet = std::make_unique<CWallet>(test_setup->m_node.chain.get(), std::string(i++, 'A'), CreateMockableWalletDatabase(), Params());
             LegacyDataSPKM* legacy_spkm = wallet->GetOrCreateLegacyDataSPKM();
             WalletBatch batch{wallet->GetDatabase()};
 
