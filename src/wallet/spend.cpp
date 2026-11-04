@@ -94,7 +94,7 @@ int CalculateMaximumSignedInputSize(const CTxOut& txout, const COutPoint outpoin
 {
     if (!provider) return -1;
 
-    if (const auto desc = InferDescriptor(txout.scriptPubKey, *provider)) {
+    if (const auto desc = InferDescriptor(txout.scriptPubKey, *provider, Params())) {
         if (const auto weight = MaxInputWeight(*desc, CTxIn{outpoint}, coin_control, true, can_grind_r)) {
             return static_cast<int>(GetVirtualTransactionSize(*weight, 0, 0));
         }
@@ -120,7 +120,7 @@ static std::unique_ptr<Descriptor> GetDescriptor(const CWallet* wallet, const CC
     if (coin_control) {
         providers.AddProvider(std::make_unique<FlatSigningProvider>(coin_control->m_external_provider));
     }
-    return InferDescriptor(script_pubkey, providers);
+    return InferDescriptor(script_pubkey, providers, wallet->GetChainParams());
 }
 
 /** Infer the maximum size of this input after it will be signed. */

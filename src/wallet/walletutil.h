@@ -5,12 +5,11 @@
 #ifndef BITCOIN_WALLET_WALLETUTIL_H
 #define BITCOIN_WALLET_WALLETUTIL_H
 
+#include <chainparams.h>
 #include <script/descriptor.h>
 #include <util/fs.h>
 
 #include <vector>
-
-class CChainParams;
 
 namespace wallet {
 
@@ -142,7 +141,7 @@ public:
 
         std::string error;
         FlatSigningProvider keys;
-        auto descs = Parse(descriptor_str, keys, error, true);
+        auto descs = Parse(descriptor_str, keys, error, Params(), true);
         if (descs.empty()) {
             throw std::ios_base::failure("Invalid descriptor: " + error);
         }

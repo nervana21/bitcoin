@@ -96,7 +96,7 @@ BOOST_FIXTURE_TEST_CASE(wallet_load_descriptor_cache_invalid_xpub_size, TestingS
     const std::string desc_str = "wpkh([d34db33f/84h/0h/0h]xpub6DJ2dNUysrn5Vt36jH2KLBT2i1auw1tTSSomg8PhqNiUtx8QX2SvC9nrHu81fT41fvDUnhMjEzQgXnQjKEu3oaqMSzhSrHMxyyoEAmUHQbY/0/*)#cjjspncu";
     FlatSigningProvider keys;
     std::string parse_error;
-    std::vector<std::unique_ptr<Descriptor>> descs = Parse(desc_str, keys, parse_error, /*require_checksum=*/true);
+    std::vector<std::unique_ptr<Descriptor>> descs = Parse(desc_str, keys, parse_error, Params(), /*require_checksum=*/true);
     BOOST_REQUIRE_MESSAGE(descs.size() == 1, parse_error);
     std::shared_ptr<Descriptor> descriptor = std::move(descs.at(0));
     const uint256 desc_id = CompatDescriptorHash(*descriptor);

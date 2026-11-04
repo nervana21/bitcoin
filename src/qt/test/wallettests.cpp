@@ -206,7 +206,7 @@ std::shared_ptr<CWallet> SetupDescriptorsWallet(interfaces::Node& node, TestChai
     } else {
         key_str = EncodeSecret(test.coinbaseKey, Params());
     }
-    auto descs = Parse("combo(" + key_str + ")", provider, error, /* require_checksum=*/ false);
+    auto descs = Parse("combo(" + key_str + ")", provider, error, Params(), /* require_checksum=*/ false);
     assert(!descs.empty());
     assert(descs.size() == 1);
     auto& desc = descs.at(0);

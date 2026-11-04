@@ -26,7 +26,7 @@ std::string EncodeExtPubKey(const CExtPubKey& extpubkey, const CChainParams& par
 /** Decode a base58-encoded extended key string as either an xprv or xpub, using a single
  *  base58 decode. The first element of the returned pair is valid if the string encodes
  *  an extended private key; the second if it encodes an extended public key. */
-std::pair<CExtKey, CExtPubKey> DecodeExtKeyOrPubKey(std::string_view str);
+std::pair<CExtKey, CExtPubKey> DecodeExtKeyOrPubKey(std::string_view str, const CChainParams& params);
 
 std::string EncodeDestination(const CTxDestination& dest, const CChainParams& params);
 CTxDestination DecodeDestination(const std::string& str, const CChainParams& params);

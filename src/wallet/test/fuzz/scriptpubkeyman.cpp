@@ -67,7 +67,7 @@ static std::optional<std::pair<WalletDescriptor, FlatSigningProvider>> CreateWal
 
     FlatSigningProvider keys;
     std::string error;
-    std::vector<std::unique_ptr<Descriptor>> parsed_descs = Parse(desc_str.value(), keys, error, false);
+    std::vector<std::unique_ptr<Descriptor>> parsed_descs = Parse(desc_str.value(), keys, error, Params(), false);
     if (parsed_descs.empty()) return std::nullopt;
 
     // Verify expand succeeds before making WalletDescriptor

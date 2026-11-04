@@ -27,8 +27,8 @@ void CheckUnparsable(const std::string& prv, const std::string& pub, const std::
 {
     FlatSigningProvider keys_priv, keys_pub;
     std::string error;
-    auto parse_priv = Parse(prv, keys_priv, error);
-    auto parse_pub = Parse(pub, keys_pub, error);
+    auto parse_priv = Parse(prv, keys_priv, error, Params());
+    auto parse_pub = Parse(pub, keys_pub, error, Params());
     BOOST_CHECK_MESSAGE(parse_priv.empty(), prv);
     BOOST_CHECK_MESSAGE(parse_pub.empty(), pub);
     BOOST_CHECK_EQUAL(error, expected_error);
@@ -38,7 +38,7 @@ void CheckUnparsable(const std::string& prv, const std::string& pub, const std::
 void CheckInferRaw(const CScript& script)
 {
     FlatSigningProvider dummy_provider;
-    std::unique_ptr<Descriptor> desc = InferDescriptor(script, dummy_provider);
+    std::unique_ptr<Descriptor> desc = InferDescriptor(script, dummy_provider, Params());
     BOOST_CHECK(desc->ToString().rfind("raw(", 0) == 0);
 }
 
@@ -190,12 +190,12 @@ void DoCheck(std::string prv, std::string pub, const std::string& norm_pub, int 
     if (replace_apostrophe_with_h_in_prv) {
         prv = UseHInsteadOfApostrophe(prv);
     }
-    parse_privs = Parse(prv, keys_priv, error);
+    parse_privs = Parse(prv, keys_priv, error, Params());
     BOOST_CHECK_MESSAGE(!parse_privs.empty(), error);
     if (replace_apostrophe_with_h_in_pub) {
         pub = UseHInsteadOfApostrophe(pub);
     }
-    parse_pubs = Parse(pub, keys_pub, error);
+    parse_pubs = Parse(pub, keys_pub, error, Params());
     BOOST_CHECK_MESSAGE(!parse_pubs.empty(), error);
 
     auto& parse_priv = parse_privs.at(desc_index);
@@ -475,14 +475,14 @@ void DoCheck(std::string prv, std::string pub, const std::string& norm_pub, int 
                 }
 
                 /* Infer a descriptor from the generated script, and verify its solvability and that it roundtrips. */
-                auto inferred = InferDescriptor(spks[n], script_provider);
+                auto inferred = InferDescriptor(spks[n], script_provider, Params());
                 BOOST_CHECK_EQUAL(inferred->IsSolvable(), !(flags & UNSOLVABLE));
                 std::vector<CScript> spks_inferred;
                 FlatSigningProvider provider_inferred;
                 BOOST_CHECK(inferred->Expand(0, provider_inferred, spks_inferred, provider_inferred));
                 BOOST_CHECK_EQUAL(spks_inferred.size(), 1U);
                 BOOST_CHECK_EQUAL(spks_inferred[0], spks[n]);
-                BOOST_CHECK_EQUAL(InferDescriptor(spks_inferred[0], provider_inferred)->IsSolvable(), !(flags & UNSOLVABLE));
+                BOOST_CHECK_EQUAL(InferDescriptor(spks_inferred[0], provider_inferred, Params())->IsSolvable(), !(flags & UNSOLVABLE));
                 const auto origins_inferred{GetKeyOriginData(provider_inferred, flags)};
                 const auto origins_script{GetKeyOriginData(script_provider, flags)};
                 BOOST_CHECK_EQUAL_COLLECTIONS(origins_inferred.begin(), origins_inferred.end(), origins_script.begin(), origins_script.end());
@@ -555,7 +555,7 @@ void CheckMultipath(const std::string& prv,
     FlatSigningProvider prov, out;
     std::string error;
     const auto desc{[&](){
-        auto parsed{Parse(pub, prov, error)};
+        auto parsed{Parse(pub, prov, error, Params())};
         assert(parsed.size() > 1);
         return std::move(parsed.at(0));
     }()};
@@ -606,7 +606,7 @@ void CheckInferDescriptor(const std::string& script_hex, const std::string& expe
 
     std::string checksum{GetDescriptorChecksum(expected_desc)};
 
-    std::unique_ptr<Descriptor> desc = InferDescriptor(script, provider);
+    std::unique_ptr<Descriptor> desc = InferDescriptor(script, provider, Params());
     BOOST_CHECK_EQUAL(desc->ToString(), expected_desc + "#" + checksum);
 }
 
@@ -1346,7 +1346,7 @@ BOOST_AUTO_TEST_CASE(descriptor_test)
         }
         FlatSigningProvider tree_keys;
         std::string tree_error;
-        auto parsed = Parse("tr(03a34b99f22c790c4e36b2b3c2c35a36db06226e41c692fc82b8b56ac1c540c5bd," + tree + ")", tree_keys, tree_error);
+        auto parsed = Parse("tr(03a34b99f22c790c4e36b2b3c2c35a36db06226e41c692fc82b8b56ac1c540c5bd," + tree + ")", tree_keys, tree_error, Params());
         BOOST_CHECK_MESSAGE(!parsed.empty(), tree_error);
         std::vector<CScript> scripts;
         FlatSigningProvider provider;
@@ -1373,7 +1373,7 @@ BOOST_AUTO_TEST_CASE(descriptor_literal_null_byte)
     // Trailing '\0' string literal should be ignored.
     FlatSigningProvider keys;
     std::string err;
-    auto descs = Parse("pk(0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798)", keys, err, /*require_checksum=*/false);
+    auto descs = Parse("pk(0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798)", keys, err, Params(), /*require_checksum=*/false);
     BOOST_REQUIRE_MESSAGE(!descs.empty(), err);
 }
 
@@ -1383,7 +1383,7 @@ BOOST_AUTO_TEST_CASE(descriptor_older_warnings)
     {
         FlatSigningProvider keys;
         std::string err;
-        auto descs = Parse("wsh(and_v(v:pk(0379e45b3cf75f9c5f9befd8e9506fb962f6a9d185ac87001ec44a8d3df8d4a9e3),older(65535)))", keys, err, /*require_checksum=*/false);
+        auto descs = Parse("wsh(and_v(v:pk(0379e45b3cf75f9c5f9befd8e9506fb962f6a9d185ac87001ec44a8d3df8d4a9e3),older(65535)))", keys, err, Params(), /*require_checksum=*/false);
         BOOST_REQUIRE_MESSAGE(!descs.empty(), err);
         BOOST_CHECK(descs[0]->Warnings().empty());
     }
@@ -1393,7 +1393,7 @@ BOOST_AUTO_TEST_CASE(descriptor_older_warnings)
         FlatSigningProvider keys;
         std::string err;
         const uint32_t height_unsafe = 65536;
-        auto descs = Parse(strprintf("wsh(and_v(v:pk(0379e45b3cf75f9c5f9befd8e9506fb962f6a9d185ac87001ec44a8d3df8d4a9e3),older(%u)))", height_unsafe), keys, err, /*require_checksum=*/false);
+        auto descs = Parse(strprintf("wsh(and_v(v:pk(0379e45b3cf75f9c5f9befd8e9506fb962f6a9d185ac87001ec44a8d3df8d4a9e3),older(%u)))", height_unsafe), keys, err, Params(), /*require_checksum=*/false);
         BOOST_REQUIRE_MESSAGE(!descs.empty(), err);
         const auto& ws = descs[0]->Warnings();
         BOOST_REQUIRE_EQUAL(ws.size(), 1U);
@@ -1405,7 +1405,7 @@ BOOST_AUTO_TEST_CASE(descriptor_older_warnings)
         FlatSigningProvider keys;
         std::string err;
         const uint32_t time_unsafe = 65536 | CTxIn::SEQUENCE_LOCKTIME_TYPE_FLAG;
-        auto descs = Parse(strprintf("wsh(and_v(v:pk(0379e45b3cf75f9c5f9befd8e9506fb962f6a9d185ac87001ec44a8d3df8d4a9e3),older(%u)))", time_unsafe), keys, err, /*require_checksum=*/false);
+        auto descs = Parse(strprintf("wsh(and_v(v:pk(0379e45b3cf75f9c5f9befd8e9506fb962f6a9d185ac87001ec44a8d3df8d4a9e3),older(%u)))", time_unsafe), keys, err, Params(), /*require_checksum=*/false);
         BOOST_REQUIRE_MESSAGE(!descs.empty(), err);
         const auto& warnings = descs[0]->Warnings();
         BOOST_REQUIRE_EQUAL(warnings.size(), 1U);
@@ -1417,7 +1417,7 @@ BOOST_AUTO_TEST_CASE(descriptor_older_warnings)
         FlatSigningProvider keys;
         std::string err;
         // Using after() with a large timestamp (> 65535)
-        auto descs = Parse("wsh(and_v(v:pk(0379e45b3cf75f9c5f9befd8e9506fb962f6a9d185ac87001ec44a8d3df8d4a9e3),after(1000000)))", keys, err, /*require_checksum=*/false);
+        auto descs = Parse("wsh(and_v(v:pk(0379e45b3cf75f9c5f9befd8e9506fb962f6a9d185ac87001ec44a8d3df8d4a9e3),after(1000000)))", keys, err, Params(), /*require_checksum=*/false);
         BOOST_REQUIRE_MESSAGE(!descs.empty(), err);
         BOOST_CHECK(descs[0]->Warnings().empty());
     }
@@ -1427,7 +1427,7 @@ void CheckSingleUnparsable(const std::string& desc, const std::string& expected_
 {
     FlatSigningProvider keys;
     std::string error;
-    auto parsed = Parse(desc, keys, error);
+    auto parsed = Parse(desc, keys, error, Params());
     BOOST_CHECK_MESSAGE(parsed.empty(), desc);
     BOOST_CHECK_EQUAL(error, expected_error);
 }
@@ -1439,8 +1439,8 @@ void CheckUnused(const std::string& prv, const std::string& pub)
 
     std::unique_ptr<Descriptor> parse_priv;
     std::unique_ptr<Descriptor> parse_pub;
-    parse_priv = std::move(Parse(prv, keys_priv, error).at(0));
-    parse_pub = std::move(Parse(pub, keys_pub, error).at(0));
+    parse_priv = std::move(Parse(prv, keys_priv, error, Params()).at(0));
+    parse_pub = std::move(Parse(pub, keys_pub, error, Params()).at(0));
     BOOST_CHECK_MESSAGE(parse_priv, error);
     BOOST_CHECK_MESSAGE(parse_pub, error);
 

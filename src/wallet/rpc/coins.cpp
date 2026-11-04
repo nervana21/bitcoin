@@ -689,7 +689,7 @@ RPCMethod listunspent()
         if (out.solvable) {
             std::unique_ptr<SigningProvider> provider = pwallet->GetSolvingProvider(scriptPubKey);
             if (provider) {
-                auto descriptor = InferDescriptor(scriptPubKey, *provider);
+                auto descriptor = InferDescriptor(scriptPubKey, *provider, pwallet->GetChainParams());
                 entry.pushKV("desc", descriptor->ToString());
             }
         }

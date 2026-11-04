@@ -6,6 +6,7 @@
 
 #include <arith_uint256.h>
 #include <chain.h>
+#include <chainparams.h>
 #include <common/args.h>
 #include <common/messages.h>
 #include <common/types.h>
@@ -1355,7 +1356,7 @@ std::vector<CScript> EvalDescriptorStringOrObject(const UniValue& scanobject, Fl
     }
 
     std::string error;
-    auto descs = Parse(desc_str, provider, error);
+    auto descs = Parse(desc_str, provider, error, Params());
     if (descs.empty()) {
         throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, error);
     }

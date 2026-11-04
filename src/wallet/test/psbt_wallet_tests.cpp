@@ -22,7 +22,7 @@ static void import_descriptor(CWallet& wallet, const std::string& descriptor)
     AssertLockHeld(wallet.cs_wallet);
     FlatSigningProvider provider;
     std::string error;
-    auto descs = Parse(descriptor, provider, error, /* require_checksum=*/false);
+    auto descs = Parse(descriptor, provider, error, Params(), /* require_checksum=*/false);
     assert(descs.size() == 1);
     auto& desc = descs.at(0);
     WalletDescriptor w_desc(std::move(desc), 0, 0, 10, 0);

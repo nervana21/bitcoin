@@ -24,7 +24,7 @@ static void ExpandDescriptor(benchmark::Bench& bench)
     const std::pair<int64_t, int64_t> range = {0, 1000};
     FlatSigningProvider provider;
     std::string error;
-    auto descs = Parse(desc_str, provider, error);
+    auto descs = Parse(desc_str, provider, error, Params());
 
     bench.run([&] {
         for (int i = range.first; i <= range.second; ++i) {

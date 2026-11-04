@@ -2450,7 +2450,7 @@ static RPCMethod scantxoutset()
             FlatSigningProvider provider;
             auto scripts = EvalDescriptorStringOrObject(scanobject, provider);
             for (CScript& script : scripts) {
-                std::string inferred = InferDescriptor(script, provider)->ToString();
+                std::string inferred = InferDescriptor(script, provider, Params())->ToString();
                 needles.emplace(script);
                 descriptors.emplace(std::move(script), std::move(inferred));
             }
