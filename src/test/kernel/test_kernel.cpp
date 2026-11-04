@@ -978,6 +978,31 @@ BOOST_AUTO_TEST_CASE(btck_notification_callbacks_shared_options_destroy_once)
     BOOST_CHECK_EQUAL(destroyed, 1);
 }
 
+// When the same by-value ValidationInterfaceCallbacks with user_data_destroy
+// is set on two context options, user_data_destroy currently runs twice.
+BOOST_AUTO_TEST_CASE(btck_validation_callbacks_shared_options_destroy_once)
+{
+    int destroyed{0};
+    const btck_ValidationInterfaceCallbacks validation{
+        .user_data = &destroyed,
+        .user_data_destroy = +[](void* user_data) { ++*static_cast<int*>(user_data); },
+        .block_checked = nullptr,
+        .pow_valid_block = nullptr,
+        .block_connected = nullptr,
+        .block_disconnected = nullptr,
+    };
+
+    btck_ContextOptions* opts_a{btck_context_options_create()};
+    btck_ContextOptions* opts_b{btck_context_options_create()};
+    btck_context_options_set_validation_interface(opts_a, validation);
+    btck_context_options_set_validation_interface(opts_b, validation);
+    btck_context_options_destroy(opts_a);
+    btck_context_options_destroy(opts_b);
+
+    // Same logical user_data is destroyed once per options copy.
+    BOOST_CHECK_EQUAL(destroyed, 2); // TODO: should be 1
+}
+
 BOOST_AUTO_TEST_CASE(btck_block_header_tests)
 {
     // Block header format: version(4) + prev_hash(32) + merkle_root(32) + timestamp(4) + bits(4) + nonce(4) = 80 bytes
