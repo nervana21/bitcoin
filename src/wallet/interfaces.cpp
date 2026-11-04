@@ -586,6 +586,7 @@ public:
         DatabaseOptions options;
         DatabaseStatus status;
         ReadDatabaseArgs(*m_context.args, options);
+        options.network_magic = m_context.chain->getMessageStart();
         options.require_create = true;
         options.create_flags = wallet_creation_flags;
         options.create_passphrase = passphrase;
@@ -602,6 +603,7 @@ public:
         DatabaseOptions options;
         DatabaseStatus status;
         ReadDatabaseArgs(*m_context.args, options);
+        options.network_magic = m_context.chain->getMessageStart();
         options.require_existing = true;
         bilingual_str error;
         std::unique_ptr<Wallet> wallet{MakeWallet(m_context, LoadWallet(m_context, name, /*load_on_start=*/true, options, status, error, warnings))};
@@ -642,6 +644,7 @@ public:
         // Unloaded wallet, read db
         DatabaseOptions options;
         options.require_existing = true;
+        options.network_magic = m_context.chain->getMessageStart();
         DatabaseStatus status;
         bilingual_str error;
         auto db = MakeWalletDatabase(wallet_name, options, status, error);

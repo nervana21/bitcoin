@@ -62,6 +62,7 @@ bool VerifyWallets(WalletContext& context)
         DatabaseOptions options;
         DatabaseStatus status;
         ReadDatabaseArgs(args, options);
+        options.network_magic = chain.getMessageStart();
         bilingual_str error_string;
         options.require_existing = true;
         options.verify = false;
@@ -95,6 +96,7 @@ bool VerifyWallets(WalletContext& context)
         DatabaseOptions options;
         DatabaseStatus status;
         ReadDatabaseArgs(args, options);
+        options.network_magic = chain.getMessageStart();
         options.require_existing = true;
         options.verify = true;
         bilingual_str error_string;
@@ -133,6 +135,7 @@ bool LoadWallets(WalletContext& context)
             DatabaseOptions options;
             DatabaseStatus status;
             ReadDatabaseArgs(*context.args, options);
+            options.network_magic = chain.getMessageStart();
             options.require_existing = true;
             options.verify = false; // No need to verify, assuming verified earlier in VerifyWallets()
             bilingual_str error;
