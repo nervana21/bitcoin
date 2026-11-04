@@ -6,6 +6,7 @@
 
 #include <chain.h>
 #include <key.h>
+#include <chainparams.h>
 #include <key_io.h>
 #include <test/util/setup_common.h>
 #include <validationinterface.h>
@@ -21,7 +22,7 @@
 namespace wallet {
 std::unique_ptr<CWallet> CreateSyncedWallet(interfaces::Chain& chain, CChain& cchain, const CKey& key)
 {
-    auto wallet = std::make_unique<CWallet>(&chain, "", CreateMockableWalletDatabase());
+    auto wallet = std::make_unique<CWallet>(&chain, "", CreateMockableWalletDatabase(), Params());
     {
         LOCK2(wallet->cs_wallet, ::cs_main);
         wallet->SetLastBlockProcessed(cchain.Height(), cchain.Tip()->GetBlockHash());
@@ -56,6 +57,7 @@ void AddKey(CWallet& wallet, const CKey& key)
 
 std::shared_ptr<CWallet> TestCreateWallet(std::unique_ptr<WalletDatabase> database, WalletContext& context, uint64_t create_flags)
 {
+    if (!context.chain_params) context.chain_params = &Params();
     bilingual_str _error;
     std::vector<bilingual_str> _warnings;
     auto wallet = CWallet::CreateNew(context, "", std::move(database), create_flags, /*born_encrypted=*/false, _error, _warnings);
@@ -71,6 +73,7 @@ std::shared_ptr<CWallet> TestCreateWallet(WalletContext& context)
     DatabaseOptions options;
     options.require_create = true;
     options.create_flags = WALLET_FLAG_DESCRIPTORS;
+    options.network_magic = Params().MessageStart();
     DatabaseStatus status;
     bilingual_str error;
     auto database = MakeWalletDatabase("", options, status, error);
@@ -80,6 +83,7 @@ std::shared_ptr<CWallet> TestCreateWallet(WalletContext& context)
 
 std::shared_ptr<CWallet> TestLoadWallet(std::unique_ptr<WalletDatabase> database, WalletContext& context)
 {
+    if (!context.chain_params) context.chain_params = &Params();
     bilingual_str error;
     std::vector<bilingual_str> warnings;
     auto wallet = CWallet::LoadExisting(context, "", std::move(database), error, warnings);
@@ -94,6 +98,7 @@ std::shared_ptr<CWallet> TestLoadWallet(WalletContext& context)
 {
     DatabaseOptions options;
     options.require_existing = true;
+    options.network_magic = Params().MessageStart();
     DatabaseStatus status;
     bilingual_str error;
     auto database = MakeWalletDatabase("", options, status, error);

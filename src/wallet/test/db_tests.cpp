@@ -2,6 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <chainparams.h>
 #include <boost/test/unit_test.hpp>
 
 #include <test/util/common.h>
@@ -64,6 +65,7 @@ static std::vector<std::unique_ptr<WalletDatabase>> TestDatabases(const fs::path
 {
     std::vector<std::unique_ptr<WalletDatabase>> dbs;
     DatabaseOptions options;
+    options.network_magic = Params().MessageStart();
     DatabaseStatus status;
     bilingual_str error;
     // Unable to test BerkeleyRO since we cannot create a new BDB database to open
@@ -227,6 +229,7 @@ BOOST_AUTO_TEST_CASE(txn_close_failure_dangling_txn)
     // Verifies that there is no active dangling, to-be-reversed db txn
     // after the batch object that initiated it is destroyed.
     DatabaseOptions options;
+    options.network_magic = Params().MessageStart();
     DatabaseStatus status;
     bilingual_str error;
     std::unique_ptr<SQLiteDatabase> database = MakeSQLiteDatabase(m_path_root / "sqlite", options, status, error);
@@ -262,6 +265,7 @@ BOOST_AUTO_TEST_CASE(concurrent_txn_dont_interfere)
     std::string value2 = "value_2";
 
     DatabaseOptions options;
+    options.network_magic = Params().MessageStart();
     DatabaseStatus status;
     bilingual_str error;
     const auto& database = MakeSQLiteDatabase(m_path_root / "sqlite", options, status, error);

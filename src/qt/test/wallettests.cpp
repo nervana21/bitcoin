@@ -8,6 +8,7 @@
 #include <wallet/coincontrol.h>
 #include <interfaces/chain.h>
 #include <interfaces/node.h>
+#include <chainparams.h>
 #include <key_io.h>
 #include <qt/bitcoinamountfield.h>
 #include <qt/bitcoinunits.h>
@@ -188,7 +189,7 @@ void SyncUpWallet(const std::shared_ptr<CWallet>& wallet, interfaces::Node& node
 
 std::shared_ptr<CWallet> SetupDescriptorsWallet(interfaces::Node& node, TestChain100Setup& test, bool watch_only = false)
 {
-    std::shared_ptr<CWallet> wallet = std::make_shared<CWallet>(node.context()->chain.get(), "", CreateMockableWalletDatabase());
+    std::shared_ptr<CWallet> wallet = std::make_shared<CWallet>(node.context()->chain.get(), "", CreateMockableWalletDatabase(), Params());
     LOCK(wallet->cs_wallet);
     wallet->SetWalletFlag(WALLET_FLAG_DESCRIPTORS);
     if (watch_only) {

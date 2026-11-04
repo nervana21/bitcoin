@@ -5,6 +5,7 @@
 #include <key.h>
 #include <script/descriptor.h>
 #include <wallet/test/util.h>
+#include <chainparams.h>
 #include <wallet/wallet.h>
 #include <test/util/common.h>
 #include <test/util/logging.h>
@@ -63,7 +64,7 @@ BOOST_FIXTURE_TEST_CASE(wallet_load_descriptors, TestingSetup)
 
     {
         // Now try to load the wallet and verify the error.
-        const std::shared_ptr<CWallet> wallet(new CWallet(m_node.chain.get(), "", std::move(database)));
+        const std::shared_ptr<CWallet> wallet(new CWallet(m_node.chain.get(), "", std::move(database), Params()));
         BOOST_CHECK_EQUAL(wallet->PopulateWalletFromDB(_error, _warnings), DBErrors::UNKNOWN_DESCRIPTOR);
     }
 
@@ -81,7 +82,7 @@ BOOST_FIXTURE_TEST_CASE(wallet_load_descriptors, TestingSetup)
 
     {
         // Now try to load the wallet and verify the result.
-        const std::shared_ptr<CWallet> wallet(new CWallet(m_node.chain.get(), "", std::move(database)));
+        const std::shared_ptr<CWallet> wallet(new CWallet(m_node.chain.get(), "", std::move(database), Params()));
         BOOST_CHECK_EQUAL(wallet->PopulateWalletFromDB(_error, _warnings), DBErrors::LOAD_OK);
     }
 }
@@ -117,14 +118,14 @@ BOOST_FIXTURE_TEST_CASE(wallet_load_descriptor_cache_invalid_xpub_size, TestingS
     {
         std::unique_ptr<WalletDatabase> database = make_db_with_short_cache_xpub("walletdescriptorcache");
         ASSERT_DEBUG_LOG("descriptor cache xpub has invalid size");
-        const std::shared_ptr<CWallet> wallet(new CWallet(m_node.chain.get(), "", std::move(database)));
+        const std::shared_ptr<CWallet> wallet(new CWallet(m_node.chain.get(), "", std::move(database), Params()));
         BOOST_CHECK_EQUAL(wallet->PopulateWalletFromDB(error, warnings), DBErrors::CORRUPT);
     }
 
     {
         std::unique_ptr<WalletDatabase> database = make_db_with_short_cache_xpub("walletdescriptorlhcache");
         ASSERT_DEBUG_LOG("descriptor last hardened cache xpub has invalid size");
-        const std::shared_ptr<CWallet> wallet(new CWallet(m_node.chain.get(), "", std::move(database)));
+        const std::shared_ptr<CWallet> wallet(new CWallet(m_node.chain.get(), "", std::move(database), Params()));
         BOOST_CHECK_EQUAL(wallet->PopulateWalletFromDB(error, warnings), DBErrors::CORRUPT);
     }
 }

@@ -4,6 +4,7 @@
 
 #include <interfaces/wallet.h>
 
+#include <chainparams.h>
 #include <common/args.h>
 #include <consensus/amount.h>
 #include <interfaces/chain.h>
@@ -552,6 +553,7 @@ public:
     WalletLoaderImpl(Chain& chain, ArgsManager& args)
     {
         m_context.chain = &chain;
+        m_context.chain_params = &Params();
         m_context.args = &args;
     }
     ~WalletLoaderImpl() override { stop(); }

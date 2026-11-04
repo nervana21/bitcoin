@@ -3,6 +3,7 @@
 // file COPYING or https://www.opensource.org/licenses/mit-license.php.
 
 #include <interfaces/wallet.h>
+#include <chainparams.h>
 #include <key_io.h>
 #include <test/util/setup_common.h>
 #include <wallet/context.h>
@@ -20,6 +21,7 @@ BOOST_AUTO_TEST_CASE(addhdkey)
 {
     WalletContext context;
     context.args = &m_args;
+    context.chain_params = &Params();
     auto wallet = TestCreateWallet(context);
     auto interface = interfaces::MakeWallet(context, wallet);
 
@@ -32,6 +34,7 @@ BOOST_AUTO_TEST_CASE(addhdkey_with_key)
 {
     WalletContext context;
     context.args = &m_args;
+    context.chain_params = &Params();
     auto wallet = TestCreateWallet(context);
     auto interface = interfaces::MakeWallet(context, wallet);
 
@@ -49,6 +52,7 @@ BOOST_AUTO_TEST_CASE(addhdkey_with_malformed_key)
 {
     WalletContext context;
     context.args = &m_args;
+    context.chain_params = &Params();
     auto wallet = TestCreateWallet(context);
     auto interface = interfaces::MakeWallet(context, wallet);
 
@@ -66,6 +70,7 @@ BOOST_AUTO_TEST_CASE(addhdkey_wallet_locked)
 {
     WalletContext context;
     context.args = &m_args;
+    context.chain_params = &Params();
     auto wallet = TestCreateWallet(context);
     BOOST_REQUIRE(wallet->EncryptWallet("hunter2"));
     BOOST_REQUIRE(wallet->Lock());

@@ -15,6 +15,7 @@
 #include <wallet/db.h>
 #include <wallet/test/util.h>
 #include <wallet/transaction.h>
+#include <chainparams.h>
 #include <wallet/wallet.h>
 #include <wallet/walletutil.h>
 
@@ -44,6 +45,7 @@ static void WalletLoadingDescriptors(benchmark::Bench& bench)
     WalletContext context;
     context.args = &test_setup->m_args;
     context.chain = test_setup->m_node.chain.get();
+    context.chain_params = &Params();
 
     // Setup the wallet
     // Loading the wallet will also create it
@@ -52,6 +54,7 @@ static void WalletLoadingDescriptors(benchmark::Bench& bench)
     DatabaseOptions options;
     options.require_format = DatabaseFormat::SQLITE;
     options.require_create = true;
+    options.network_magic = Params().MessageStart();
     bilingual_str error;
     auto database = MakeWalletDatabase("", options, status, error);
     auto wallet = TestCreateWallet(std::move(database), context, create_flags);

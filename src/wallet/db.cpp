@@ -3,8 +3,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <chainparams.h>
 #include <common/args.h>
+#include <util/check.h>
 #include <util/fs.h>
 #include <util/log.h>
 #include <wallet/db.h>
@@ -152,17 +152,16 @@ bool IsSQLiteFile(const fs::path& path, const MessageStartChars& network_magic)
 
 MessageStartChars ResolveNetworkMagic(const DatabaseOptions& options)
 {
-    if (options.network_magic) return *options.network_magic;
-    return Params().MessageStart();
+    return *Assert(options.network_magic);
 }
 
 void ReadDatabaseArgs(const ArgsManager& args, DatabaseOptions& options)
 {
     // Override current options with args values, if any were specified
     options.use_unsafe_sync = args.GetBoolArg("-unsafesqlitesync", options.use_unsafe_sync);
-    // network_magic is not filled here. Callers with a chain handle should set
-    // options.network_magic from chain.getMessageStart(). ResolveNetworkMagic
-    // falls back to Params().MessageStart() only when still unset.
+    // network_magic is not filled here. Callers must set options.network_magic
+    // (from chain.getMessageStart() or Params().MessageStart() at the process
+    // boundary) before opening a database.
 }
 
 } // namespace wallet

@@ -6,6 +6,7 @@
 
 #include <wallet/sqlite.h>
 
+#include <chainparams.h>
 #include <crypto/common.h>
 #include <sync.h>
 #include <util/check.h>
@@ -722,7 +723,11 @@ std::unique_ptr<SQLiteDatabase> MakeSQLiteDatabase(const fs::path& path, const D
 }
 
 InMemoryWalletDatabase::InMemoryWalletDatabase()
-    : SQLiteDatabase(fs::path{}, fs::path{":memory:"}, DatabaseOptions(), SQLITE_OPEN_MEMORY)
+    : SQLiteDatabase(fs::path{}, fs::path{":memory:"}, [] {
+          DatabaseOptions options;
+          options.network_magic = Params().MessageStart();
+          return options;
+      }(), SQLITE_OPEN_MEMORY)
 {}
 
 std::unique_ptr<WalletDatabase> MakeInMemoryWalletDatabase()

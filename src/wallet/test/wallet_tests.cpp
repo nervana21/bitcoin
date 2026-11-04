@@ -2,6 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <chainparams.h>
 #include <wallet/wallet.h>
 
 #include <array>
@@ -137,6 +138,7 @@ struct EncryptionFailureSetup : TestingSetup {
         context.args = &m_args;
         m_args.ForceSetArg("-keypool", "1"); // Failure injection does not depend on keypool depth
         context.chain = m_node.chain.get();
+        context.chain_params = &Params();
         RecreateWallet(WALLET_FLAG_DESCRIPTORS);
     }
 
@@ -412,11 +414,12 @@ void TestLoadWallet(const std::string& name, DatabaseFormat format, std::functio
     auto chain{interfaces::MakeChain(node)};
     DatabaseOptions options;
     options.require_format = format;
+    options.network_magic = Params().MessageStart();
     DatabaseStatus status;
     bilingual_str error;
     std::vector<bilingual_str> warnings;
     auto database{MakeWalletDatabase(name, options, status, error)};
-    auto wallet{std::make_shared<CWallet>(chain.get(), "", std::move(database))};
+    auto wallet{std::make_shared<CWallet>(chain.get(), "", std::move(database), Params())};
     BOOST_CHECK_EQUAL(wallet->PopulateWalletFromDB(error, warnings), DBErrors::LOAD_OK);
     WITH_LOCK(wallet->cs_wallet, f(wallet));
 }
@@ -600,7 +603,7 @@ BOOST_FIXTURE_TEST_CASE(BasicOutputTypesTest, ListCoinsTest)
 
 BOOST_FIXTURE_TEST_CASE(wallet_disableprivkeys, BasicTestingSetup)
 {
-    const std::shared_ptr<CWallet> wallet = std::make_shared<CWallet>(m_node.chain.get(), "", CreateMockableWalletDatabase());
+    const std::shared_ptr<CWallet> wallet = std::make_shared<CWallet>(m_node.chain.get(), "", CreateMockableWalletDatabase(), Params());
     LOCK(wallet->cs_wallet);
     wallet->SetWalletFlag(WALLET_FLAG_DESCRIPTORS);
     wallet->SetWalletFlag(WALLET_FLAG_DISABLE_PRIVATE_KEYS);
@@ -695,6 +698,7 @@ BOOST_FIXTURE_TEST_CASE(CreateWallet, TestChain100Setup)
     WalletContext context;
     context.args = &m_args;
     context.chain = m_node.chain.get();
+    context.chain_params = &Params();
     auto wallet = TestCreateWallet(context);
     CKey key = GenerateRandomKey();
     AddKey(*wallet, key);
@@ -802,6 +806,7 @@ BOOST_FIXTURE_TEST_CASE(RemoveTxs, TestChain100Setup)
     WalletContext context;
     context.args = &m_args;
     context.chain = m_node.chain.get();
+    context.chain_params = &Params();
     auto wallet = TestCreateWallet(context);
     CKey key = GenerateRandomKey();
     AddKey(*wallet, key);
