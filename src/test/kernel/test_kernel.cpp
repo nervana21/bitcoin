@@ -959,32 +959,23 @@ BOOST_AUTO_TEST_CASE(btck_context_tests)
     }
 }
 
-// When the same by-value NotificationInterfaceCallbacks with user_data_destroy
-// is set on two context options, user_data_destroy currently runs twice.
+// Same NotificationInterfaceCallbacks with user_data_destroy set on two
+// context options must destroy user_data once.
 BOOST_AUTO_TEST_CASE(btck_notification_callbacks_shared_options_destroy_once)
 {
     int destroyed{0};
-    const btck_NotificationInterfaceCallbacks notifications{
-        .user_data = &destroyed,
-        .user_data_destroy = +[](void* user_data) { ++*static_cast<int*>(user_data); },
-        .block_tip = nullptr,
-        .header_tip = nullptr,
-        .progress = nullptr,
-        .warning_set = nullptr,
-        .warning_unset = nullptr,
-        .flush_error = nullptr,
-        .fatal_error = nullptr,
-    };
+    btck_NotificationInterfaceCallbacks* notifications{btck_notification_interface_callbacks_create(
+        &destroyed, +[](void* user_data) { ++*static_cast<int*>(user_data); })};
 
     btck_ContextOptions* opts_a{btck_context_options_create()};
     btck_ContextOptions* opts_b{btck_context_options_create()};
     btck_context_options_set_notifications(opts_a, notifications);
     btck_context_options_set_notifications(opts_b, notifications);
+    btck_notification_interface_callbacks_destroy(notifications);
     btck_context_options_destroy(opts_a);
     btck_context_options_destroy(opts_b);
 
-    // Same logical user_data is destroyed once per options copy.
-    BOOST_CHECK_EQUAL(destroyed, 2); // TODO: should be 1
+    BOOST_CHECK_EQUAL(destroyed, 1);
 }
 
 BOOST_AUTO_TEST_CASE(btck_block_header_tests)

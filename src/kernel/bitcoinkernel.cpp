@@ -372,58 +372,69 @@ constexpr btck_LogCategory to_btck(BCLog::LogFlags flag)
     }
 }
 
+//! Shared by a callbacks object and every KernelNotifications copied from it.
+//! user_data_destroy runs once the last of them is destroyed.
+std::shared_ptr<void> MakeUserData(void* user_data, btck_DestroyCallback user_data_destroy)
+{
+    return std::shared_ptr<void>{user_data, [user_data_destroy](void* ptr) {
+                                     if (ptr && user_data_destroy) user_data_destroy(ptr);
+                                 }};
+}
+
+struct NotificationCallbacks {
+    std::shared_ptr<void> user_data;
+    btck_NotifyBlockTip block_tip{nullptr};
+    btck_NotifyHeaderTip header_tip{nullptr};
+    btck_NotifyProgress progress{nullptr};
+    btck_NotifyWarningSet warning_set{nullptr};
+    btck_NotifyWarningUnset warning_unset{nullptr};
+    btck_NotifyFlushError flush_error{nullptr};
+    btck_NotifyFatalError fatal_error{nullptr};
+};
+
 class KernelNotifications final : public kernel::Notifications
 {
 private:
-    btck_NotificationInterfaceCallbacks m_cbs;
+    const NotificationCallbacks m_cbs;
 
 public:
-    KernelNotifications(btck_NotificationInterfaceCallbacks cbs)
-        : m_cbs{cbs}
+    explicit KernelNotifications(NotificationCallbacks cbs)
+        : m_cbs{std::move(cbs)}
     {
-    }
-
-    ~KernelNotifications()
-    {
-        if (m_cbs.user_data && m_cbs.user_data_destroy) {
-            m_cbs.user_data_destroy(m_cbs.user_data);
-        }
-        m_cbs.user_data_destroy = nullptr;
-        m_cbs.user_data = nullptr;
     }
 
     kernel::InterruptResult blockTip(SynchronizationState state, const CBlockIndex& index, double verification_progress) override
     {
-        if (m_cbs.block_tip) m_cbs.block_tip(m_cbs.user_data, cast_state(state), btck_BlockTreeEntry::ref(&index), verification_progress);
+        if (m_cbs.block_tip) m_cbs.block_tip(m_cbs.user_data.get(), cast_state(state), btck_BlockTreeEntry::ref(&index), verification_progress);
         return {};
     }
     void headerTip(SynchronizationState state, int64_t height, int64_t timestamp, bool presync) override
     {
         if (!m_cbs.header_tip) return;
         const HeaderTipEvent event{.state = state, .height = height, .timestamp = timestamp, .presync = presync};
-        m_cbs.header_tip(m_cbs.user_data, btck_HeaderTip::ref(&event));
+        m_cbs.header_tip(m_cbs.user_data.get(), btck_HeaderTip::ref(&event));
     }
     void progress(const bilingual_str& title, int progress_percent, bool resume_possible) override
     {
         if (!m_cbs.progress) return;
         const ProgressEvent event{.title = title.original, .percent = progress_percent, .resume_possible = resume_possible};
-        m_cbs.progress(m_cbs.user_data, btck_Progress::ref(&event));
+        m_cbs.progress(m_cbs.user_data.get(), btck_Progress::ref(&event));
     }
     void warningSet(kernel::Warning id, const bilingual_str& message) override
     {
-        if (m_cbs.warning_set) m_cbs.warning_set(m_cbs.user_data, cast_btck_warning(id), to_btck(message.original));
+        if (m_cbs.warning_set) m_cbs.warning_set(m_cbs.user_data.get(), cast_btck_warning(id), to_btck(message.original));
     }
     void warningUnset(kernel::Warning id) override
     {
-        if (m_cbs.warning_unset) m_cbs.warning_unset(m_cbs.user_data, cast_btck_warning(id));
+        if (m_cbs.warning_unset) m_cbs.warning_unset(m_cbs.user_data.get(), cast_btck_warning(id));
     }
     void flushError(kernel::FlushError error) override
     {
-        if (m_cbs.flush_error) m_cbs.flush_error(m_cbs.user_data, cast_btck_flush_error(error));
+        if (m_cbs.flush_error) m_cbs.flush_error(m_cbs.user_data.get(), cast_btck_flush_error(error));
     }
     void fatalError(const kernel::FatalError& error) override
     {
-        if (m_cbs.fatal_error) m_cbs.fatal_error(m_cbs.user_data, cast_btck_fatal_error(error));
+        if (m_cbs.fatal_error) m_cbs.fatal_error(m_cbs.user_data.get(), cast_btck_fatal_error(error));
     }
 };
 
@@ -596,8 +607,7 @@ public:
             m_chainparams = CChainParams::Main();
         }
         if (!m_notifications) {
-            m_notifications = std::make_shared<KernelNotifications>(btck_NotificationInterfaceCallbacks{
-                nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr});
+            m_notifications = std::make_shared<KernelNotifications>(NotificationCallbacks{});
         }
 
         if (!kernel::SanityChecks(*m_context)) {
@@ -672,6 +682,7 @@ struct btck_Transaction : Handle<btck_Transaction, std::shared_ptr<const CTransa
 struct btck_TransactionOutput : Handle<btck_TransactionOutput, CTxOut> {};
 struct btck_ScriptPubkey : Handle<btck_ScriptPubkey, CScript> {};
 struct btck_LoggingConnection : Handle<btck_LoggingConnection, LogConnection> {};
+struct btck_NotificationInterfaceCallbacks : Handle<btck_NotificationInterfaceCallbacks, NotificationCallbacks> {};
 struct btck_ContextOptions : Handle<btck_ContextOptions, ContextOptions> {};
 struct btck_Context : Handle<btck_Context, std::shared_ptr<const Context>> {};
 struct btck_ChainParameters : Handle<btck_ChainParameters, CChainParams> {};
@@ -1231,6 +1242,51 @@ void btck_chain_parameters_destroy(btck_ChainParameters* chain_parameters)
     delete chain_parameters;
 }
 
+btck_NotificationInterfaceCallbacks* btck_notification_interface_callbacks_create(void* user_data, btck_DestroyCallback user_data_destroy)
+{
+    return btck_NotificationInterfaceCallbacks::create(NotificationCallbacks{.user_data = MakeUserData(user_data, user_data_destroy)});
+}
+
+void btck_notification_interface_callbacks_set_block_tip(btck_NotificationInterfaceCallbacks* callbacks, btck_NotifyBlockTip block_tip)
+{
+    btck_NotificationInterfaceCallbacks::get(callbacks).block_tip = block_tip;
+}
+
+void btck_notification_interface_callbacks_set_header_tip(btck_NotificationInterfaceCallbacks* callbacks, btck_NotifyHeaderTip header_tip)
+{
+    btck_NotificationInterfaceCallbacks::get(callbacks).header_tip = header_tip;
+}
+
+void btck_notification_interface_callbacks_set_progress(btck_NotificationInterfaceCallbacks* callbacks, btck_NotifyProgress progress)
+{
+    btck_NotificationInterfaceCallbacks::get(callbacks).progress = progress;
+}
+
+void btck_notification_interface_callbacks_set_warning_set(btck_NotificationInterfaceCallbacks* callbacks, btck_NotifyWarningSet warning_set)
+{
+    btck_NotificationInterfaceCallbacks::get(callbacks).warning_set = warning_set;
+}
+
+void btck_notification_interface_callbacks_set_warning_unset(btck_NotificationInterfaceCallbacks* callbacks, btck_NotifyWarningUnset warning_unset)
+{
+    btck_NotificationInterfaceCallbacks::get(callbacks).warning_unset = warning_unset;
+}
+
+void btck_notification_interface_callbacks_set_flush_error(btck_NotificationInterfaceCallbacks* callbacks, btck_NotifyFlushError flush_error)
+{
+    btck_NotificationInterfaceCallbacks::get(callbacks).flush_error = flush_error;
+}
+
+void btck_notification_interface_callbacks_set_fatal_error(btck_NotificationInterfaceCallbacks* callbacks, btck_NotifyFatalError fatal_error)
+{
+    btck_NotificationInterfaceCallbacks::get(callbacks).fatal_error = fatal_error;
+}
+
+void btck_notification_interface_callbacks_destroy(btck_NotificationInterfaceCallbacks* callbacks)
+{
+    delete callbacks;
+}
+
 btck_ContextOptions* btck_context_options_create()
 {
     return btck_ContextOptions::create();
@@ -1249,11 +1305,11 @@ void btck_context_options_set_logger(btck_ContextOptions* options, btck_LoggingC
     btck_ContextOptions::get(options).m_log_connection = &btck_LoggingConnection::get(logging_connection);
 }
 
-void btck_context_options_set_notifications(btck_ContextOptions* options, btck_NotificationInterfaceCallbacks notifications)
+void btck_context_options_set_notifications(btck_ContextOptions* options, const btck_NotificationInterfaceCallbacks* notifications)
 {
-    // The KernelNotifications are copy-initialized, so the caller can free them again.
+    // The callbacks are copied, so the caller can free them again.
     LOCK(btck_ContextOptions::get(options).m_mutex);
-    btck_ContextOptions::get(options).m_notifications = std::make_shared<KernelNotifications>(notifications);
+    btck_ContextOptions::get(options).m_notifications = std::make_shared<KernelNotifications>(btck_NotificationInterfaceCallbacks::get(notifications));
 }
 
 void btck_context_options_set_validation_interface(btck_ContextOptions* options, btck_ValidationInterfaceCallbacks vi_cbs)
