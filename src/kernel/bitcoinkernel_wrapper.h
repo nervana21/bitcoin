@@ -1057,6 +1057,9 @@ public:
     LogCategory Category() const { return static_cast<LogCategory>(btck_log_entry_get_category(get())); }
 };
 
+// LogMessage() may be called from multiple threads at the same time.
+// btcsignals delivers log entries without serializing callbacks, so any type
+// that models Log must make LogMessage thread-safe (or accept the races).
 template <typename T>
 concept Log = requires(T a, const LogEntry& entry) {
     { a.LogMessage(entry) } -> std::same_as<void>;

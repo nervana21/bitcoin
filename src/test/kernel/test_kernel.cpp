@@ -16,10 +16,14 @@
 #include <test/util/common.h>
 
 #include <algorithm>
+// Entry counters and destroyed flags shared across log callbacks / threads.
+#include <atomic>
 #include <charconv>
 #include <concepts>
 #include <cstdint>
 #include <cstdlib>
+// ActionLog stores the nested test action as std::function<void()>.
+#include <functional>
 #include <iostream>
 #include <map>
 #include <memory>
@@ -27,8 +31,14 @@
 #include <random>
 #include <ranges>
 #include <span>
+// TestLog builds each printed line in an ostringstream before one write.
+#include <sstream>
+// ThrowingLog throws std::runtime_error from inside a callback.
+#include <stdexcept>
 #include <string>
 #include <string_view>
+// logging_callback_concurrency_tests runs two loggers on std::thread.
+#include <thread>
 #include <vector>
 
 using namespace btck;
@@ -100,10 +110,19 @@ class TestLog
 public:
     void LogMessage(const LogEntry& entry)
     {
-        std::cout << "kernel: " << entry.Timestamp().time_since_epoch().count()
-                  << " [" << Name(entry.Category()) << ":"
-                  << Name(entry.Level()) << "] "
-                  << entry.Message() << "\n";
+        // Build one full line locally, then print it once.
+        // Callbacks are no longer serialized, so interleaved << on std::cout would garble output.
+        std::ostringstream line;
+        const auto timestamp_count = entry.Timestamp().time_since_epoch().count();
+        const char* category_name = Name(entry.Category());
+        const char* level_name = Name(entry.Level());
+        const auto& message_text = entry.Message();
+        line << "kernel: " << timestamp_count
+             << " [" << category_name << ":"
+             << level_name << "] "
+             << message_text << "\n";
+        const std::string finished_line = line.str();
+        std::cout << finished_line;
     }
 };
 
@@ -743,6 +762,365 @@ BOOST_AUTO_TEST_CASE(logging_connection_tests)
     BOOST_CHECK_EQUAL(messages["Logger disconnecting."], 3);
     BOOST_CHECK_EQUAL(destroyed, 2);
     logging_set_min_level(LogLevel::INFO_LEVEL);
+}
+
+//! Counts delivered entries, runs an action from inside the first invocation, and optionally records
+//! its destruction.
+//!
+//! Used by the re-entrancy tests below to poke the logger from inside a callback.
+class ActionLog
+{
+    // Work to run exactly once, on the first delivered entry.
+    std::function<void()> m_action;
+    // How many LogMessage calls we have seen so far.
+    std::atomic<int>& m_entries;
+    // Optional flag set true when this ActionLog object is destroyed.
+    std::atomic<bool>* m_destroyed;
+
+public:
+    ActionLog(std::function<void()> action, std::atomic<int>& entries, std::atomic<bool>* destroyed = nullptr)
+        : m_action{std::move(action)}, m_entries{entries}, m_destroyed{destroyed}
+    {
+    }
+
+    ~ActionLog()
+    {
+        // Tell the test that user_data teardown finished (if it asked to watch).
+        if (m_destroyed) {
+            *m_destroyed = true;
+        }
+    }
+
+    void LogMessage(const LogEntry&)
+    {
+        // Post-increment: first call sees 0, later calls see 1, 2, ...
+        const int previous_count = m_entries++;
+        const bool is_first_entry = previous_count == 0;
+        if (is_first_entry) {
+            // Run the test's nested action only on the first delivery.
+            m_action();
+        }
+    }
+};
+
+//! Helper: constructing custom signet ChainParams with challenge 0x51 logs an INFO line.
+static void LogInfoByCreatingSignetChallengeParams()
+{
+    ChainParams params{hex_string_to_byte_vec("51")};
+}
+
+//! A callback can log, and destroy kernel objects that log, as a garbage collector's finalizers might.
+BOOST_AUTO_TEST_CASE(logging_callback_reentry_tests)
+{
+    // Scratch datadir for a real ChainMan so destroying it can log.
+    TestDirectory test_directory{"logging_reentry_test_bitcoin_kernel"};
+    // Context and ChainMan live in optionals so the callback can reset them.
+    std::optional<Context> context{std::in_place};
+    std::optional<ChainMan> chainman;
+    {
+        // Build chainman options pointing at the temp datadir / blocksdir.
+        const std::string datadir_string = PathToString(test_directory.m_directory);
+        const std::string blocksdir_string = PathToString(test_directory.m_directory / "blocks");
+        ChainstateManagerOptions chainman_opts{*context, datadir_string, blocksdir_string};
+        // Construct the ChainMan inside the optional.
+        chainman.emplace(*context, chainman_opts);
+    }
+
+    // Count how many times our callback runs.
+    std::atomic<int> entries{0};
+
+    // On the first log delivery: log again (nested), then tear down chainman + context.
+    struct ReenterAndDestroy {
+        std::optional<ChainMan>* chainman;
+        std::optional<Context>* context;
+        void operator()() const
+        {
+            // Creating signet chain parameters with a challenge logs an INFO entry.
+            LogInfoByCreatingSignetChallengeParams();
+            // Destroy objects that may themselves log during teardown.
+            chainman->reset();
+            context->reset();
+        }
+    };
+    ReenterAndDestroy reenter_and_destroy;
+    reenter_and_destroy.chainman = &chainman;
+    reenter_and_destroy.context = &context;
+
+    Logger logger{std::make_unique<ActionLog>(reenter_and_destroy, entries)};
+
+    // Trigger an INFO log so the ActionLog runs its nested action.
+    LogInfoByCreatingSignetChallengeParams();
+
+    // Nested destroys finished.
+    BOOST_CHECK(!chainman && !context);
+    // At least the outer entry plus the nested INFO from inside the callback.
+    BOOST_CHECK_GE(entries, 2);
+}
+
+//! A callback can destroy a different connection from inside itself.
+BOOST_AUTO_TEST_CASE(logging_callback_destroy_other_tests)
+{
+    // CountingLog records messages and increments destroyed when freed.
+    std::map<std::string, int> messages;
+    int destroyed{0};
+    std::optional<Logger<CountingLog>> other;
+    std::atomic<int> entries{0};
+
+    // On first delivery: destroy the *other* logging connection.
+    struct DestroyOther {
+        std::optional<Logger<CountingLog>>* other;
+        void operator()() const
+        {
+            other->reset();
+        }
+    };
+    DestroyOther destroy_other;
+    destroy_other.other = &other;
+
+    Logger logger{std::make_unique<ActionLog>(destroy_other, entries)};
+    // Second connection that will be destroyed from inside the first callback.
+    other.emplace(std::make_unique<CountingLog>(messages, destroyed));
+
+    // One INFO log reaches both connections; ActionLog then resets other.
+    LogInfoByCreatingSignetChallengeParams();
+
+    BOOST_CHECK_EQUAL(entries, 1);
+    // CountingLog's destructor ran when other was reset.
+    BOOST_CHECK_EQUAL(destroyed, 1);
+}
+
+//! A callback can create a connection from inside itself. The new connection receives later entries.
+BOOST_AUTO_TEST_CASE(logging_callback_create_tests)
+{
+    std::map<std::string, int> messages;
+    int destroyed{0};
+    std::optional<Logger<CountingLog>> created;
+    std::atomic<int> entries{0};
+
+    // On first delivery: register a brand-new CountingLog connection.
+    struct CreateCountingLogger {
+        std::optional<Logger<CountingLog>>* created;
+        std::map<std::string, int>* messages;
+        int* destroyed;
+        void operator()() const
+        {
+            created->emplace(std::make_unique<CountingLog>(*messages, *destroyed));
+        }
+    };
+    CreateCountingLogger create_counting_logger;
+    create_counting_logger.created = &created;
+    create_counting_logger.messages = &messages;
+    create_counting_logger.destroyed = &destroyed;
+
+    Logger logger{std::make_unique<ActionLog>(create_counting_logger, entries)};
+
+    // First INFO: only ActionLog is connected. It creates CountingLog mid-delivery.
+    LogInfoByCreatingSignetChallengeParams();
+    BOOST_CHECK_EQUAL(entries, 1);
+    BOOST_REQUIRE(created);
+    // The new connection was added after the snapshot for this emit, so it saw nothing yet.
+    BOOST_CHECK(messages.empty());
+
+    // Second INFO: both connections receive it.
+    LogInfoByCreatingSignetChallengeParams();
+    BOOST_CHECK_EQUAL(entries, 2);
+    BOOST_REQUIRE_EQUAL(messages.size(), 1U);
+    BOOST_CHECK_EQUAL(messages.begin()->second, 1);
+
+    // Tear down the created connection and confirm its user_data destructor ran once.
+    created.reset();
+    BOOST_CHECK_EQUAL(destroyed, 1);
+}
+
+//! Throws from every invocation. KernelLogger must swallow the exception.
+class ThrowingLog
+{
+public:
+    void LogMessage(const LogEntry&)
+    {
+        throw std::runtime_error{"ThrowingLog"};
+    }
+};
+
+//! A callback can destroy a connection whose callback threw earlier on the same thread.
+BOOST_AUTO_TEST_CASE(logging_callback_destroy_returned_tests)
+{
+    // First connection: always throws from LogMessage.
+    std::optional<Logger<ThrowingLog>> thrower{std::in_place, std::make_unique<ThrowingLog>()};
+    std::atomic<int> entries{0};
+
+    // Second connection: on first delivery, destroy the throwing connection.
+    struct DestroyThrower {
+        std::optional<Logger<ThrowingLog>>* thrower;
+        void operator()() const
+        {
+            thrower->reset();
+        }
+    };
+    DestroyThrower destroy_thrower;
+    destroy_thrower.thrower = &thrower;
+
+    Logger logger{std::make_unique<ActionLog>(destroy_thrower, entries)};
+
+    // Both callbacks run for this INFO. Thrower throws (swallowed); ActionLog resets it.
+    LogInfoByCreatingSignetChallengeParams();
+
+    BOOST_CHECK(!thrower);
+    BOOST_CHECK_EQUAL(entries, 1);
+}
+
+//! A callback can destroy its own connection. user_data is destroyed when the invocation returns.
+BOOST_AUTO_TEST_CASE(logging_callback_destroy_self_tests)
+{
+    std::atomic<int> entries{0};
+    std::atomic<bool> destroyed{false};
+    // Start true so a missed assignment would fail the later BOOST_CHECK(!...).
+    bool destroyed_in_callback{true};
+    std::optional<Logger<ActionLog>> logger;
+
+    // On first delivery: destroy this very connection, then sample the destroyed flag.
+    struct DestroySelf {
+        std::optional<Logger<ActionLog>>* logger;
+        std::atomic<bool>* destroyed;
+        bool* destroyed_in_callback;
+        void operator()() const
+        {
+            logger->reset();
+            // user_data must still be alive until this invocation returns.
+            *destroyed_in_callback = *destroyed;
+        }
+    };
+    DestroySelf destroy_self;
+    destroy_self.logger = &logger;
+    destroy_self.destroyed = &destroyed;
+    destroy_self.destroyed_in_callback = &destroyed_in_callback;
+
+    logger.emplace(std::make_unique<ActionLog>(destroy_self, entries, &destroyed));
+
+    LogInfoByCreatingSignetChallengeParams();
+
+    // Connection is gone after the call returns.
+    BOOST_CHECK(!logger);
+    // During the callback, destructor had not run yet.
+    BOOST_CHECK(!destroyed_in_callback);
+    // After return, user_data destructor has run.
+    BOOST_CHECK(destroyed);
+
+    // Another INFO must not reach the destroyed connection.
+    LogInfoByCreatingSignetChallengeParams();
+    BOOST_CHECK_EQUAL(entries, 1);
+}
+
+//! A callback can destroy the connection of an outer callback running on the same thread.
+BOOST_AUTO_TEST_CASE(logging_callback_destroy_outer_tests)
+{
+    std::atomic<int> outer_entries{0};
+    std::atomic<int> inner_entries{0};
+    std::atomic<bool> outer_destroyed{false};
+    bool destroyed_in_callback{true};
+    std::optional<Logger<ActionLog>> outer;
+
+    // Outer ActionLog's first-delivery action: log again (nested INFO).
+    // Inner ActionLog's first-delivery action: destroy outer and sample its flag.
+    struct DestroyOuter {
+        std::optional<Logger<ActionLog>>* outer;
+        std::atomic<bool>* outer_destroyed;
+        bool* destroyed_in_callback;
+        void operator()() const
+        {
+            outer->reset();
+            *destroyed_in_callback = *outer_destroyed;
+        }
+    };
+    DestroyOuter destroy_outer;
+    destroy_outer.outer = &outer;
+    destroy_outer.outer_destroyed = &outer_destroyed;
+    destroy_outer.destroyed_in_callback = &destroyed_in_callback;
+
+    // Outer logs from inside its first invocation. Inner destroys outer when it
+    // receives that nested entry (inner's first delivery is the nested one if
+    // ordering delivers outer's nested log to both; here both see 2 entries).
+    outer.emplace(std::make_unique<ActionLog>(LogInfoByCreatingSignetChallengeParams, outer_entries, &outer_destroyed));
+    Logger inner{std::make_unique<ActionLog>(destroy_outer, inner_entries)};
+
+    // Kick off: outer and inner both get the first INFO; outer nests another INFO.
+    LogInfoByCreatingSignetChallengeParams();
+
+    BOOST_CHECK(!outer);
+    BOOST_CHECK(!destroyed_in_callback);
+    BOOST_CHECK(outer_destroyed);
+    // Both callbacks received the outer entry and the nested one.
+    BOOST_CHECK_EQUAL(outer_entries, 2);
+    BOOST_CHECK_EQUAL(inner_entries, 2);
+}
+
+//! Counts invocations of LogMessage(), and blocks each one until released, so that a test controls
+//! when invocations return.
+class BlockingLog
+{
+    // How many threads have entered LogMessage.
+    std::atomic<int>& m_entered;
+    // Cleared until the test allows blocked callbacks to finish.
+    std::atomic<bool>& m_released;
+    // Set true in the destructor so the test sees user_data teardown.
+    std::atomic<bool>& m_destroyed;
+
+public:
+    BlockingLog(std::atomic<int>& entered, std::atomic<bool>& released, std::atomic<bool>& destroyed)
+        : m_entered{entered}, m_released{released}, m_destroyed{destroyed}
+    {
+    }
+
+    ~BlockingLog()
+    {
+        m_destroyed = true;
+    }
+
+    void LogMessage(const LogEntry&)
+    {
+        // Announce that this thread is inside the callback.
+        ++m_entered;
+        m_entered.notify_all();
+        // Sleep until the test flips m_released to true.
+        m_released.wait(false);
+    }
+};
+
+//! Invocations on different threads run at the same time. Destroying the connection doesn't wait for
+//! them, and user_data is destroyed when the last one returns.
+BOOST_AUTO_TEST_CASE(logging_callback_concurrency_tests)
+{
+    std::atomic<int> entered{0};
+    std::atomic<bool> released{false};
+    std::atomic<bool> destroyed{false};
+    std::optional<Logger<BlockingLog>> logger;
+    logger.emplace(std::make_unique<BlockingLog>(entered, released, destroyed));
+
+    // Two threads each trigger one INFO log into the blocking callback.
+    std::thread log_1{LogInfoByCreatingSignetChallengeParams};
+    std::thread log_2{LogInfoByCreatingSignetChallengeParams};
+
+    // Wait until both threads have entered LogMessage (proves overlap is possible).
+    for (;;) {
+        const int current_entered = entered;
+        if (current_entered >= 2) {
+            break;
+        }
+        entered.wait(current_entered);
+    }
+
+    // Disconnect while both callbacks are still inside LogMessage.
+    logger.reset();
+    // user_data must not be destroyed yet: two invocations still hold it alive.
+    BOOST_CHECK(!destroyed);
+
+    // Let both blocked callbacks finish.
+    released = true;
+    released.notify_all();
+    log_1.join();
+    log_2.join();
+    // Last returning invocation destroyed user_data.
+    BOOST_CHECK(destroyed);
 }
 
 BOOST_AUTO_TEST_CASE(btck_chainparams_tests)

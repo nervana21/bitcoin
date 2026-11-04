@@ -15,9 +15,13 @@
 
 #include <cassert>
 #include <charconv>
+// Nanosecond cast for KernelLog timestamps (matches C API units).
+#include <chrono>
 #include <filesystem>
 #include <iostream>
 #include <optional>
+// KernelLog builds each line in an ostringstream before one std::cout write.
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -46,10 +50,30 @@ class KernelLog
 public:
     void LogMessage(const LogEntry& entry)
     {
-        std::cout << "kernel: " << entry.Timestamp().time_since_epoch().count()
-                  << " [" << Name(entry.Category()) << ":"
-                  << Name(entry.Level()) << "] "
-                  << entry.Message() << "\n";
+        // Build the whole line in a local buffer first.
+        // LogMessage may run on several threads at once, so we must not interleave
+        // many small writes to std::cout from different threads.
+        std::ostringstream line;
+
+        // Timestamp as nanoseconds since epoch (same unit the C API getter reports).
+        const auto timestamp = entry.Timestamp();
+        const auto timestamp_as_nanos = std::chrono::nanoseconds{timestamp.time_since_epoch()};
+        const auto timestamp_count = timestamp_as_nanos.count();
+
+        // Human-readable category and level names for the bracketed tag.
+        const char* category_name = Name(entry.Category());
+        const char* level_name = Name(entry.Level());
+
+        // Message text from the kernel.
+        const auto& message_text = entry.Message();
+
+        // Assemble one complete line, then print it in a single insertion.
+        line << "kernel: " << timestamp_count
+             << " [" << category_name << ":"
+             << level_name << "] "
+             << message_text << "\n";
+        const std::string finished_line = line.str();
+        std::cout << finished_line;
     }
 };
 

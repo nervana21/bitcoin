@@ -407,12 +407,20 @@ typedef struct btck_LogEntry btck_LogEntry;
  * above the minimum level (see @ref btck_logging_set_min_level) while its
  * btck_LoggingConnection exists.
  *
- * The callback may be invoked from any thread. Invocations are serialized: no
- * two invocations run at the same time, and destroying a btck_LoggingConnection
- * waits for an in-flight invocation of its callback to return. The callback may
- * call the btck_log_entry_get_* functions on @p entry. It must not call any
- * other kernel API function (this may deadlock), and should return quickly
- * since it blocks every kernel thread that logs.
+ * The callback may be invoked from any thread, and from multiple threads at the
+ * same time, so it must be thread-safe.
+ *
+ * Why thread-safe now: log delivery uses btcsignals, which copies the connection
+ * list under a StdMutex and then runs each callback with no lock held. Two
+ * threads can therefore be inside your callback at once.
+ *
+ * Because no logger lock is held while it runs, the callback may call kernel
+ * functions, including ones that log or that create or destroy logging
+ * connections (re-entrancy is allowed).
+ *
+ * Kernel code may still hold internal locks such as cs_main while it logs, so
+ * the callback should return quickly and must not wait for another thread that
+ * calls into the kernel (that other thread might need cs_main).
  *
  * @param[in] user_data User-defined opaque structure.
  * @param[in] entry     Log entry. Valid only for the duration of the callback.
@@ -960,6 +968,15 @@ BITCOINKERNEL_API btck_LoggingConnection* BITCOINKERNEL_WARN_UNUSED_RESULT btck_
 
 /**
  * Stop logging and destroy the logging connection.
+ *
+ * May be called from inside a logging callback, including the connection's own
+ * callback. That is safe because disconnect does not need the logger lock that
+ * the old serialized design held across the whole callback loop.
+ *
+ * Does not wait for callback invocations already running on other threads.
+ * Those threads may still enter the callback after this returns. The user_data
+ * pointer is destroyed only when the last of those in-flight calls returns,
+ * and that destruction runs on that last thread.
  */
 BITCOINKERNEL_API void btck_logging_connection_destroy(btck_LoggingConnection* logging_connection);
 
