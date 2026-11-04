@@ -305,7 +305,7 @@ BOOST_FIXTURE_TEST_CASE(add_descriptor_key_database_failure, EncryptionFailureSe
 
 BOOST_FIXTURE_TEST_CASE(update_non_range_descriptor, TestingSetup)
 {
-    CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
+    CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase(), Params());
     {
         LOCK(wallet.cs_wallet);
         wallet.SetWalletFlag(WALLET_FLAG_DESCRIPTORS);

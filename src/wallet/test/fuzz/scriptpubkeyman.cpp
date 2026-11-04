@@ -96,7 +96,7 @@ FUZZ_TARGET(scriptpubkeyman, .init = initialize_spkm)
     FakeNodeClock clock{ConsumeTime(fuzzed_data_provider)};
     const auto& node{g_setup->m_node};
     Chainstate& chainstate{node.chainman->ActiveChainstate()};
-    std::unique_ptr<CWallet> wallet_ptr{std::make_unique<CWallet>(node.chain.get(), "", CreateMockableWalletDatabase())};
+    std::unique_ptr<CWallet> wallet_ptr{std::make_unique<CWallet>(node.chain.get(), "", CreateMockableWalletDatabase(), Params())};
     CWallet& wallet{*wallet_ptr};
     {
         LOCK(wallet.cs_wallet);
@@ -222,7 +222,7 @@ FUZZ_TARGET(spkm_migration, .init = initialize_spkm_migration)
     const auto& node{g_setup->m_node};
     Chainstate& chainstate{node.chainman->ActiveChainstate()};
 
-    std::unique_ptr<CWallet> wallet_ptr{std::make_unique<CWallet>(node.chain.get(), "", CreateMockableWalletDatabase())};
+    std::unique_ptr<CWallet> wallet_ptr{std::make_unique<CWallet>(node.chain.get(), "", CreateMockableWalletDatabase(), Params())};
     CWallet& wallet{*wallet_ptr};
     wallet.m_keypool_size = 1;
     {

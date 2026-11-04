@@ -47,7 +47,7 @@ BOOST_FIXTURE_TEST_CASE(scan_for_wallet_transactions, TestChain100Setup)
 
     // Verify Scan fails to read an unknown start block.
     {
-        CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
+        CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase(), Params());
         {
             LOCK(wallet.cs_wallet);
             LOCK(Assert(m_node.chainman)->GetMutex());
@@ -68,7 +68,7 @@ BOOST_FIXTURE_TEST_CASE(scan_for_wallet_transactions, TestChain100Setup)
     // Verify Scan picks up transactions in both the old
     // and new block files.
     {
-        CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
+        CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase(), Params());
         {
             LOCK(wallet.cs_wallet);
             LOCK(Assert(m_node.chainman)->GetMutex());
@@ -115,7 +115,7 @@ BOOST_FIXTURE_TEST_CASE(scan_for_wallet_transactions, TestChain100Setup)
     // Verify Scan only picks transactions in the new block
     // file.
     {
-        CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
+        CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase(), Params());
         {
             LOCK(wallet.cs_wallet);
             LOCK(Assert(m_node.chainman)->GetMutex());
@@ -143,7 +143,7 @@ BOOST_FIXTURE_TEST_CASE(scan_for_wallet_transactions, TestChain100Setup)
 
     // Verify Scan scans no blocks.
     {
-        CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
+        CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase(), Params());
         {
             LOCK(wallet.cs_wallet);
             LOCK(Assert(m_node.chainman)->GetMutex());
@@ -194,7 +194,7 @@ BOOST_FIXTURE_TEST_CASE(scan_for_wallet_transactions_reorged_block, TestChain100
 
     // Test wallet whose scripts do not match the stale block's filter.
     {
-        CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
+        CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase(), Params());
         {
             LOCK(wallet.cs_wallet);
             LOCK(Assert(m_node.chainman)->GetMutex());
@@ -212,7 +212,7 @@ BOOST_FIXTURE_TEST_CASE(scan_for_wallet_transactions_reorged_block, TestChain100
 
     // Test wallet whose scripts do match the stale block's filter.
     {
-        CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
+        CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase(), Params());
         {
             LOCK(wallet.cs_wallet);
             LOCK(Assert(m_node.chainman)->GetMutex());
@@ -240,7 +240,7 @@ BOOST_FIXTURE_TEST_CASE(scan_for_wallet_transactions_reorged_block, TestChain100
     m_node.chainman->m_blockman.UnlinkPrunedFiles({file_number});
 
     {
-        CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
+        CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase(), Params());
         {
             LOCK(wallet.cs_wallet);
             LOCK(Assert(m_node.chainman)->GetMutex());
@@ -264,7 +264,7 @@ BOOST_FIXTURE_TEST_CASE(scan_for_wallet_transactions_reorged_block, TestChain100
 
 BOOST_FIXTURE_TEST_CASE(scan_for_wallet_transactions_abort, TestChain100Setup)
 {
-    CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
+    CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase(), Params());
     uint256 genesis_hash;
     {
         LOCK(wallet.cs_wallet);
@@ -294,7 +294,7 @@ BOOST_FIXTURE_TEST_CASE(scan_for_wallet_transactions_abort, TestChain100Setup)
 
 BOOST_FIXTURE_TEST_CASE(wallet_rescan_reserver, TestingSetup)
 {
-    CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
+    CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase(), Params());
 
     // No scan in progress: accessors report idle state.
     BOOST_CHECK(!wallet.Scanner().IsScanning());
@@ -341,7 +341,7 @@ BOOST_FIXTURE_TEST_CASE(scan_for_wallet_transactions_bounded, TestChain100Setup)
     // A scan with max_height set stops exactly at max_height and does not
     // sync any blocks beyond it.
     {
-        CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
+        CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase(), Params());
         {
             LOCK(wallet.cs_wallet);
             wallet.SetWalletFlag(WALLET_FLAG_DESCRIPTORS);
@@ -362,7 +362,7 @@ BOOST_FIXTURE_TEST_CASE(scan_for_wallet_transactions_bounded, TestChain100Setup)
     // A single-block range (start == max_height == tip) scans exactly that
     // block.
     {
-        CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
+        CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase(), Params());
         {
             LOCK(wallet.cs_wallet);
             wallet.SetWalletFlag(WALLET_FLAG_DESCRIPTORS);
@@ -382,7 +382,7 @@ BOOST_FIXTURE_TEST_CASE(scan_for_wallet_transactions_bounded, TestChain100Setup)
 
 BOOST_FIXTURE_TEST_CASE(scan_for_wallet_transactions_tip_extension, TestChain100Setup)
 {
-    CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
+    CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase(), Params());
     uint256 genesis_hash;
     int start_tip_height{0};
     {
@@ -423,7 +423,7 @@ BOOST_FIXTURE_TEST_CASE(scan_for_wallet_transactions_tip_extension, TestChain100
 
 BOOST_FIXTURE_TEST_CASE(scan_for_wallet_transactions_no_progress_saved, TestChain100Setup)
 {
-    CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
+    CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase(), Params());
     uint256 genesis_hash, tip_hash;
     int max_height;
     {
@@ -473,7 +473,7 @@ BOOST_FIXTURE_TEST_CASE(rescan_from_time, TestChain100Setup)
     }
     m_node.chainman->m_blockman.UnlinkPrunedFiles({file_number});
 
-    CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
+    CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase(), Params());
     {
         LOCK(wallet.cs_wallet);
         LOCK(Assert(m_node.chainman)->GetMutex());
@@ -512,7 +512,7 @@ BOOST_FIXTURE_TEST_CASE(scan_for_wallet_transactions_missing_filter, TestChain10
     BOOST_REQUIRE(filter_index.Init());
 
     {
-        CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase());
+        CWallet wallet(m_node.chain.get(), "", CreateMockableWalletDatabase(), Params());
         uint256 genesis_hash, tip_hash;
         int tip_height;
         {
