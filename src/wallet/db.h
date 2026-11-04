@@ -176,8 +176,9 @@ struct DatabaseOptions {
     // Specialized options. Not every option is supported by every backend.
     bool verify = true;             //!< Check data integrity on load.
     bool use_unsafe_sync = false;   //!< Disable file sync for faster performance.
-    //! P2P / wallet-db network magic. Filled from Params().MessageStart() when
-    //! unset so SQLite code does not call Params() itself.
+    //! P2P / wallet-db network magic. Prefer setting from chain.getMessageStart()
+    //! at open time. ResolveNetworkMagic falls back to Params().MessageStart()
+    //! only when this is still unset.
     std::optional<MessageStartChars> network_magic{};
 };
 
@@ -201,7 +202,7 @@ enum class DatabaseStatus {
 std::vector<std::pair<fs::path, std::string>> ListDatabases(const fs::path& path, const MessageStartChars& network_magic);
 
 void ReadDatabaseArgs(const ArgsManager& args, DatabaseOptions& options);
-//! Ensure options.network_magic is set (from Params() if still unset).
+//! Return options.network_magic, or Params().MessageStart() as last-resort process default.
 MessageStartChars ResolveNetworkMagic(const DatabaseOptions& options);
 std::unique_ptr<WalletDatabase> MakeDatabase(const fs::path& path, const DatabaseOptions& options, DatabaseStatus& status, bilingual_str& error);
 

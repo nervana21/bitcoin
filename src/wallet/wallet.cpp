@@ -416,6 +416,7 @@ std::shared_ptr<CWallet> RestoreWallet(WalletContext& context, const fs::path& b
 
     DatabaseOptions options;
     ReadDatabaseArgs(*context.args, options);
+    options.network_magic = context.chain->getMessageStart();
     options.require_existing = true;
 
     const fs::path wallet_path = fsbridge::AbsPathJoin(GetWalletDir(), fs::u8path(wallet_name));
@@ -4117,6 +4118,7 @@ bool DoMigration(CWallet& wallet, WalletContext& context, bilingual_str& error, 
         options.require_existing = false;
         options.require_create = true;
         options.require_format = DatabaseFormat::SQLITE;
+        options.network_magic = context.chain->getMessageStart();
 
         WalletContext empty_context;
         empty_context.args = context.args;
@@ -4252,6 +4254,7 @@ util::Result<MigrationResult> MigrateLegacyToDescriptor(const std::string& walle
     DatabaseOptions options;
     options.require_existing = true;
     options.require_format = DatabaseFormat::BERKELEY_RO;
+    options.network_magic = context.chain->getMessageStart();
     DatabaseStatus status;
     std::unique_ptr<WalletDatabase> database = MakeWalletDatabase(wallet_name, options, status, error);
     if (!database) {
@@ -4275,6 +4278,7 @@ util::Result<MigrationResult> MigrateLegacyToDescriptor(std::shared_ptr<CWallet>
 
     DatabaseOptions options;
     options.require_existing = true;
+    options.network_magic = context.chain->getMessageStart();
     DatabaseStatus status;
 
     const std::string wallet_name = local_wallet->GetName();

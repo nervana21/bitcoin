@@ -160,9 +160,9 @@ void ReadDatabaseArgs(const ArgsManager& args, DatabaseOptions& options)
 {
     // Override current options with args values, if any were specified
     options.use_unsafe_sync = args.GetBoolArg("-unsafesqlitesync", options.use_unsafe_sync);
-    if (!options.network_magic) {
-        options.network_magic = Params().MessageStart();
-    }
+    // network_magic is not filled here. Callers with a chain handle should set
+    // options.network_magic from chain.getMessageStart(). ResolveNetworkMagic
+    // falls back to Params().MessageStart() only when still unset.
 }
 
 } // namespace wallet

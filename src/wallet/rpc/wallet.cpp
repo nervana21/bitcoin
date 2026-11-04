@@ -170,8 +170,9 @@ static RPCMethod listwalletdir()
                 },
         [](const RPCMethod& self, const JSONRPCRequest& request) -> UniValue
 {
+    WalletContext& context = EnsureWalletContext(request.context);
     UniValue wallets(UniValue::VARR);
-    for (const auto& [path, db_type] : ListDatabases(GetWalletDir(), Params().MessageStart())) {
+    for (const auto& [path, db_type] : ListDatabases(GetWalletDir(), context.chain->getMessageStart())) {
         UniValue wallet(UniValue::VOBJ);
         wallet.pushKV("name", path.utf8string());
                 UniValue warnings(UniValue::VARR);
@@ -260,6 +261,7 @@ static RPCMethod loadwallet()
     DatabaseOptions options;
     DatabaseStatus status;
     ReadDatabaseArgs(*context.args, options);
+    options.network_magic = context.chain->getMessageStart();
     options.require_existing = true;
     bilingual_str error;
     std::vector<bilingual_str> warnings;
@@ -424,6 +426,7 @@ static RPCMethod createwallet()
     DatabaseOptions options;
     DatabaseStatus status;
     ReadDatabaseArgs(*context.args, options);
+    options.network_magic = context.chain->getMessageStart();
     options.require_create = true;
     options.create_flags = flags;
     options.create_passphrase = passphrase;
