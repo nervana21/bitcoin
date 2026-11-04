@@ -6,6 +6,7 @@
 #include <common/signmessage.h>
 #include <rpc/register.h> // IWYU pragma: associated
 
+#include <chainparams.h>
 #include <key.h>
 #include <key_io.h>
 #include <rpc/protocol.h>
@@ -44,7 +45,8 @@ static RPCMethod verifymessage()
         {
             switch (MessageVerify(std::string{self.Arg<std::string_view>("address")},
                                   std::string{self.Arg<std::string_view>("signature")},
-                                  std::string{self.Arg<std::string_view>("message")})) {
+                                  std::string{self.Arg<std::string_view>("message")},
+                                  Params())) {
             case MessageVerificationResult::ERR_INVALID_ADDRESS:
                 throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid address");
             case MessageVerificationResult::ERR_ADDRESS_NO_KEY:

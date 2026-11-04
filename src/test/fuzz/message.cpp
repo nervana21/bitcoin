@@ -33,7 +33,7 @@ FUZZ_TARGET(message, .init = initialize_message)
         const bool message_signed = MessageSign(private_key, random_message, signature);
         if (private_key.IsValid()) {
             assert(message_signed);
-            const MessageVerificationResult verification_result = MessageVerify(EncodeDestination(PKHash(private_key.GetPubKey().GetID()), Params()), signature, random_message);
+            const MessageVerificationResult verification_result = MessageVerify(EncodeDestination(PKHash(private_key.GetPubKey().GetID()), Params()), signature, random_message, Params());
             assert(verification_result == MessageVerificationResult::OK);
         }
     }
@@ -41,7 +41,7 @@ FUZZ_TARGET(message, .init = initialize_message)
         (void)MessageHash(random_message);
         auto address = fuzzed_data_provider.ConsumeRandomLengthString(1024);
         auto signature = fuzzed_data_provider.ConsumeRandomLengthString(1024);
-        (void)MessageVerify(address, signature, random_message);
+        (void)MessageVerify(address, signature, random_message, Params());
         (void)SigningResultString(fuzzed_data_provider.PickValueInArray({SigningResult::OK, SigningResult::PRIVATE_KEY_NOT_AVAILABLE, SigningResult::SIGNING_FAILED}));
     }
 }

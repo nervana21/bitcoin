@@ -6,6 +6,7 @@
 #include <common/signmessage.h>
 
 #include <addresstype.h>
+#include <chainparams.h>
 #include <hash.h>
 #include <key.h>
 #include <key_io.h>
@@ -29,9 +30,10 @@ const std::string MESSAGE_MAGIC = "Bitcoin Signed Message:\n";
 MessageVerificationResult MessageVerify(
     const std::string& address,
     const std::string& signature,
-    const std::string& message)
+    const std::string& message,
+    const CChainParams& params)
 {
-    CTxDestination destination = DecodeDestination(address, Params());
+    CTxDestination destination = DecodeDestination(address, params);
     if (!IsValidDestination(destination)) {
         return MessageVerificationResult::ERR_INVALID_ADDRESS;
     }

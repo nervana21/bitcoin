@@ -12,6 +12,7 @@
 
 #include <common/signmessage.h>
 #include <bitcoin-build-config.h> // IWYU pragma: keep
+#include <chainparams.h>
 #include <key_io.h>
 #include <wallet/wallet.h>
 
@@ -201,7 +202,7 @@ void SignVerifyMessageDialog::on_verifyMessageButton_VM_clicked()
     const std::string& signature = ui->signatureIn_VM->text().toStdString();
     const std::string& message = ui->messageIn_VM->document()->toPlainText().toStdString();
 
-    const auto result = MessageVerify(address, signature, message);
+    const auto result = MessageVerify(address, signature, message, Params());
 
     if (result == MessageVerificationResult::OK) {
         ui->statusLabel_VM->setStyleSheet("QLabel { color: green; }");
