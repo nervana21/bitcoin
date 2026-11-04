@@ -37,7 +37,7 @@
 #include <node/blockstorage.h>
 #include <node/coin.h>
 #include <node/context.h>
-#include <node/interface_ui.h>
+#include <common/interface_ui.h>
 #include <node/kernel_notifications.h>
 #include <node/miner.h>
 #include <node/mini_miner.h>

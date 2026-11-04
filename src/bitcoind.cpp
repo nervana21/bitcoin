@@ -18,7 +18,7 @@
 #include <logging.h>
 #include <kernel/context.h>
 #include <node/context.h>
-#include <node/interface_ui.h>
+#include <common/interface_ui.h>
 #include <node/warnings.h>
 #include <noui.h>
 #include <util/check.h>

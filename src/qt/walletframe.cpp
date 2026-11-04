@@ -4,7 +4,7 @@
 
 #include <qt/walletframe.h>
 
-#include <node/interface_ui.h>
+#include <common/interface_ui.h>
 #include <psbt.h>
 #include <qt/guiutil.h>
 #include <qt/overviewpage.h>

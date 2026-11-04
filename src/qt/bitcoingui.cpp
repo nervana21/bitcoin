@@ -37,7 +37,7 @@
 #include <common/system.h>
 #include <interfaces/handler.h>
 #include <interfaces/node.h>
-#include <node/interface_ui.h>
+#include <common/interface_ui.h>
 #include <util/translation.h>
 #include <validation.h>
 

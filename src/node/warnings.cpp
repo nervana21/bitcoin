@@ -8,7 +8,7 @@
 #include <node/warnings.h>
 
 #include <common/system.h>
-#include <node/interface_ui.h>
+#include <common/interface_ui.h>
 #include <sync.h>
 #include <univalue.h>
 #include <util/translation.h>

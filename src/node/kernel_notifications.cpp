@@ -14,7 +14,7 @@
 #include <kernel/error.h>
 #include <kernel/warning.h>
 #include <node/abort.h>
-#include <node/interface_ui.h>
+#include <common/interface_ui.h>
 #include <node/warnings.h>
 #include <util/check.h>
 #include <util/fs.h>

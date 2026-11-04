@@ -7,7 +7,7 @@
 
 #include <common/system.h>
 #include <netaddress.h>
-#include <node/interface_ui.h>
+#include <common/interface_ui.h>
 #include <sync.h>
 #include <util/log.h>
 #include <util/time.h>

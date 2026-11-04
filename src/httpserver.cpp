@@ -13,7 +13,7 @@
 #include <compat/compat.h>
 #include <logging.h>
 #include <netbase.h>
-#include <node/interface_ui.h>
+#include <common/interface_ui.h>
 #include <rpc/protocol.h>
 #include <span.h>
 #include <sync.h>

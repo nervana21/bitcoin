@@ -5,7 +5,7 @@
 
 #include <noui.h>
 
-#include <node/interface_ui.h>
+#include <common/interface_ui.h>
 #include <util/btcsignals.h>
 #include <util/log.h>
 #include <util/translation.h>

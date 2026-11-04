@@ -15,7 +15,7 @@
 #include <node/blockstorage.h>
 #include <node/context.h>
 #include <node/database_args.h>
-#include <node/interface_ui.h>
+#include <common/interface_ui.h>
 #include <primitives/block.h>
 #include <sync.h>
 #include <tinyformat.h>

@@ -18,7 +18,7 @@
 #include <interfaces/handler.h>
 #include <interfaces/node.h>
 #include <key_io.h>
-#include <node/interface_ui.h>
+#include <common/interface_ui.h>
 #include <node/types.h>
 #include <psbt.h>
 #include <util/translation.h>

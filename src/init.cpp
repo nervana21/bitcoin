@@ -61,7 +61,7 @@
 #include <node/chainstate.h>
 #include <node/chainstatemanager_args.h>
 #include <node/context.h>
-#include <node/interface_ui.h>
+#include <common/interface_ui.h>
 #include <node/kernel_mempool.h>
 #include <node/kernel_notifications.h>
 #include <node/mempool_args.h>

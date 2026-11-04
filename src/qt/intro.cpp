@@ -17,7 +17,7 @@
 
 #include <common/args.h>
 #include <interfaces/node.h>
-#include <node/interface_ui.h>
+#include <common/interface_ui.h>
 #include <util/fs_helpers.h>
 #include <util/translation.h>
 #include <validation.h>
