@@ -978,29 +978,23 @@ BOOST_AUTO_TEST_CASE(btck_notification_callbacks_shared_options_destroy_once)
     BOOST_CHECK_EQUAL(destroyed, 1);
 }
 
-// When the same by-value ValidationInterfaceCallbacks with user_data_destroy
-// is set on two context options, user_data_destroy currently runs twice.
+// Same ValidationInterfaceCallbacks with user_data_destroy set on two
+// context options must destroy user_data once.
 BOOST_AUTO_TEST_CASE(btck_validation_callbacks_shared_options_destroy_once)
 {
     int destroyed{0};
-    const btck_ValidationInterfaceCallbacks validation{
-        .user_data = &destroyed,
-        .user_data_destroy = +[](void* user_data) { ++*static_cast<int*>(user_data); },
-        .block_checked = nullptr,
-        .pow_valid_block = nullptr,
-        .block_connected = nullptr,
-        .block_disconnected = nullptr,
-    };
+    btck_ValidationInterfaceCallbacks* validation{btck_validation_interface_callbacks_create(
+        &destroyed, +[](void* user_data) { ++*static_cast<int*>(user_data); })};
 
     btck_ContextOptions* opts_a{btck_context_options_create()};
     btck_ContextOptions* opts_b{btck_context_options_create()};
     btck_context_options_set_validation_interface(opts_a, validation);
     btck_context_options_set_validation_interface(opts_b, validation);
+    btck_validation_interface_callbacks_destroy(validation);
     btck_context_options_destroy(opts_a);
     btck_context_options_destroy(opts_b);
 
-    // Same logical user_data is destroyed once per options copy.
-    BOOST_CHECK_EQUAL(destroyed, 2); // TODO: should be 1
+    BOOST_CHECK_EQUAL(destroyed, 1);
 }
 
 BOOST_AUTO_TEST_CASE(btck_block_header_tests)
@@ -1606,10 +1600,10 @@ BOOST_AUTO_TEST_CASE(btck_chainman_regtest_tests)
         auto context2{create_context(notifications2, ChainType::REGTEST)};
         auto chainman2{create_chainman(
             test_directory2, /*reindex=*/false, /*wipe_chainstate=*/false,
-            /*block_tree_db_in_memory=*/false, /*chainstate_db_in_memory=*/false, context2)};
+            /*chainstate_db_in_memory=*/false, context2)};
 
         for (const auto& [block, block_spent_outputs] : blocks) {
-            BlockValidationState header_state{chainman2->ProcessBlockHeader(block.GetHeader())};
+            BlockValidationState header_state{chainman2->AcceptHeader(block.GetHeader())};
             BOOST_CHECK_EQUAL(header_state.GetValidationMode(), ValidationMode::VALID);
             BlockTreeEntry entry{*chainman2->GetBlockTreeEntry(block.GetHash())};
 
