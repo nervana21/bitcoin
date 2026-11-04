@@ -12,7 +12,7 @@
 #include <interfaces/wallet.h>
 #include <net.h>
 #include <node/context.h>
-#include <node/interface_ui.h>
+#include <common/interface_ui.h>
 #include <outputtype.h>
 #include <univalue.h>
 #include <util/check.h>

@@ -166,6 +166,7 @@ add_library(bitcoin_common STATIC EXCLUDE_FROM_ALL
   common/signmessage.cpp
   common/system.cpp
   common/url.cpp
+  common/interface_ui.cpp
   core_io.cpp
   external_signer.cpp
   init/common.cpp
@@ -267,7 +268,6 @@ add_library(bitcoin_node STATIC EXCLUDE_FROM_ALL
   node/context.cpp
   node/database_args.cpp
   node/eviction.cpp
-  node/interface_ui.cpp
   node/interfaces.cpp
   node/kernel_mempool.cpp
   node/kernel_notifications.cpp

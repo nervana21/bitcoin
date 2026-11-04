@@ -19,7 +19,7 @@
 #include <chainparams.h>
 #include <interfaces/node.h>
 #include <key_io.h>
-#include <node/interface_ui.h>
+#include <common/interface_ui.h>
 #include <node/types.h>
 #include <txmempool.h>
 #include <validation.h>

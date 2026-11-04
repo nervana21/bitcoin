@@ -16,7 +16,7 @@
 #include <interfaces/node.h>
 #include <logging.h>
 #include <node/context.h>
-#include <node/interface_ui.h>
+#include <common/interface_ui.h>
 #include <noui.h>
 #include <qt/bitcoingui.h>
 #include <qt/clientmodel.h>
