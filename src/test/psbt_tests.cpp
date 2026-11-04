@@ -242,7 +242,7 @@ struct PSBTOutputTest {
 
         util::ReplaceAll(descriptor, "<KEY>", HexStr(pubkey));
         std::string error;
-        auto descriptors{Parse(descriptor, provider, error, /*require_checksum=*/false)};
+        auto descriptors{Parse(descriptor, provider, error, Params(), /*require_checksum=*/false)};
         BOOST_REQUIRE_MESSAGE(!descriptors.empty(), error);
         std::vector<CScript> output_scripts;
         BOOST_REQUIRE(descriptors[0]->Expand(/*pos=*/0, provider, output_scripts, provider));

@@ -644,7 +644,7 @@ CreatedTransactionResult FundTransaction(CWallet& wallet, const CMutableTransact
                 FlatSigningProvider desc_out;
                 std::string error;
                 std::vector<CScript> scripts_temp;
-                auto descs = Parse(desc_str, desc_out, error, true);
+                auto descs = Parse(desc_str, desc_out, error, wallet.GetChainParams(), true);
                 if (descs.empty()) {
                     throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Unable to parse descriptor '%s': %s", desc_str, error));
                 }

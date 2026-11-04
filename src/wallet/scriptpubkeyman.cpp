@@ -601,7 +601,7 @@ std::optional<MigrationData> LegacyDataSPKM::MigrateToDescriptor()
         std::string desc_str = "combo(" + origin_str + HexStr(key.GetPubKey()) + ")";
         FlatSigningProvider provider;
         std::string error;
-        std::vector<std::unique_ptr<Descriptor>> descs = Parse(desc_str, provider, error, false);
+        std::vector<std::unique_ptr<Descriptor>> descs = Parse(desc_str, provider, error, m_storage.GetChainParams(), false);
         CHECK_NONFATAL(descs.size() == 1); // It shouldn't be possible to have an invalid or multipath descriptor
         WalletDescriptor w_desc(std::move(descs.at(0)), creation_time, 0, 0, 0);
 
@@ -657,7 +657,7 @@ std::optional<MigrationData> LegacyDataSPKM::MigrateToDescriptor()
             std::string desc_str = "combo(" + xpub + "/0h/" + ToString(i) + "h/*h)";
             FlatSigningProvider provider;
             std::string error;
-            std::vector<std::unique_ptr<Descriptor>> descs = Parse(desc_str, provider, error, false);
+            std::vector<std::unique_ptr<Descriptor>> descs = Parse(desc_str, provider, error, m_storage.GetChainParams(), false);
             CHECK_NONFATAL(descs.size() == 1); // It shouldn't be possible to have an invalid or multipath descriptor
             uint32_t chain_counter = std::max((i == 1 ? chain.nInternalChainCounter : chain.nExternalChainCounter), (uint32_t)0);
             WalletDescriptor w_desc(std::move(descs.at(0)), 0, 0, chain_counter, 0);
@@ -698,7 +698,7 @@ std::optional<MigrationData> LegacyDataSPKM::MigrateToDescriptor()
         }
 
         // InferDescriptor as that will get us all the solving info if it is there
-        std::unique_ptr<Descriptor> desc = InferDescriptor(spk, *GetSolvingProvider(spk));
+        std::unique_ptr<Descriptor> desc = InferDescriptor(spk, *GetSolvingProvider(spk), m_storage.GetChainParams());
 
         // Past bugs in InferDescriptor have caused it to create descriptors which cannot be re-parsed.
         // Re-parse the descriptors to detect that, and skip any that do not parse.
@@ -706,7 +706,7 @@ std::optional<MigrationData> LegacyDataSPKM::MigrateToDescriptor()
             std::string desc_str = desc->ToString();
             FlatSigningProvider parsed_keys;
             std::string parse_error;
-            std::vector<std::unique_ptr<Descriptor>> parsed_descs = Parse(desc_str, parsed_keys, parse_error);
+            std::vector<std::unique_ptr<Descriptor>> parsed_descs = Parse(desc_str, parsed_keys, parse_error, m_storage.GetChainParams());
             if (parsed_descs.empty()) {
                 // Remove this scriptPubKey from the set
                 it = spks.erase(it);
@@ -793,7 +793,7 @@ std::optional<MigrationData> LegacyDataSPKM::MigrateToDescriptor()
         }
 
         // InferDescriptor as that will get us all the solving info if it is there
-        std::unique_ptr<Descriptor> desc = InferDescriptor(script, *GetSolvingProvider(script));
+        std::unique_ptr<Descriptor> desc = InferDescriptor(script, *GetSolvingProvider(script), m_storage.GetChainParams());
         if (!desc->IsSolvable()) {
             // The wallet was able to provide some information, but not enough to make a descriptor that actually
             // contains anything useful. This is probably because the script itself is actually unsignable (e.g. P2WSH-P2WSH).
@@ -806,7 +806,7 @@ std::optional<MigrationData> LegacyDataSPKM::MigrateToDescriptor()
             std::string desc_str = desc->ToString();
             FlatSigningProvider parsed_keys;
             std::string parse_error;
-            std::vector<std::unique_ptr<Descriptor>> parsed_descs = Parse(desc_str, parsed_keys, parse_error, false);
+            std::vector<std::unique_ptr<Descriptor>> parsed_descs = Parse(desc_str, parsed_keys, parse_error, m_storage.GetChainParams(), false);
             if (parsed_descs.empty()) {
                 continue;
             }

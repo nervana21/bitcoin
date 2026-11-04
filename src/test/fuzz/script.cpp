@@ -85,7 +85,7 @@ FUZZ_TARGET(script, .init = initialize_script)
     }
 
     const FlatSigningProvider signing_provider;
-    (void)InferDescriptor(script, signing_provider);
+    (void)InferDescriptor(script, signing_provider, Params());
     (void)IsSegWitOutput(signing_provider, script);
 
     (void)RecursiveDynamicUsage(script);

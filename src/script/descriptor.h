@@ -20,6 +20,7 @@
 #include <unordered_map>
 #include <vector>
 
+class CChainParams;
 class CScript;
 class SigningProvider;
 struct FlatSigningProvider;
@@ -226,7 +227,7 @@ util::Expected<void, std::string> CheckDescriptorRangeBounds(int64_t low, int64_
  * If a parse error occurs, or the checksum is missing/invalid, or anything
  * else is wrong, an empty vector is returned.
  */
-std::vector<std::unique_ptr<Descriptor>> Parse(std::string_view descriptor, FlatSigningProvider& out, std::string& error, bool require_checksum = false);
+std::vector<std::unique_ptr<Descriptor>> Parse(std::string_view descriptor, FlatSigningProvider& out, std::string& error, const CChainParams& params, bool require_checksum = false);
 
 /** Get the checksum for a `descriptor`.
  *
@@ -250,7 +251,7 @@ std::string GetDescriptorChecksum(const std::string& descriptor);
  *   returned (which is not IsSolvable()).
  * - Failing that, a "raw()" descriptor is returned.
  */
-std::unique_ptr<Descriptor> InferDescriptor(const CScript& script, const SigningProvider& provider);
+std::unique_ptr<Descriptor> InferDescriptor(const CScript& script, const SigningProvider& provider, const CChainParams& params);
 
 /** Hash of the COMPAT string representation of the descriptor that is not supposed to change over time.
  * Due to the hash's usage in previous versions, the COMPAT string is computed with some quirks.

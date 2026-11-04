@@ -284,13 +284,13 @@ CExtKey DecodeExtKey(std::string_view str, const CChainParams& params)
     return key;
 }
 
-std::pair<CExtKey, CExtPubKey> DecodeExtKeyOrPubKey(std::string_view str)
+std::pair<CExtKey, CExtPubKey> DecodeExtKeyOrPubKey(std::string_view str, const CChainParams& params)
 {
     std::pair<CExtKey, CExtPubKey> result;
     std::vector<unsigned char> data;
     if (DecodeBase58Check(str, data, 78)) {
-        const std::vector<unsigned char>& priv_prefix = Params().Base58Prefix(CChainParams::EXT_SECRET_KEY);
-        const std::vector<unsigned char>& pub_prefix = Params().Base58Prefix(CChainParams::EXT_PUBLIC_KEY);
+        const std::vector<unsigned char>& priv_prefix = params.Base58Prefix(CChainParams::EXT_SECRET_KEY);
+        const std::vector<unsigned char>& pub_prefix = params.Base58Prefix(CChainParams::EXT_PUBLIC_KEY);
         if (data.size() == BIP32_EXTKEY_SIZE + priv_prefix.size() && std::equal(priv_prefix.begin(), priv_prefix.end(), data.begin())) {
             SpanReader{std::span{data}.subspan(priv_prefix.size())} >> result.first;
         } else if (data.size() == BIP32_EXTKEY_SIZE + pub_prefix.size() && std::equal(pub_prefix.begin(), pub_prefix.end(), data.begin())) {

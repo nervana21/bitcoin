@@ -25,6 +25,7 @@
 #include <interfaces/wallet.h>
 #include <kernel/mempool_removal_reason.h>
 #include <kernel/types.h>
+#include <chainparams.h>
 #include <key.h>
 #include <key_io.h>
 #include <node/types.h>
@@ -3531,7 +3532,7 @@ void CWallet::SetupDescriptorScriptPubKeyMans()
                 const std::string& desc_str = desc_val.getValStr();
                 FlatSigningProvider keys;
                 std::string desc_error;
-                auto descs = Parse(desc_str, keys, desc_error, false);
+                auto descs = Parse(desc_str, keys, desc_error, GetChainParams(), false);
                 if (descs.empty()) {
                     throw std::runtime_error(std::string(__func__) + ": Invalid descriptor \"" + desc_str + "\" (" + desc_error + ")");
                 }
@@ -3738,7 +3739,7 @@ util::Expected<CExtPubKey, WalletError> CWallet::AddHDKey(const std::optional<CE
     std::string desc_str = "unused(" + EncodeExtKey(hdkey, GetChainParams()) + ")";
     FlatSigningProvider keys;
     std::string parse_error;
-    std::vector<std::unique_ptr<Descriptor>> descs = Parse(desc_str, keys, parse_error, /*require_checksum=*/false);
+    std::vector<std::unique_ptr<Descriptor>> descs = Parse(desc_str, keys, parse_error, GetChainParams(), /*require_checksum=*/false);
     if (descs.empty()) {
         return util::Unexpected{WalletError{
             WalletErrorCode::GenericError,
@@ -4153,7 +4154,7 @@ bool DoMigration(CWallet& wallet, WalletContext& context, bilingual_str& error, 
                 // Parse the descriptor
                 FlatSigningProvider keys;
                 std::string parse_err;
-                std::vector<std::unique_ptr<Descriptor>> descs = Parse(desc_str, keys, parse_err, /*require_checksum=*/ true);
+                std::vector<std::unique_ptr<Descriptor>> descs = Parse(desc_str, keys, parse_err, wallet.GetChainParams(), /*require_checksum=*/ true);
                 // LegacyDataSPKM should not produce invalid, multipath, or ranged watch-only descriptors.
                 assert(descs.size() == 1);
                 assert(!descs.at(0)->IsRange());
@@ -4193,7 +4194,7 @@ bool DoMigration(CWallet& wallet, WalletContext& context, bilingual_str& error, 
                 // Parse the descriptor
                 FlatSigningProvider keys;
                 std::string parse_err;
-                std::vector<std::unique_ptr<Descriptor>> descs = Parse(desc_str, keys, parse_err, /*require_checksum=*/ true);
+                std::vector<std::unique_ptr<Descriptor>> descs = Parse(desc_str, keys, parse_err, wallet.GetChainParams(), /*require_checksum=*/ true);
                 // LegacyDataSPKM should not produce invalid, multipath, or ranged watch-only descriptors.
                 assert(descs.size() == 1);
                 assert(!descs.at(0)->IsRange());

@@ -47,7 +47,7 @@ static void TestDescriptor(const Descriptor& desc, FlatSigningProvider& sig_prov
 
     // If we could serialize to script we must be able to infer using the same provider.
     if (!out_scripts.empty()) {
-        assert(InferDescriptor(out_scripts.back(), sig_provider));
+        assert(InferDescriptor(out_scripts.back(), sig_provider, Params()));
 
         // The ScriptSize() must match the size of the serialized Script. (ScriptSize() is set for all descs but 'combo()'.)
         const bool is_combo{!desc.IsSingleType()};
@@ -90,7 +90,7 @@ FUZZ_TARGET(mocked_descriptor_parse, .init = initialize_mocked_descriptor_parse)
         if (IsTooExpensive(MakeUCharSpan(*descriptor))) return;
         FlatSigningProvider signing_provider;
         std::string error;
-        const auto desc = Parse(*descriptor, signing_provider, error);
+        const auto desc = Parse(*descriptor, signing_provider, error, Params());
         std::optional<bool> is_ranged;
         std::optional<bool> is_solvable;
         for (const auto& d : desc) {
@@ -108,7 +108,7 @@ FUZZ_TARGET(descriptor_parse, .init = initialize_descriptor_parse)
     FlatSigningProvider signing_provider;
     std::string error;
     for (const bool require_checksum : {true, false}) {
-        const auto desc = Parse(descriptor, signing_provider, error, require_checksum);
+        const auto desc = Parse(descriptor, signing_provider, error, Params(), require_checksum);
         std::optional<bool> is_ranged;
         std::optional<bool> is_solvable;
         for (const auto& d : desc) {

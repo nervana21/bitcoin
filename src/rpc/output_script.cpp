@@ -153,7 +153,7 @@ static RPCMethod createmultisig()
             const CTxDestination dest = AddAndGetMultisigDestination(required, pubkeys, output_type.value(), keystore, inner);
 
             // Make the descriptor
-            std::unique_ptr<Descriptor> descriptor = InferDescriptor(GetScriptForDestination(dest), keystore);
+            std::unique_ptr<Descriptor> descriptor = InferDescriptor(GetScriptForDestination(dest), keystore, Params());
 
             UniValue result(UniValue::VOBJ);
             result.pushKV("address", EncodeDestination(dest, Params()));
@@ -205,7 +205,7 @@ static RPCMethod getdescriptorinfo()
         {
             FlatSigningProvider provider;
             std::string error;
-            auto descs = Parse(self.Arg<std::string_view>("descriptor"), provider, error);
+            auto descs = Parse(self.Arg<std::string_view>("descriptor"), provider, error, Params());
             if (descs.empty()) {
                 throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, error);
             }
@@ -322,7 +322,7 @@ static RPCMethod deriveaddresses()
 
             FlatSigningProvider key_provider;
             std::string error;
-            auto descs = Parse(desc_str, key_provider, error, /* require_checksum = */ true);
+            auto descs = Parse(desc_str, key_provider, error, Params(), /* require_checksum = */ true);
             if (descs.empty()) {
                 throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, error);
             }

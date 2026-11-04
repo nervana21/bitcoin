@@ -20,7 +20,7 @@ ImportResult ImportDescriptor(CWallet& wallet, const ImportDescriptorRequest& re
     // Parse descriptor string
     FlatSigningProvider keys;
     std::string error;
-    auto parsed_descs = Parse(request.descriptor, keys, error, /*require_checksum=*/true);
+    auto parsed_descs = Parse(request.descriptor, keys, error, wallet.GetChainParams(), /*require_checksum=*/true);
     if (parsed_descs.empty()) {
         return ImportResult(WalletErrorCode::InvalidDescriptor, error, warnings);
     }

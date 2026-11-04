@@ -500,7 +500,7 @@ RPCMethod getaddressinfo()
     ret.pushKV("ismine", mine);
 
     if (provider) {
-        auto inferred = InferDescriptor(scriptPubKey, *provider);
+        auto inferred = InferDescriptor(scriptPubKey, *provider, pwallet->GetChainParams());
         bool solvable = inferred->IsSolvable();
         ret.pushKV("solvable", solvable);
         if (solvable) {

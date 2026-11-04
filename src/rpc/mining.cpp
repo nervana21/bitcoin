@@ -218,7 +218,7 @@ static UniValue generateBlocks(ChainstateManager& chainman, node::BlockTemplateM
 static bool getScriptFromDescriptor(std::string_view descriptor, CScript& script, std::string& error)
 {
     FlatSigningProvider key_provider;
-    const auto descs = Parse(descriptor, key_provider, error, /* require_checksum = */ false);
+    const auto descs = Parse(descriptor, key_provider, error, Params(), /* require_checksum = */ false);
     if (descs.empty()) return false;
     if (descs.size() > 1) {
         throw JSONRPCError(RPC_INVALID_PARAMETER, "Multipath descriptor not accepted");
