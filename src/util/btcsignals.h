@@ -5,7 +5,9 @@
 #ifndef BITCOIN_UTIL_BTCSIGNALS_H
 #define BITCOIN_UTIL_BTCSIGNALS_H
 
-#include <sync.h>
+// StdMutex lives here. We use it instead of sync.h Mutex so connecting or
+// emitting a signal cannot recurse into the logger (see m_mutex comment below).
+#include <util/stdmutex.h>
 
 #include <algorithm>
 #include <atomic>
@@ -214,8 +216,14 @@ class signal
         }
     };
 
-    mutable Mutex m_mutex;
+    // Protects m_connections.
+    // Must be StdMutex, not sync.h Mutex: locking a sync.h Mutex can itself log.
+    // If this signal is the one delivering those log entries, that nested lock
+    // would deadlock. StdMutex never logs, so log delivery is safe.
+    mutable StdMutex m_mutex;
 
+    // Live connection holders. Copy the vector under the lock, then call
+    // callbacks outside the lock so a callback may connect/disconnect freely.
     std::vector<std::shared_ptr<connection_holder>> m_connections GUARDED_BY(m_mutex){};
 
 public:
@@ -250,9 +258,12 @@ public:
     template <typename... Args>
     [[nodiscard]] result_type operator()(Args&&... args) const EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
     {
+        // Snapshot of holders we will call. Taken under the lock, used outside it.
         std::vector<std::shared_ptr<connection_holder>> connections;
         {
-            LOCK(m_mutex);
+            // StdMutex lock: safe even when a callback will log.
+            STDLOCK(m_mutex);
+            // Copy the shared_ptrs so holders stay alive after we unlock.
             connections = m_connections;
         }
         if constexpr (std::is_void_v<result_type>) {
@@ -261,7 +272,8 @@ public:
             for (const auto& connection : connections) {
                 // Holding the callback pointer keeps the callback alive until
                 // the call returns, even if it is disconnected concurrently.
-                if (const auto callback{connection->callback()}) {
+                const auto callback = connection->callback();
+                if (callback) {
                     (*callback)(args...);
                 }
             }
@@ -272,7 +284,8 @@ public:
                           "Callback result type must be equal to the combiner result type (bool).");
             result_type ret{false};
             for (const auto& connection : connections) {
-                if (const auto callback{connection->callback()}) {
+                const auto callback = connection->callback();
+                if (callback) {
                     ret |= (*callback)(args...);
                 }
             }
@@ -287,12 +300,22 @@ public:
     template <typename Callable>
     connection connect(Callable&& func) EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
     {
-        LOCK(m_mutex);
+        // StdMutex lock: registering a log-delivery callback must not log-lock.
+        STDLOCK(m_mutex);
 
-        // Garbage-collect disconnected connections to prevent unbounded growth
-        std::erase_if(m_connections, [](const auto& holder) { return !holder->connected(); });
+        // Drop holders whose callbacks already disconnected, so the vector
+        // does not grow without bound across many connect/disconnect cycles.
+        auto holder_is_disconnected = [](const std::shared_ptr<connection_holder>& holder) {
+            const bool still_connected = holder->connected();
+            const bool should_erase = !still_connected;
+            return should_erase;
+        };
+        std::erase_if(m_connections, holder_is_disconnected);
 
-        const auto& entry = m_connections.emplace_back(std::make_shared<connection_holder>(std::forward<Callable>(func)));
+        // Allocate a new holder for this callback and append it.
+        auto new_holder = std::make_shared<connection_holder>(std::forward<Callable>(func));
+        const auto& entry = m_connections.emplace_back(std::move(new_holder));
+        // Hand the caller a connection handle that can disconnect this holder.
         return connection(entry);
     }
 
@@ -301,10 +324,17 @@ public:
      */
     [[nodiscard]] bool empty() const EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
     {
-        LOCK(m_mutex);
-        return std::ranges::none_of(m_connections, [](const auto& holder) {
-            return holder->connected();
-        });
+        // StdMutex lock: same deadlock reason as connect / operator().
+        STDLOCK(m_mutex);
+        for (const auto& holder : m_connections) {
+            const bool still_connected = holder->connected();
+            if (still_connected) {
+                // At least one live callback remains.
+                return false;
+            }
+        }
+        // Every holder is disconnected (or the vector is empty).
+        return true;
     }
 };
 
