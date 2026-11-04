@@ -1362,16 +1362,16 @@ public:
         static_assert(std::is_base_of_v<ValidationInterface, T>);
         auto heap_vi = std::make_unique<std::shared_ptr<T>>(std::move(validation_interface));
         using user_type = std::shared_ptr<T>*;
-        btck_context_options_set_validation_interface(
-            get(),
-            btck_ValidationInterfaceCallbacks{
-                .user_data = heap_vi.release(),
-                .user_data_destroy = +[](void* user_data) { delete static_cast<user_type>(user_data); },
-                .block_checked = +[](void* user_data, btck_Block* block, const btck_BlockValidationState* state) { (*static_cast<user_type>(user_data))->BlockChecked(Block{block}, BlockValidationStateView{state}); },
-                .pow_valid_block = +[](void* user_data, btck_Block* block, const btck_BlockTreeEntry* entry) { (*static_cast<user_type>(user_data))->PowValidBlock(BlockTreeEntry{entry}, Block{block}); },
-                .block_connected = +[](void* user_data, btck_Block* block, const btck_BlockTreeEntry* entry) { (*static_cast<user_type>(user_data))->BlockConnected(Block{block}, BlockTreeEntry{entry}); },
-                .block_disconnected = +[](void* user_data, btck_Block* block, const btck_BlockTreeEntry* entry) { (*static_cast<user_type>(user_data))->BlockDisconnected(Block{block}, BlockTreeEntry{entry}); },
-            });
+        std::unique_ptr<btck_ValidationInterfaceCallbacks, decltype(&btck_validation_interface_callbacks_destroy)> cbs{
+            check(btck_validation_interface_callbacks_create(
+                heap_vi.release(),
+                +[](void* user_data) { delete static_cast<user_type>(user_data); })),
+            &btck_validation_interface_callbacks_destroy};
+        btck_validation_interface_callbacks_set_block_checked(cbs.get(), +[](void* user_data, btck_Block* block, const btck_BlockValidationState* state) { (*static_cast<user_type>(user_data))->BlockChecked(Block{block}, BlockValidationStateView{state}); });
+        btck_validation_interface_callbacks_set_pow_valid_block(cbs.get(), +[](void* user_data, btck_Block* block, const btck_BlockTreeEntry* entry) { (*static_cast<user_type>(user_data))->PowValidBlock(BlockTreeEntry{entry}, Block{block}); });
+        btck_validation_interface_callbacks_set_block_connected(cbs.get(), +[](void* user_data, btck_Block* block, const btck_BlockTreeEntry* entry) { (*static_cast<user_type>(user_data))->BlockConnected(Block{block}, BlockTreeEntry{entry}); });
+        btck_validation_interface_callbacks_set_block_disconnected(cbs.get(), +[](void* user_data, btck_Block* block, const btck_BlockTreeEntry* entry) { (*static_cast<user_type>(user_data))->BlockDisconnected(Block{block}, BlockTreeEntry{entry}); });
+        btck_context_options_set_validation_interface(get(), cbs.get());
     }
 };
 
