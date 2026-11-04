@@ -10,6 +10,7 @@
 
 #include <string>
 
+class CChainParams;
 class CKey;
 
 extern const std::string MESSAGE_MAGIC;
@@ -50,11 +51,13 @@ enum class SigningResult {
  * @param[in] address Signer's bitcoin address, it must refer to a public key.
  * @param[in] signature The signature in base64 format.
  * @param[in] message The message that was signed.
+ * @param[in] params Chain parameters for address decoding.
  * @return result code */
 MessageVerificationResult MessageVerify(
     const std::string& address,
     const std::string& signature,
-    const std::string& message);
+    const std::string& message,
+    const CChainParams& params);
 
 /** Sign a message.
  * @param[in] privkey Private key to sign with.

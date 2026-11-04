@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <clientversion.h>
+#include <chainparams.h>
 #include <common/signmessage.h>
 #include <compat/compat.h>
 #include <hash.h>
@@ -1532,49 +1533,49 @@ BOOST_AUTO_TEST_CASE(message_verify)
         MessageVerify(
             "invalid address",
             "signature should be irrelevant",
-            "message too"),
+            "message too", Params()),
         MessageVerificationResult::ERR_INVALID_ADDRESS);
 
     BOOST_CHECK_EQUAL(
         MessageVerify(
             "3B5fQsEXEaV8v6U3ejYc8XaKXAkyQj2MjV",
             "signature should be irrelevant",
-            "message too"),
+            "message too", Params()),
         MessageVerificationResult::ERR_ADDRESS_NO_KEY);
 
     BOOST_CHECK_EQUAL(
         MessageVerify(
             "1KqbBpLy5FARmTPD4VZnDDpYjkUvkr82Pm",
             "invalid signature, not in base64 encoding",
-            "message should be irrelevant"),
+            "message should be irrelevant", Params()),
         MessageVerificationResult::ERR_MALFORMED_SIGNATURE);
 
     BOOST_CHECK_EQUAL(
         MessageVerify(
             "1KqbBpLy5FARmTPD4VZnDDpYjkUvkr82Pm",
             "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-            "message should be irrelevant"),
+            "message should be irrelevant", Params()),
         MessageVerificationResult::ERR_PUBKEY_NOT_RECOVERED);
 
     BOOST_CHECK_EQUAL(
         MessageVerify(
             "15CRxFdyRpGZLW9w8HnHvVduizdL5jKNbs",
             "IPojfrX2dfPnH26UegfbGQQLrdK844DlHq5157/P6h57WyuS/Qsl+h/WSVGDF4MUi4rWSswW38oimDYfNNUBUOk=",
-            "I never signed this"),
+            "I never signed this", Params()),
         MessageVerificationResult::ERR_NOT_SIGNED);
 
     BOOST_CHECK_EQUAL(
         MessageVerify(
             "15CRxFdyRpGZLW9w8HnHvVduizdL5jKNbs",
             "IPojfrX2dfPnH26UegfbGQQLrdK844DlHq5157/P6h57WyuS/Qsl+h/WSVGDF4MUi4rWSswW38oimDYfNNUBUOk=",
-            "Trust no one"),
+            "Trust no one", Params()),
         MessageVerificationResult::OK);
 
     BOOST_CHECK_EQUAL(
         MessageVerify(
             "11canuhp9X2NocwCq7xNrQYTmUgZAnLK3",
             "IIcaIENoYW5jZWxsb3Igb24gYnJpbmsgb2Ygc2Vjb25kIGJhaWxvdXQgZm9yIGJhbmtzIAaHRtbCeDZINyavx14=",
-            "Trust me"),
+            "Trust me", Params()),
         MessageVerificationResult::OK);
 }
 
