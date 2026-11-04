@@ -112,7 +112,6 @@ add_library(bitcoin_kernel STATIC EXCLUDE_FROM_ALL
   script/sigcache.cpp
   signet.cpp
   txdb.cpp
-  util/serfloat.cpp
   validation.cpp
   validationinterface.cpp
   versionbits.cpp
@@ -121,7 +120,7 @@ target_link_libraries(bitcoin_kernel
   PRIVATE
     core_interface
     bitcoin_consensus
-    bitcoin_util_kernel
+    bitcoin_util
     leveldb
     secp256k1
     $<TARGET_NAME_IF_EXISTS:USDT::headers>
@@ -181,6 +180,11 @@ add_library(bitcoin_common STATIC EXCLUDE_FROM_ALL
   script/parsing.cpp
   script/sign.cpp
   script/signingprovider.cpp
+  util/bip32.cpp
+  util/bytevectorhash.cpp
+  util/sock.cpp
+  util/string.cpp
+  util/threadinterrupt.cpp
 )
 target_link_libraries(bitcoin_common
   PRIVATE
@@ -188,7 +192,6 @@ target_link_libraries(bitcoin_common
     bitcoin_consensus
     bitcoin_kernel
     bitcoin_util
-    bitcoin_util_kernel
     univalue
     secp256k1
     $<TARGET_NAME_IF_EXISTS:USDT::headers>
@@ -299,6 +302,9 @@ add_library(bitcoin_node STATIC EXCLUDE_FROM_ALL
   txgraph.cpp
   txmempool.cpp
   txrequest.cpp
+  util/asmap.cpp
+  util/batchpriority.cpp
+  util/readwritefile.cpp
   $<$<TARGET_EXISTS:bitcoin_wallet>:wallet/init.cpp>
   $<$<NOT:$<TARGET_EXISTS:bitcoin_wallet>>:dummywallet.cpp>
 )
@@ -308,7 +314,6 @@ target_link_libraries(bitcoin_node
     bitcoin_common
     bitcoin_kernel
     bitcoin_util
-    bitcoin_util_kernel
     $<TARGET_NAME_IF_EXISTS:bitcoin_zmq>
     minisketch
     univalue
@@ -328,6 +333,7 @@ if(BUILD_BITCOIN_BIN)
   add_executable(bitcoin
     bitcoin.cpp
     bitcoin-res.rc
+    util/exec.cpp
   )
   add_windows_application_manifest(bitcoin)
   target_link_libraries(bitcoin core_interface bitcoin_common bitcoin_util)

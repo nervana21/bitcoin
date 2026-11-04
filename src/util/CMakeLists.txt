@@ -2,7 +2,9 @@
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or https://opensource.org/license/mit/.
 
-add_library(bitcoin_util_kernel STATIC EXCLUDE_FROM_ALL
+# Kernel-safe utilities. Higher helpers (sock, asmap, bip32, …) live in
+# bitcoin_common / bitcoin_node so check-deps can forbid kernel use.
+add_library(bitcoin_util STATIC EXCLUDE_FROM_ALL
   chaintype.cpp
   check.cpp
   exception.cpp
@@ -15,6 +17,7 @@ add_library(bitcoin_util_kernel STATIC EXCLUDE_FROM_ALL
   messages.cpp
   moneystr.cpp
   rbf.cpp
+  serfloat.cpp
   signalinterrupt.cpp
   strencodings.cpp
   syserror.cpp
@@ -30,7 +33,7 @@ add_library(bitcoin_util_kernel STATIC EXCLUDE_FROM_ALL
   ../sync.cpp
 )
 
-target_link_libraries(bitcoin_util_kernel
+target_link_libraries(bitcoin_util
   PRIVATE
     core_interface
     bitcoin_clientversion
@@ -38,26 +41,4 @@ target_link_libraries(bitcoin_util_kernel
     $<$<PLATFORM_ID:Windows>:ws2_32>
     $<$<PLATFORM_ID:Windows>:iphlpapi>
     $<$<PLATFORM_ID:Windows>:bcrypt>
-)
-
-add_library(bitcoin_util STATIC EXCLUDE_FROM_ALL
-  asmap.cpp
-  batchpriority.cpp
-  bip32.cpp
-  bytevectorhash.cpp
-  exec.cpp
-  readwritefile.cpp
-  serfloat.cpp
-  sock.cpp
-  string.cpp
-  threadinterrupt.cpp
-)
-
-target_link_libraries(bitcoin_util
-  PRIVATE
-    core_interface
-    bitcoin_clientversion
-    bitcoin_crypto
-    bitcoin_util_kernel
-    $<$<PLATFORM_ID:Windows>:ws2_32>
 )
