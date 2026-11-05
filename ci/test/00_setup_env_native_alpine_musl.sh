@@ -11,6 +11,9 @@ export CI_BASE_PACKAGES="build-base musl-dev pkgconf curl ccache make ninja git 
 export PIP_PACKAGES="--break-system-packages pyzmq pycapnp"
 export DEP_OPTS="DEBUG=1"
 printf -v BITCOIN_CONFIG "%q " \
+ `# Alpine musl GCC false-positives maybe-uninitialized around std::optional::emplace` \
+ `# in the new logging re-entry tests in test_kernel.cpp. Keep it a warning, not -Werror.` \
+ -DCMAKE_CXX_FLAGS="-Wno-error=maybe-uninitialized" \
  --preset=dev-mode \
  -DREDUCE_EXPORTS=ON \
  -DCMAKE_BUILD_TYPE=Debug
