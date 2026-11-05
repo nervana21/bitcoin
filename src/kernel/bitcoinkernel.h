@@ -314,9 +314,13 @@ typedef struct btck_TransactionSpentOutputs btck_TransactionSpentOutputs;
 typedef struct btck_Coin btck_Coin;
 
 /**
- * Opaque in-memory UTXO container of outpoint to coin pairs owned by the
- * kernel. Intended for sans-UTXO-set block validation without copying a
- * caller map into a temporary structure on each lookup.
+ * Opaque in-memory UTXO container for validating a block without a full
+ * chainstate UTXO set.
+ *
+ * Holds outpoint to coin pairs owned by the kernel. Pass to
+ * @ref btck_chainstate_manager_validate_block. Validation layers a cache on
+ * this map and does not mutate the container (the cache is discarded after a
+ * check-only connect).
  */
 typedef struct btck_CoinsDb btck_CoinsDb;
 
@@ -544,14 +548,6 @@ typedef void (*btck_ValidationInterfaceBlockDisconnected)(void* user_data, btck_
  * @return             0 on success.
  */
 typedef int (*btck_WriteBytes)(const void* bytes, size_t size, void* userdata);
-
-/** Function signature for retrieving a coin.
- *
- * The returned coin's ownership passes to the caller invoking this callback.
- *
- * Return nullptr if the coin cannot be retrieved.
- */
-typedef btck_Coin* (*btck_FetchCoin)(void* user_data, const btck_TransactionOutPoint* outpoint);
 
 /**
  * Whether a validated data structure is valid, invalid, or an error was
@@ -1851,18 +1847,16 @@ BITCOINKERNEL_API btck_BlockValidationState* BITCOINKERNEL_WARN_UNUSED_RESULT bt
 /**
  * @brief Validate the passed in block.
  *
- * This validates the block against the caller's supplied coins without
+ * This validates the block against coins in a @ref btck_CoinsDb without
  * requiring a full UTXO set or mutating the chainstate. The supplied coins
  * must be unspent. Coins created and consumed within the same block are
  * ignored. BIP-30 violating transactions cannot be detected through this
- * function.
+ * function. The coins database is not mutated.
  *
  * @param[in] chainstate_manager      Non-null.
  * @param[in] block                   Non-null.
  * @param[in] block_tree_entry        Non-null. The entry must be associated with the block.
- * @param[in] coin_fetcher            Non-null. Callback for getting the coins spent by this block.
- * @param[in] user_data               Nullable. Holds a user-defined opaque structure that will be
- *                                    passed back through the coin_fetcher callback.
+ * @param[in] coins_db                Non-null. Kernel-owned coins used for spends in this block.
  * @param[out] block_validation_state The result of the block validation.
  * @return                            0 if the block is valid.
  */
@@ -1870,9 +1864,8 @@ BITCOINKERNEL_API int BITCOINKERNEL_WARN_UNUSED_RESULT btck_chainstate_manager_v
     btck_ChainstateManager* chainstate_manager,
     const btck_Block* block,
     const btck_BlockTreeEntry* block_tree_entry,
-    btck_FetchCoin coin_fetcher,
-    void* user_data,
-    btck_BlockValidationState* block_validation_state) BITCOINKERNEL_ARG_NONNULL(1, 2, 3, 4, 6);
+    const btck_CoinsDb* coins_db,
+    btck_BlockValidationState* block_validation_state) BITCOINKERNEL_ARG_NONNULL(1, 2, 3, 4, 5);
 
 /**
  * @brief Override the current time used by this chainstate manager.

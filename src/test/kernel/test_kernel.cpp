@@ -1653,37 +1653,22 @@ BOOST_AUTO_TEST_CASE(btck_chainman_in_memory_tests)
     BOOST_CHECK(context.interrupt());
 }
 
-class BlockSpentCoinFetcher : public CoinFetcher
+CoinsDb MakeSpentCoinsDb(const Block& block, const BlockSpentOutputs& block_spent_outputs)
 {
-private:
-    std::vector<std::pair<OutPoint, Coin>> m_coins;
-
-public:
-    BlockSpentCoinFetcher() = default;
-
-    BlockSpentCoinFetcher(const Block& block, const BlockSpentOutputs& block_spent_outputs)
-    {
-        size_t undo_index{0};
-        for (const auto transaction : block.Transactions()) {
-            if (transaction.IsCoinbase()) continue;
-            TransactionSpentOutputsView tx_undo{block_spent_outputs.GetTxSpentOutputs(undo_index)};
-            ++undo_index;
-            size_t input_index{0};
-            for (const auto input : transaction.Inputs()) {
-                m_coins.emplace_back(input.OutPoint(), Coin{tx_undo.GetCoin(input_index)});
-                ++input_index;
-            }
+    CoinsDb coins_db;
+    size_t undo_index{0};
+    for (const auto transaction : block.Transactions()) {
+        if (transaction.IsCoinbase()) continue;
+        TransactionSpentOutputsView tx_undo{block_spent_outputs.GetTxSpentOutputs(undo_index)};
+        ++undo_index;
+        size_t input_index{0};
+        for (const auto input : transaction.Inputs()) {
+            BOOST_CHECK(coins_db.Add(input.OutPoint(), tx_undo.GetCoin(input_index)));
+            ++input_index;
         }
     }
-
-    std::optional<Coin> FetchCoin(OutPointView out_point) override
-    {
-        for (const auto& [stored, coin] : m_coins) {
-            if (stored == out_point) return coin;
-        }
-        return std::nullopt;
-    }
-};
+    return coins_db;
+}
 
 BOOST_AUTO_TEST_CASE(btck_chainman_regtest_tests)
 {
@@ -1797,10 +1782,10 @@ BOOST_AUTO_TEST_CASE(btck_chainman_regtest_tests)
         }
 
         BlockSpentOutputs block_spent_outputs{chainman->ReadBlockSpentOutputs(block_tree_entry)};
-        BlockSpentCoinFetcher coin_fetcher{*block, block_spent_outputs};
+        CoinsDb coins_db{MakeSpentCoinsDb(*block, block_spent_outputs)};
 
         BlockValidationState state{};
-        BOOST_CHECK(chainman->ValidateBlock(*block, block_tree_entry, coin_fetcher, state));
+        BOOST_CHECK(chainman->ValidateBlock(*block, block_tree_entry, coins_db, state));
         BOOST_CHECK_EQUAL(state.GetValidationMode(), ValidationMode::VALID);
         BOOST_CHECK_EQUAL(state.GetBlockValidationResult(), BlockValidationResult::UNSET);
 
@@ -1828,12 +1813,12 @@ BOOST_AUTO_TEST_CASE(btck_chainman_regtest_tests)
             BOOST_CHECK_EQUAL(header_state.GetValidationMode(), ValidationMode::VALID);
             BlockTreeEntry entry{*chainman2->GetBlockTreeEntry(block.GetHash())};
 
-            BlockSpentCoinFetcher coin_fetcher{block, block_spent_outputs};
+            CoinsDb coins_db{MakeSpentCoinsDb(block, block_spent_outputs)};
             BlockValidationState state;
-            BOOST_CHECK(chainman2->ValidateBlock(block, entry, coin_fetcher, state));
+            BOOST_CHECK(chainman2->ValidateBlock(block, entry, coins_db, state));
             BOOST_CHECK_EQUAL(state.GetValidationMode(), ValidationMode::VALID);
             // Validate again to ensure there is no lingering state
-            BOOST_CHECK(chainman2->ValidateBlock(block, entry, coin_fetcher, state));
+            BOOST_CHECK(chainman2->ValidateBlock(block, entry, coins_db, state));
             BOOST_CHECK_EQUAL(state.GetValidationMode(), ValidationMode::VALID);
         }
 
@@ -1841,18 +1826,18 @@ BOOST_AUTO_TEST_CASE(btck_chainman_regtest_tests)
             // Validate with no coins
             BlockValidationState state;
             BlockTreeEntry entry{*chainman2->GetBlockTreeEntry(blocks[205].first.GetHash())};
-            BlockSpentCoinFetcher empty_fetcher{};
-            BOOST_CHECK(!chainman2->ValidateBlock(blocks[205].first, entry, empty_fetcher, state));
+            CoinsDb empty_db;
+            BOOST_CHECK(!chainman2->ValidateBlock(blocks[205].first, entry, empty_db, state));
             BOOST_CHECK_EQUAL(state.GetValidationMode(), ValidationMode::INVALID);
             BOOST_CHECK_EQUAL(state.GetBlockValidationResult(), BlockValidationResult::CONSENSUS);
         }
 
         {
             // Validate with an incorrect set of coins
-            BlockSpentCoinFetcher wrong_fetcher{blocks[205].first, blocks[205].second};
+            CoinsDb wrong_db{MakeSpentCoinsDb(blocks[205].first, blocks[205].second)};
             BlockValidationState state;
             BlockTreeEntry entry{*chainman2->GetBlockTreeEntry(blocks[204].first.GetHash())};
-            BOOST_CHECK(!chainman2->ValidateBlock(blocks[204].first, entry, wrong_fetcher, state));
+            BOOST_CHECK(!chainman2->ValidateBlock(blocks[204].first, entry, wrong_db, state));
             BOOST_CHECK_EQUAL(state.GetValidationMode(), ValidationMode::INVALID);
             BOOST_CHECK_EQUAL(state.GetBlockValidationResult(), BlockValidationResult::CONSENSUS);
         }

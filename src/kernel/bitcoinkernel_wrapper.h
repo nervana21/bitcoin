@@ -1595,14 +1595,6 @@ public:
     size_t Count() const { return btck_coinsdb_count(get()); }
 };
 
-class CoinFetcher
-{
-public:
-    virtual ~CoinFetcher() = default;
-
-    virtual std::optional<Coin> FetchCoin(OutPointView out_point) = 0;
-};
-
 class ChainMan : UniqueHandle<btck_ChainstateManager, btck_chainstate_manager_destroy>
 {
 public:
@@ -1670,17 +1662,11 @@ public:
 
     bool ValidateBlock(const Block& block,
                        const BlockTreeEntry& entry,
-                       CoinFetcher& fetcher,
+                       const CoinsDb& coins_db,
                        BlockValidationState& state)
     {
         return btck_chainstate_manager_validate_block(
-                   get(), block.get(), entry.get(),
-                   +[](void* user_data, const btck_TransactionOutPoint* out_point) -> btck_Coin* {
-                       auto coin{static_cast<CoinFetcher*>(user_data)->FetchCoin(OutPointView{out_point})};
-                       if (!coin) return nullptr;
-                       return btck_coin_copy(coin->get());
-                   },
-                   &fetcher, state.get()) == 0;
+                   get(), block.get(), entry.get(), coins_db.get(), state.get()) == 0;
     }
 
     void SetClockTime(std::optional<std::chrono::seconds> now)
