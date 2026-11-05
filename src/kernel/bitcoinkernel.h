@@ -1447,26 +1447,6 @@ BITCOINKERNEL_API btck_BlockValidationState* BITCOINKERNEL_WARN_UNUSED_RESULT bt
 #define btck_chainstate_manager_process_block_header btck_accept_header
 
 /**
- * @brief Override the current time used by this chainstate manager.
- *
- * Affects all time-sensitive operations scoped to this chainstate manager:
- * the block header future-time check, the IBD latch (IsTipRecent), header
- * sync progress estimates, and the verification progress value passed to
- * block tip callbacks.
- *
- * @param[in] chainstate_manager  Non-null.
- * @param[in] now_seconds         Unix epoch seconds in the range
- *                                [1, 4294967295], or 0 to restore the
- *                                system clock. The upper bound matches the
- *                                maximum value of a block header timestamp.
- * @return                        0 on success, non-zero if now_seconds is
- *                                negative or exceeds 4294967295.
- */
-BITCOINKERNEL_API int BITCOINKERNEL_WARN_UNUSED_RESULT btck_chainstate_manager_set_clock_time(
-    btck_ChainstateManager* chainstate_manager,
-    int64_t now_seconds) BITCOINKERNEL_ARG_NONNULL(1);
-
-/**
  * @brief Validate the passed in block.
  *
  * This validates the block against the caller's supplied coins without
@@ -1491,6 +1471,26 @@ BITCOINKERNEL_API int BITCOINKERNEL_WARN_UNUSED_RESULT btck_chainstate_manager_v
     btck_FetchCoin coin_fetcher,
     void* user_data,
     btck_BlockValidationState* block_validation_state) BITCOINKERNEL_ARG_NONNULL(1, 2, 3, 4, 6);
+
+/**
+ * @brief Override the current time used by this chainstate manager.
+ *
+ * Affects all time-sensitive operations scoped to this chainstate manager:
+ * the block header future-time check, the IBD latch (IsTipRecent), header
+ * sync progress estimates, and the verification progress value passed to
+ * block tip callbacks.
+ *
+ * @param[in] chainstate_manager  Non-null.
+ * @param[in] now_seconds         Unix epoch seconds in the range
+ *                                [1, 4294967295], or 0 to restore the
+ *                                system clock. The upper bound matches the
+ *                                maximum value of a block header timestamp.
+ * @return                        0 on success, non-zero if now_seconds is
+ *                                negative or exceeds 4294967295.
+ */
+BITCOINKERNEL_API int BITCOINKERNEL_WARN_UNUSED_RESULT btck_chainstate_manager_set_clock_time(
+    btck_ChainstateManager* chainstate_manager,
+    int64_t now_seconds) BITCOINKERNEL_ARG_NONNULL(1);
 
 /**
  * @brief Triggers the start of a reindex if the wipe options were previously
