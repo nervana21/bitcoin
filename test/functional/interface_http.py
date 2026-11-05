@@ -112,6 +112,14 @@ class HTTPBasicsTest (BitcoinTestFramework):
     def setup_network(self):
         self.setup_nodes()
         self.node = self.nodes[0]
+        # The test framework typically reuses a single persistent HTTP connection
+        # for all RPCs to a TestNode. Because we are setting -rpcservertimeout
+        # so low on this one node, its connection will quickly timeout and get dropped by
+        # the server. Negating this setting will force the AuthServiceProxy
+        # for this node to create a fresh new HTTP connection for every command
+        # called for the remainder of this test (including --test_methods runs
+        # that skip run_test).
+        self.node.reuse_http_connections = False
 
     def send_bad_and_tolerate_disconnect(self, conn, predicate_fn):
         '''
@@ -134,14 +142,6 @@ class HTTPBasicsTest (BitcoinTestFramework):
 
 
     def run_test(self):
-        # The test framework typically reuses a single persistent HTTP connection
-        # for all RPCs to a TestNode. Because we are setting -rpcservertimeout
-        # so low on this one node, its connection will quickly timeout and get dropped by
-        # the server. Negating this setting will force the AuthServiceProxy
-        # for this node to create a fresh new HTTP connection for every command
-        # called for the remainder of this test.
-        self.node.reuse_http_connections = False
-
         self.check_default_connection()
         self.check_socket_exclusivity()
         self.check_keepalive_connection()
