@@ -314,6 +314,13 @@ typedef struct btck_TransactionSpentOutputs btck_TransactionSpentOutputs;
 typedef struct btck_Coin btck_Coin;
 
 /**
+ * Opaque in-memory UTXO container of outpoint to coin pairs owned by the
+ * kernel. Intended for sans-UTXO-set block validation without copying a
+ * caller map into a temporary structure on each lookup.
+ */
+typedef struct btck_CoinsDb btck_CoinsDb;
+
+/**
  * Opaque data structure for holding a block hash.
  *
  * This is a type-safe identifier for a block.
@@ -2668,6 +2675,71 @@ BITCOINKERNEL_API const btck_TransactionOutput* btck_coin_get_output(
  * Destroy the coin.
  */
 BITCOINKERNEL_API void btck_coin_destroy(btck_Coin* coin);
+
+///@}
+
+/** @name CoinsDb
+ * In-memory outpoint to coin map for sans-UTXO-set block validation.
+ */
+///@{
+
+/**
+ * @brief Create an empty coins database.
+ *
+ * @return The coins database.
+ */
+BITCOINKERNEL_API btck_CoinsDb* BITCOINKERNEL_WARN_UNUSED_RESULT btck_coinsdb_create();
+
+/**
+ * @brief Insert a coin for an outpoint.
+ *
+ * @param[in] coins_db  Non-null.
+ * @param[in] out_point Non-null.
+ * @param[in] coin      Non-null. Copied into the database.
+ * @return              0 on success, -1 if the outpoint is already present.
+ */
+BITCOINKERNEL_API int BITCOINKERNEL_WARN_UNUSED_RESULT btck_coinsdb_add(
+    btck_CoinsDb* coins_db,
+    const btck_TransactionOutPoint* out_point,
+    const btck_Coin* coin) BITCOINKERNEL_ARG_NONNULL(1, 2, 3);
+
+/**
+ * @brief Remove a coin by outpoint.
+ *
+ * @param[in] coins_db  Non-null.
+ * @param[in] out_point Non-null.
+ * @return              0 if a coin was removed, -1 if the outpoint was absent.
+ */
+BITCOINKERNEL_API int BITCOINKERNEL_WARN_UNUSED_RESULT btck_coinsdb_remove(
+    btck_CoinsDb* coins_db,
+    const btck_TransactionOutPoint* out_point) BITCOINKERNEL_ARG_NONNULL(1, 2);
+
+/**
+ * @brief Look up a coin by outpoint.
+ *
+ * The returned coin is an owned copy. The caller destroys it with btck_coin_destroy.
+ * A missing outpoint returns null.
+ *
+ * @param[in] coins_db  Non-null.
+ * @param[in] out_point Non-null.
+ * @return              The coin, or null if absent.
+ */
+BITCOINKERNEL_API btck_Coin* BITCOINKERNEL_WARN_UNUSED_RESULT btck_coinsdb_lookup(
+    const btck_CoinsDb* coins_db,
+    const btck_TransactionOutPoint* out_point) BITCOINKERNEL_ARG_NONNULL(1, 2);
+
+/**
+ * @brief Number of coins stored.
+ *
+ * @param[in] coins_db Non-null.
+ * @return             The entry count.
+ */
+BITCOINKERNEL_API size_t btck_coinsdb_count(const btck_CoinsDb* coins_db) BITCOINKERNEL_ARG_NONNULL(1);
+
+/**
+ * Destroy the coins database.
+ */
+BITCOINKERNEL_API void btck_coinsdb_destroy(btck_CoinsDb* coins_db);
 
 ///@}
 

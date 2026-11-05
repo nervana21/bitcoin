@@ -1563,6 +1563,38 @@ public:
     MAKE_RANGE_METHOD(TxsSpentOutputs, BlockSpentOutputs, &BlockSpentOutputs::Count, &BlockSpentOutputs::GetTxSpentOutputs, *this)
 };
 
+class CoinsDb : public UniqueHandle<btck_CoinsDb, btck_coinsdb_destroy>
+{
+public:
+    CoinsDb() : UniqueHandle{btck_coinsdb_create()} {}
+
+    explicit CoinsDb(btck_CoinsDb* ptr) : UniqueHandle{ptr} {}
+
+    bool Add(const OutPointView& out_point, const CoinView& coin)
+    {
+        return btck_coinsdb_add(get(), out_point.get(), coin.get()) == 0;
+    }
+
+    bool Add(const OutPointView& out_point, const Coin& coin)
+    {
+        return btck_coinsdb_add(get(), out_point.get(), coin.get()) == 0;
+    }
+
+    bool Remove(const OutPointView& out_point)
+    {
+        return btck_coinsdb_remove(get(), out_point.get()) == 0;
+    }
+
+    std::optional<Coin> Lookup(const OutPointView& out_point) const
+    {
+        btck_Coin* coin{btck_coinsdb_lookup(get(), out_point.get())};
+        if (!coin) return std::nullopt;
+        return Coin{coin};
+    }
+
+    size_t Count() const { return btck_coinsdb_count(get()); }
+};
+
 class CoinFetcher
 {
 public:

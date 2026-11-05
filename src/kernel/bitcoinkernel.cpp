@@ -56,6 +56,7 @@
 #include <cstring>
 #include <exception>
 #include <limits>
+#include <map>
 #include <memory>
 #include <optional>
 #include <span>
@@ -697,6 +698,7 @@ struct btck_Chain : Handle<btck_Chain, CChain> {};
 struct btck_BlockSpentOutputs : Handle<btck_BlockSpentOutputs, std::shared_ptr<CBlockUndo>> {};
 struct btck_TransactionSpentOutputs : Handle<btck_TransactionSpentOutputs, CTxUndo> {};
 struct btck_Coin : Handle<btck_Coin, Coin> {};
+struct btck_CoinsDb : Handle<btck_CoinsDb, std::map<COutPoint, Coin>> {};
 struct btck_BlockHash : Handle<btck_BlockHash, uint256> {};
 struct btck_TransactionInput : Handle<btck_TransactionInput, CTxIn> {};
 struct btck_WitnessStack : Handle<btck_WitnessStack, CScriptWitness> {};
@@ -1944,6 +1946,42 @@ const btck_TransactionOutput* btck_coin_get_output(const btck_Coin* coin)
 void btck_coin_destroy(btck_Coin* coin)
 {
     delete coin;
+}
+
+btck_CoinsDb* btck_coinsdb_create()
+{
+    return btck_CoinsDb::create();
+}
+
+int btck_coinsdb_add(btck_CoinsDb* coins_db, const btck_TransactionOutPoint* out_point, const btck_Coin* coin)
+{
+    auto& map{btck_CoinsDb::get(coins_db)};
+    const auto& [it, inserted]{map.try_emplace(btck_TransactionOutPoint::get(out_point), btck_Coin::get(coin))};
+    (void)it;
+    return inserted ? 0 : -1;
+}
+
+int btck_coinsdb_remove(btck_CoinsDb* coins_db, const btck_TransactionOutPoint* out_point)
+{
+    return btck_CoinsDb::get(coins_db).erase(btck_TransactionOutPoint::get(out_point)) == 1 ? 0 : -1;
+}
+
+btck_Coin* btck_coinsdb_lookup(const btck_CoinsDb* coins_db, const btck_TransactionOutPoint* out_point)
+{
+    const auto& map{btck_CoinsDb::get(coins_db)};
+    auto it{map.find(btck_TransactionOutPoint::get(out_point))};
+    if (it == map.end()) return nullptr;
+    return btck_Coin::create(it->second);
+}
+
+size_t btck_coinsdb_count(const btck_CoinsDb* coins_db)
+{
+    return btck_CoinsDb::get(coins_db).size();
+}
+
+void btck_coinsdb_destroy(btck_CoinsDb* coins_db)
+{
+    delete coins_db;
 }
 
 int btck_process_new_block(
