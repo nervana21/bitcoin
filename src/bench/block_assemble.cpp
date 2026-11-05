@@ -6,7 +6,7 @@
 #include <consensus/consensus.h>
 #include <node/mining_types.h>
 #include <node/transaction.h>
-#include <validation.h>
+#include <policy/mempool_accept_result.h>
 #include <primitives/transaction.h>
 #include <random.h>
 #include <script/script.h>

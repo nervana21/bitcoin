@@ -10,7 +10,7 @@
 #include <kernel/result.h>
 #include <node/types.h>
 #include <policy/feerate.h>
-#include <validation.h>
+#include <policy/mempool_accept_result.h>
 #include <primitives/transaction.h>
 
 #include <tuple>
