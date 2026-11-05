@@ -30,6 +30,7 @@ import socket
 import struct
 import sys
 import threading
+import time
 
 from test_framework.messages import (
     CBlockHeader,
@@ -777,7 +778,15 @@ class NetworkThread(threading.Thread):
             for listener in listeners:
                 await listener.wait_closed()
         future = asyncio.run_coroutine_threadsafe(close_listeners(), self.network_event_loop)
-        future.result(timeout=timeout)
+        # Poll with time.monotonic() instead of Future.result(timeout=...).
+        # Under libfaketime, Condition.wait can wake early while the event loop is
+        # still busy, raising TimeoutError before the coroutine completes.
+        deadline = time.monotonic() + timeout
+        while not future.done():
+            if time.monotonic() >= deadline:
+                raise TimeoutError()
+            time.sleep(0.05)
+        future.result(timeout=0)
 
         self.network_event_loop.call_soon_threadsafe(self.network_event_loop.stop)
         wait_until_helper_internal(lambda: not self.network_event_loop.is_running(), timeout=timeout)
