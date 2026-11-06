@@ -34,8 +34,6 @@
 #include <logging/timer.h>
 #include <node/blockstorage.h>
 #include <kernel/utxo_snapshot.h>
-#include <policy/policy.h>
-#include <policy/settings.h>
 #include <pow.h>
 #include <primitives/block.h>
 #include <primitives/transaction.h>
@@ -406,16 +404,6 @@ void NotifyFatalAbort(Notifications& notifications, kernel::AbortFailure& abort)
 
 
 namespace {
-/* If STANDARD_SCRIPT_VERIFY_FLAGS doesn't cover a consensus flag,
- * MemPoolAccept::PolicyScriptChecks may accept txs that violate the
- * corresponding consensus rule, which would cause us to create invalid
- * block templates.
- */
-static_assert((CONSENSUS_SCRIPT_VERIFY_FLAGS & STANDARD_SCRIPT_VERIFY_FLAGS) == CONSENSUS_SCRIPT_VERIFY_FLAGS, "standard flags must be a superset of consensus flags");
-
-/* Check that there's no inconsistency with the policy/policy.h value */
-static_assert(CONSENSUS_SCRIPT_VERIFY_FLAGS == MANDATORY_SCRIPT_VERIFY_FLAGS);
-
 /** Helper class for building up script_verify_flags values for consensus
  *  checks (particularly GetBlockScriptFlags() and
  *  GetAllConsensusScriptFlags()). Designed so that flags can

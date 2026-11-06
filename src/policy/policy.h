@@ -8,6 +8,7 @@
 
 #include <consensus/amount.h>
 #include <consensus/consensus.h>
+#include <consensus/script_verify.h>
 #include <consensus/validation.h>
 #include <primitives/transaction.h>
 #include <script/interpreter.h>
@@ -90,18 +91,13 @@ inline constexpr unsigned int MAX_DUST_OUTPUTS_PER_TX{1};
 
 /**
  * Mandatory script verification flags that all new transactions must comply with for
- * them to be valid.
+ * them to be valid. Alias of CONSENSUS_SCRIPT_VERIFY_FLAGS so policy and consensus
+ * cannot drift.
  *
  * Note that this does not affect consensus validity; see GetBlockScriptFlags()
  * for that.
  */
-inline constexpr script_verify_flags MANDATORY_SCRIPT_VERIFY_FLAGS{SCRIPT_VERIFY_P2SH |
-                                                             SCRIPT_VERIFY_DERSIG |
-                                                             SCRIPT_VERIFY_NULLDUMMY |
-                                                             SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY |
-                                                             SCRIPT_VERIFY_CHECKSEQUENCEVERIFY |
-                                                             SCRIPT_VERIFY_WITNESS |
-                                                             SCRIPT_VERIFY_TAPROOT};
+inline constexpr script_verify_flags MANDATORY_SCRIPT_VERIFY_FLAGS{CONSENSUS_SCRIPT_VERIFY_FLAGS};
 
 /**
  * Standard script verification flags that standard transactions will comply
@@ -123,6 +119,14 @@ inline constexpr script_verify_flags STANDARD_SCRIPT_VERIFY_FLAGS{MANDATORY_SCRI
                                                              SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_TAPROOT_VERSION |
                                                              SCRIPT_VERIFY_DISCOURAGE_OP_SUCCESS |
                                                              SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_PUBKEYTYPE};
+
+/* If STANDARD_SCRIPT_VERIFY_FLAGS does not cover a consensus flag,
+ * MemPoolAccept::PolicyScriptChecks may accept txs that violate the
+ * corresponding consensus rule, which would cause us to create invalid
+ * block templates.
+ */
+static_assert((CONSENSUS_SCRIPT_VERIFY_FLAGS & STANDARD_SCRIPT_VERIFY_FLAGS) == CONSENSUS_SCRIPT_VERIFY_FLAGS,
+              "standard flags must be a superset of consensus flags");
 
 /** For convenience, standard but not mandatory verify flags. */
 inline constexpr script_verify_flags STANDARD_NOT_MANDATORY_VERIFY_FLAGS{STANDARD_SCRIPT_VERIFY_FLAGS & ~MANDATORY_SCRIPT_VERIFY_FLAGS};

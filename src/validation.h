@@ -12,6 +12,7 @@
 #include <checkqueue.h>
 #include <coins.h>
 #include <consensus/amount.h>
+#include <consensus/script_verify.h>
 #include <consensus/validation.h>
 #include <cuckoocache.h>
 #include <deploymentstatus.h>
@@ -320,20 +321,6 @@ bool IsBIP30Repeat(const CBlockIndex& block_index);
 
 /** Identifies blocks which coinbase output was subsequently overwritten in the UTXO set (see BIP30) */
 bool IsBIP30Unspendable(const uint256& block_hash, int block_height);
-
-/** Set of script verify flags that may be enforced at the consensus level
- *  (for some combination of chain params and chain state)
- */
-inline constexpr script_verify_flags CONSENSUS_SCRIPT_VERIFY_FLAGS{
-    SCRIPT_VERIFY_NONE
-    | SCRIPT_VERIFY_P2SH
-    | SCRIPT_VERIFY_WITNESS
-    | SCRIPT_VERIFY_TAPROOT
-    | SCRIPT_VERIFY_DERSIG
-    | SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY
-    | SCRIPT_VERIFY_CHECKSEQUENCEVERIFY
-    | SCRIPT_VERIFY_NULLDUMMY
-};
 
 // Returns the script flags which should be checked for a given block
 // (a subset of CONSENSUS_SCRIPT_VERIFY_FLAGS)
