@@ -92,7 +92,6 @@ add_executable(test_bitcoin
   rest_tests.cpp
   result_tests.cpp
   reverselock_tests.cpp
-  rpc_tests.cpp
   sanity_tests.cpp
   scheduler_tests.cpp
   script_assets_tests.cpp
@@ -171,7 +170,6 @@ add_windows_application_manifest(test_bitcoin)
 target_link_libraries(test_bitcoin
   core_interface
   test_util
-  bitcoin_cli
   bitcoin_node
   bitcoin_consensus
   minisketch
@@ -223,6 +221,13 @@ endif()
 
 if(ENABLE_IPC)
   add_subdirectory(${PROJECT_SOURCE_DIR}/src/ipc/test ipc)
+endif()
+
+# rpc_tests.cpp is the only unit test that needs the bitcoin_cli static library.
+# Leave both out when the CLI is not being built.
+if(BUILD_CLI)
+  target_sources(test_bitcoin PRIVATE rpc_tests.cpp)
+  target_link_libraries(test_bitcoin bitcoin_cli)
 endif()
 
 add_all_test_targets()
