@@ -881,6 +881,29 @@ void LogContextError(const Context& context)
     BOOST_CHECK(!btck_chainstate_manager_options_create(context.get(), "", 0, "", 0));
 }
 
+//! Tip logging is per-context (SetLogger), not a process-wide KernelLogger fan-out. Hang tests from
+//! #36768 used ChainParams{challenge} LogInfo, which has a null logger here and never reaches the
+//! callback (concurrency then waits forever). Drive entries with LogContextError on a bound context.
+//!
+//! Caller keeps `logger` alive for the Context lifetime: declare Logger before any Context that
+//! uses it so ~Context runs AddUse(-1) before ~LogConnection (which asserts m_uses == 0). No
+//! ChainMan here. A failed ChainMan leaves g_validation_mutex_owner set and poisons later
+//! chainman tests.
+template <Log T>
+Context ContextWithLogger(Logger<T>& logger)
+{
+    ContextOptions options{};
+    options.SetLogger(logger);
+    return Context{options};
+}
+
+//! One-shot: bind, log EMPTY_DIR_ERROR, drop context.
+template <Log T>
+void LogWith(Logger<T>& logger)
+{
+    LogContextError(ContextWithLogger(logger));
+}
+
 //! This test is focused on the public kernel logging interface, to the extent it is testable.
 BOOST_AUTO_TEST_CASE(logging_connection_tests)
 {
@@ -893,12 +916,8 @@ BOOST_AUTO_TEST_CASE(logging_connection_tests)
         Logger logger_1{std::make_unique<CountingLog>(messages_1, destroyed)};
         Logger logger_2{std::make_unique<CountingLog>(messages_2, destroyed)};
         Logger logger_unused{std::make_unique<CountingLog>(messages_unused, destroyed)};
-        ContextOptions options_1{};
-        options_1.SetLogger(logger_1);
-        ContextOptions options_2{};
-        options_2.SetLogger(logger_2);
-        Context context_1{options_1};
-        Context context_2{options_2};
+        Context context_1{ContextWithLogger(logger_1)};
+        Context context_2{ContextWithLogger(logger_2)};
         Context context_no_logger{};
 
         // Each context's entries reach only its own connection.
@@ -961,23 +980,16 @@ public:
 //! A callback can log, and destroy kernel objects that log, as a garbage collector's finalizers might.
 BOOST_AUTO_TEST_CASE(logging_callback_reentry_tests)
 {
-    auto test_directory{TestDirectory{"logging_reentry_test_bitcoin_kernel"}};
-    std::optional<Context> context{std::in_place};
-    std::optional<ChainMan> chainman;
-    {
-        ChainstateManagerOptions chainman_opts{*context, PathToString(test_directory.m_directory), PathToString(test_directory.m_directory / "blocks")};
-        chainman.emplace(*context, chainman_opts);
-    }
     std::atomic<int> entries{0};
+    std::optional<Context> context;
     Logger logger{std::make_unique<ActionLog>([&] {
-        // Creating signet chain parameters with a challenge logs an INFO entry.
-        ChainParams params{hex_string_to_byte_vec("51")};
-        chainman.reset();
+        // Nested log on the same connection, then destroy the context from inside the callback.
+        LogContextError(*context);
         context.reset();
     }, entries)};
-    ChainParams params{hex_string_to_byte_vec("51")};
-    BOOST_CHECK(!chainman && !context);
-    // The entry logged from inside the callback was delivered to it too.
+    context.emplace(ContextWithLogger(logger));
+    LogContextError(*context);
+    BOOST_CHECK(!context);
     BOOST_CHECK_GE(entries, 2);
 }
 
@@ -990,12 +1002,13 @@ BOOST_AUTO_TEST_CASE(logging_callback_destroy_other_tests)
     std::atomic<int> entries{0};
     Logger logger{std::make_unique<ActionLog>([&] { other.reset(); }, entries)};
     other.emplace(std::make_unique<CountingLog>(messages, destroyed));
-    ChainParams params{hex_string_to_byte_vec("51")};
+    LogWith(logger);
     BOOST_CHECK_EQUAL(entries, 1);
     BOOST_CHECK_EQUAL(destroyed, 1);
 }
 
-//! A callback can create a connection from inside itself. The new connection receives later entries.
+//! A callback can create a connection from inside itself. The new connection receives later entries
+//! once it is set on a context.
 BOOST_AUTO_TEST_CASE(logging_callback_create_tests)
 {
     std::map<std::string, int> messages;
@@ -1003,17 +1016,15 @@ BOOST_AUTO_TEST_CASE(logging_callback_create_tests)
     std::optional<Logger<CountingLog>> created;
     std::atomic<int> entries{0};
     Logger logger{std::make_unique<ActionLog>([&] { created.emplace(std::make_unique<CountingLog>(messages, destroyed)); }, entries)};
-    const auto log_info{[] { ChainParams params{hex_string_to_byte_vec("51")}; }};
-    log_info();
+    LogWith(logger);
     BOOST_CHECK_EQUAL(entries, 1);
     BOOST_REQUIRE(created);
     BOOST_CHECK(messages.empty());
-    log_info();
-    BOOST_CHECK_EQUAL(entries, 2);
+    // created is declared above this call so ~created_context (inside LogWith) runs before ~created.
+    LogWith(*created);
+    BOOST_CHECK_EQUAL(entries, 1);
     BOOST_REQUIRE_EQUAL(messages.size(), 1U);
     BOOST_CHECK_EQUAL(messages.begin()->second, 1);
-    created.reset();
-    BOOST_CHECK_EQUAL(destroyed, 1);
 }
 
 //! Throws from every invocation.
@@ -1029,7 +1040,7 @@ BOOST_AUTO_TEST_CASE(logging_callback_destroy_returned_tests)
     std::optional<Logger<ThrowingLog>> thrower{std::in_place, std::make_unique<ThrowingLog>()};
     std::atomic<int> entries{0};
     Logger logger{std::make_unique<ActionLog>([&] { thrower.reset(); }, entries)};
-    ChainParams params{hex_string_to_byte_vec("51")};
+    LogWith(logger);
     BOOST_CHECK(!thrower);
     BOOST_CHECK_EQUAL(entries, 1);
 }
@@ -1040,43 +1051,51 @@ BOOST_AUTO_TEST_CASE(logging_callback_destroy_self_tests)
     std::atomic<int> entries{0};
     std::atomic<bool> destroyed{false};
     bool destroyed_in_callback{true};
+    // Logger before Context so a failed path still destroys Context first at scope exit.
     std::optional<Logger<ActionLog>> logger;
+    std::optional<Context> context;
     logger.emplace(std::make_unique<ActionLog>([&] {
+        context.reset();
         logger.reset();
         destroyed_in_callback = destroyed;
     }, entries, &destroyed));
-    const auto log_info{[] { ChainParams params{hex_string_to_byte_vec("51")}; }};
-    log_info();
+    context.emplace(ContextWithLogger(*logger));
+    LogContextError(*context);
     BOOST_CHECK(!logger);
+    BOOST_CHECK(!context);
     BOOST_CHECK(!destroyed_in_callback);
     BOOST_CHECK(destroyed);
-    log_info();
     BOOST_CHECK_EQUAL(entries, 1);
 }
 
 //! A callback can destroy the connection of an outer callback running on the same thread.
 BOOST_AUTO_TEST_CASE(logging_callback_destroy_outer_tests)
 {
-    const auto log_info{[] { ChainParams params{hex_string_to_byte_vec("51")}; }};
     std::atomic<int> outer_entries{0};
     std::atomic<int> inner_entries{0};
     std::atomic<bool> outer_destroyed{false};
     bool destroyed_in_callback{true};
+    // Loggers before their Contexts (declaration order = reverse destroy order).
     std::optional<Logger<ActionLog>> outer;
-    // The outer callback logs from inside its first invocation. The inner callback destroys the outer
-    // callback's connection when it receives that nested entry.
-    outer.emplace(std::make_unique<ActionLog>(log_info, outer_entries, &outer_destroyed));
-    Logger inner{std::make_unique<ActionLog>([&] {
+    std::optional<Logger<ActionLog>> inner;
+    std::optional<Context> outer_context;
+    std::optional<Context> inner_context;
+    // Outer logs into the inner context. Inner destroys outer's context then connection.
+    outer.emplace(std::make_unique<ActionLog>([&] { LogContextError(*inner_context); }, outer_entries, &outer_destroyed));
+    inner.emplace(std::make_unique<ActionLog>([&] {
+        outer_context.reset();
         outer.reset();
         destroyed_in_callback = outer_destroyed;
-    }, inner_entries)};
-    log_info();
+    }, inner_entries));
+    outer_context.emplace(ContextWithLogger(*outer));
+    inner_context.emplace(ContextWithLogger(*inner));
+    LogContextError(*outer_context);
     BOOST_CHECK(!outer);
+    BOOST_CHECK(!outer_context);
     BOOST_CHECK(!destroyed_in_callback);
     BOOST_CHECK(outer_destroyed);
-    // Both callbacks received the outer entry and the nested one.
-    BOOST_CHECK_EQUAL(outer_entries, 2);
-    BOOST_CHECK_EQUAL(inner_entries, 2);
+    BOOST_CHECK_EQUAL(outer_entries, 1);
+    BOOST_CHECK_EQUAL(inner_entries, 1);
 }
 
 //! Counts invocations of LogMessage(), and blocks each one until released, so that a test controls
@@ -1108,15 +1127,18 @@ BOOST_AUTO_TEST_CASE(logging_callback_concurrency_tests)
     std::atomic<bool> released{false};
     std::atomic<bool> destroyed{false};
     std::optional<Logger<BlockingLog>> logger;
+    std::optional<Context> context;
     logger.emplace(std::make_unique<BlockingLog>(entered, released, destroyed));
+    context.emplace(ContextWithLogger(*logger));
 
-    const auto log_info{[] { ChainParams params{hex_string_to_byte_vec("51")}; }};
-    std::thread log_1{log_info};
-    std::thread log_2{log_info};
+    std::thread log_1{[&] { LogContextError(*context); }};
+    std::thread log_2{[&] { LogContextError(*context); }};
     for (int n; (n = entered) < 2;) {
         entered.wait(n);
     }
 
+    // Drop the context before the connection (m_uses). In-flight callbacks keep user_data alive.
+    context.reset();
     logger.reset();
     BOOST_CHECK(!destroyed);
 
