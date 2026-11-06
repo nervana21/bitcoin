@@ -147,10 +147,19 @@ class IPCMiningTest(BitcoinTestFramework):
             current_block_height = self.nodes[0].getchaintips()[0]["height"]
             assert_equal(blockref.result.height, current_block_height)
 
+            # Read the default IPC wait budget in milliseconds (often about 1000 ms).
+            default_wait_ms = self.default_ipc_timeout
+            # One minute in milliseconds. Floor for waits that must see a real tip change.
+            one_minute_ms = 60000.0
+            # Use the larger budget so a raised timeout_factor still wins if it is bigger.
+            long_timeout = max(default_wait_ms, one_minute_ms)
             self.log.debug("Mine a block")
-            newblockref = (await wait_and_do(
-                mining.waitTipChanged(ctx, blockref.result.hash, self.default_ipc_timeout),
-                lambda: self.generate(self.nodes[0], 1))).result
+            # Wait for the tip to leave the current hash, using long_timeout (not the ~1s default alone).
+            tip_changed_wait = mining.waitTipChanged(ctx, blockref.result.hash, long_timeout)
+            # Mine one block after the wait has started so the tip can advance under that wait.
+            def mine_one_block():
+                self.generate(self.nodes[0], 1)
+            newblockref = (await wait_and_do(tip_changed_wait, mine_one_block)).result
             assert_equal(len(newblockref.hash), block_hash_size)
             assert_equal(newblockref.height, current_block_height + 1)
             self.log.debug("Wait for timeout")
@@ -161,7 +170,7 @@ class IPCMiningTest(BitcoinTestFramework):
 
             self.log.debug("interrupt() should abort waitTipChanged()")
             async def wait_for_tip():
-                long_timeout = max(self.default_ipc_timeout, 60000.0)  # at least 1 minute
+                # Reuse long_timeout from above so the interrupt wait keeps the same floor.
                 result = (await mining.waitTipChanged(ctx, newblockref.hash, long_timeout)).result
                 # Unlike a timeout, interrupt() returns an empty BlockRef.
                 assert_equal(len(result.hash), 0)
