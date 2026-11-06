@@ -304,6 +304,7 @@ add_library(bitcoin_node STATIC EXCLUDE_FROM_ALL
   util/batchpriority.cpp
   util/readwritefile.cpp
   dbwrapper.cpp
+  node/blocktree_migration.cpp
   kernel/disconnected_transactions.cpp
   $<$<TARGET_EXISTS:bitcoin_wallet>:wallet/init.cpp>
   $<$<NOT:$<TARGET_EXISTS:bitcoin_wallet>>:dummywallet.cpp>
