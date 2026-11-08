@@ -30,6 +30,8 @@
 #include <util/check.h>
 #include <util/expected.h>
 #include <util/fs.h>
+// LockDirectory / UnlockDirectory live here (used by BlocksDirLock).
+#include <util/fs_helpers.h>
 #include <util/log.h>
 #include <util/obfuscation.h>
 #include <util/overflow.h>
@@ -1179,6 +1181,45 @@ FlatFilePos BlockManager::WriteBlock(const CBlock& block, int nHeight)
     return pos;
 }
 
+BlocksDirLock::BlocksDirLock(fs::path dir) : m_dir{std::move(dir)}
+{
+    // Ask the filesystem helpers to create and hold a lock file named ".lock"
+    // inside the blocks directory we just stored in m_dir.
+    const util::LockResult lock_result = util::LockDirectory(m_dir, ".lock");
+
+    // Turn the path into a normal string so error messages can print it.
+    const std::string dir_string = fs::PathToString(m_dir);
+
+    switch (lock_result) {
+    case util::LockResult::ErrorWrite: {
+        // We could not even write the lock file (permissions, missing parent, etc.).
+        const std::string write_error_message = strprintf(
+            "Cannot write to directory '%s'; check permissions.",
+            dir_string);
+        throw std::runtime_error{write_error_message};
+    }
+    case util::LockResult::ErrorLock: {
+        // The lock file exists and another process already holds it.
+        const std::string busy_error_message = strprintf(
+            "Cannot obtain a lock on directory %s. It is probably in use by another process.",
+            dir_string);
+        throw std::runtime_error{busy_error_message};
+    }
+    case util::LockResult::Success:
+        // We own the lock. Construction is done.
+        return;
+    }
+
+    // Every LockResult value should have been handled above. Crash if not.
+    assert(false);
+}
+
+BlocksDirLock::~BlocksDirLock()
+{
+    // Release the same ".lock" file the constructor acquired.
+    UnlockDirectory(m_dir, ".lock");
+}
+
 static auto InitBlocksdirXorKey(const BlockManager::Options& opts)
 {
     // Bytes are serialized without length indicator, so this is also the exact
@@ -1231,7 +1272,9 @@ static auto InitBlocksdirXorKey(const BlockManager::Options& opts)
 }
 
 BlockManager::BlockManager(const util::SignalInterrupt& interrupt, Options opts)
-    : m_prune_mode{opts.prune_target > 0},
+    // Take the blocksdir lock before any other member that may touch that directory.
+    : m_blocks_dir_lock{opts.blocks_dir},
+      m_prune_mode{opts.prune_target > 0},
       m_obfuscation{InitBlocksdirXorKey(opts)},
       m_opts{std::move(opts)},
       m_block_file_seq{FlatFileSeq{m_opts.blocks_dir, "blk", m_opts.fast_prune ? 0x4000 /* 16kB */ : BLOCKFILE_CHUNK_SIZE}},

@@ -184,6 +184,37 @@ enum class ReadRawError {
 };
 
 /**
+ * RAII guard that holds an exclusive filesystem lock on a blocks directory.
+ *
+ * Why this exists: two processes must not write the same blk/rev files at once.
+ * The constructor calls util::LockDirectory on "<dir>/.lock". If another process
+ * already holds that lock, construction throws.
+ *
+ * Same-process note: LockDirectory shares one lock among instances for the same
+ * path inside one process. Destroying any of those instances releases the shared
+ * lock for everyone in that process. Do not keep a second BlocksDirLock alive
+ * and expect the directory to stay locked after the first one dies.
+ */
+class BlocksDirLock
+{
+    // Absolute (or configured) path of the blocks directory we locked.
+    const fs::path m_dir;
+
+public:
+    // Take ownership of dir, then try to create/hold "<dir>/.lock".
+    // Throws std::runtime_error on write failure or if the lock is busy.
+    explicit BlocksDirLock(fs::path dir);
+
+    // Drop the "<dir>/.lock" hold when this object is destroyed.
+    ~BlocksDirLock();
+
+    // Copy would mean two objects thinking they own one lock. Forbidden.
+    BlocksDirLock(const BlocksDirLock&) = delete;
+    // Assignment would move lock ownership without a clear lifecycle. Forbidden.
+    BlocksDirLock& operator=(const BlocksDirLock&) = delete;
+};
+
+/**
  * Maintains a tree of blocks (stored in `m_block_index`) which is consulted
  * to determine where the most-work tip is.
  *
@@ -196,6 +227,13 @@ class BlockManager
     friend ChainstateManager;
 
 private:
+    // First data member on purpose.
+    // C++ constructs members in declaration order and destroys them in reverse.
+    // Putting the lock first means: lock is taken before any later member can
+    // open or write files under blocks_dir, and the lock is released only after
+    // every later member that used that directory has already been destroyed.
+    const BlocksDirLock m_blocks_dir_lock;
+
     const CChainParams& GetParams() const { return m_opts.chainparams; }
     const Consensus::Params& GetConsensus() const { return m_opts.chainparams.GetConsensus(); }
     /**
