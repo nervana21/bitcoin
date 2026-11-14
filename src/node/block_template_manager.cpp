@@ -116,7 +116,16 @@ std::unique_ptr<CBlockTemplate> BlockTemplateManager::WaitAndCreateNewBlock(
 
     // Alternate waiting for a new tip and checking if fees have risen.
     // The latter check is expensive so we only run it once per second.
-    auto now{NodeClock::now()};
+
+    // Start the wait loop on the monotonic steady clock.
+    // Before this change, WaitAndCreateNewBlock called NodeClock::now() here.
+    // NodeClock follows wall time and mocktime, so a wall-clock jump changed how long waitNext waited.
+    // Frozen mocktime also stopped the timeout from ever firing.
+    // Steady clock only measures elapsed time, so the deadline matches real waiting
+    // (same idea as waitTipChanged, which already used the steady clock).
+    auto now{std::chrono::steady_clock::now()};
+
+    // Deadline is "now plus the caller timeout", both measured on the steady clock.
     const auto deadline = now + wait_options.timeout;
     const MillisecondsDouble tick{1000};
     const bool allow_min_difficulty{m_chainman.GetParams().GetConsensus().fPowAllowMinDifficultyBlocks};
@@ -150,8 +159,14 @@ std::unique_ptr<CBlockTemplate> BlockTemplateManager::WaitAndCreateNewBlock(
 
         // On test networks return a minimum difficulty block after 20 minutes
         if (!tip_changed && allow_min_difficulty) {
+            // Tip header time lives in the NodeClock domain (seconds from GetBlockTime).
             const NodeClock::time_point tip_time{std::chrono::seconds{m_chainman.ActiveChain().Tip()->GetBlockTime()}};
-            if (now > tip_time + 20min) {
+            // Read node/wall time separately for the 20-minute rule.
+            // Do not reuse the steady-clock `now` variable: steady clock and NodeClock are different domains.
+            // The testnet rule must keep NodeClock so tip age still tracks node time and mocktime.
+            const NodeClock::time_point node_now{NodeClock::now()};
+            const NodeClock::time_point min_difficulty_after{tip_time + 20min};
+            if (node_now > min_difficulty_after) {
                 tip_changed = true;
             }
         }
@@ -181,7 +196,9 @@ std::unique_ptr<CBlockTemplate> BlockTemplateManager::WaitAndCreateNewBlock(
             if (new_fees >= current_fees + wait_options.fee_threshold) return new_tmpl;
         }
 
-        now = NodeClock::now();
+        // Refresh `now` from the steady clock before the deadline comparison.
+        // Calling NodeClock::now() here would again couple loop progress to wall time and mocktime.
+        now = std::chrono::steady_clock::now();
     } while (now < deadline);
 
     return nullptr;
