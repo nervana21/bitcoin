@@ -1430,9 +1430,11 @@ void StopHTTPServer()
         g_http_server->DisconnectAllClients();
         // Wait 30 seconds for all disconnections
         LogDebug(BCLog::HTTP, "Waiting for HTTP clients to disconnect gracefully");
-        const auto deadline{NodeClock::now() + 30s};
+        // Elapsed shutdown wait: steady clock, same domain as idle disconnect.
+        // NodeClock would stretch or freeze this wait under wall jumps / mocktime.
+        const auto deadline{MockableSteadyClock::now() + 30s};
         while (g_http_server->GetConnectionsCount() != 0) {
-            if (NodeClock::now() > deadline) {
+            if (MockableSteadyClock::now() > deadline) {
                 LogWarning("Timeout waiting for HTTP clients to disconnect gracefully, continuing shutdown");
                 break;
             }
