@@ -113,9 +113,9 @@ class ValidationTracepointTest(BitcoinTestFramework):
         self.log.info(f"mine {BLOCKS_EXPECTED} blocks")
         generatetoaddress_duration = dict()
         for _ in range(BLOCKS_EXPECTED):
-            start = time.time()
+            start = time.monotonic()
             hash = self.generatetoaddress(self.nodes[0], 1, ADDRESS_BCRT1_UNSPENDABLE)[0]
-            generatetoaddress_duration[hash] = (time.time() - start) * 1e9  # in nanoseconds
+            generatetoaddress_duration[hash] = (time.monotonic() - start) * 1e9  # in nanoseconds
             expected_blocks[hash] = self.nodes[0].getblock(hash, 2)
 
         bpf.perf_buffer_poll(timeout=200)
