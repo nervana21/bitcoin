@@ -83,10 +83,10 @@ class FeatureFrameworkStartupFailures(BitcoinTestFramework):
         )
 
         self.log.info("Parent process is measuring node startup duration in order to obtain a reasonable timeout value for later tests...")
-        node_start_time = time.time()
+        node_start_time = time.monotonic()
         self.nodes[0].start()
         self.nodes[0].wait_for_rpc_connection()
-        node_start_duration = time.time() - node_start_time
+        node_start_duration = time.monotonic() - node_start_time
         self.nodes[0].stop_node()
         self.log.info(f"...measured {node_start_duration:.1f}s.")
 
